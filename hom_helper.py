@@ -1,4 +1,27 @@
+from typing import Callable
+
 import hou
+
+
+def sopify(
+    parent: hou.SopNode,
+    input_node: hou.SopNode | None,
+    function: Callable[[hou.SopNode], None],
+) -> hou.SopNode:
+    if "<locals>" in function.__qualname__:
+        raise ValueError("Python SOP functions must be module-level functions")
+
+    module = function.__module__
+    qualname = function.__qualname__
+
+    node = parent.createNode("python", function.__name__)
+    if input_node is not None:
+        node.setInput(0, input_node)
+    node.parm("python").set(
+        f"import {module}\n"
+        f"{module}.{qualname}(hou.pwd())"
+    )
+    return node
 
 
 def get_parent(node: hou.SopNode) -> hou.SopNode:
@@ -19,6 +42,10 @@ def add_id_attr(geo: hou.Geometry, skip_if_existing: bool = True) -> None:
     if skip_if_existing and geo.findPointAttrib("id"):
         return
     geo.addAttrib(hou.attribType.Point, "id", "")
+
+
+def affix_id(prefix: str, affix: int) -> str:
+    return prefix + str(affix)
 
 
 def points_by_id(geo: hou.Geometry, attribute: str = "id") -> dict[str, hou.Point]:
