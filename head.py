@@ -3,8 +3,8 @@ import hou
 from helper import add_fuse, add_merge, add_mirror, add_output
 
 
-def build(cephalothroax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
-    head = cephalothroax.createNode("subnet", "head")
+def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
+    head = cephalothorax.createNode("subnet", "head")
     head.setInput(0, base)
     _add_parameters(head)
     base_rim = _extract_base_rim(head)
@@ -244,6 +244,14 @@ def _fill_side_faces(
         for (int index = 0; index < center_index; ++index)
             append(back_points, right_side[index]);
 
+        string front_ids[] = {};
+        foreach (int point_number; front_points)
+            append(front_ids, point(0, "id", point_number));
+        string back_ids[] = {};
+        foreach (int point_number; back_points)
+            append(back_ids, point(0, "id", point_number));
+        string center_id = point(0, "id", center);
+
         if (len(front_points) != len(back_points))
             error("Expected matching front and back sternum loops");
 
@@ -280,6 +288,9 @@ def _fill_side_faces(
         int headsidefronts[] = {};
         int headsidemiddles[] = {};
         int headsidebacks[] = {};
+        string headsidefront_ids[] = {};
+        string headsidemiddle_ids[] = {};
+        string headsideback_ids[] = {};
         for (int index = 0; index < len(ratios_front); ++index) {
             vector front_position = center_position + headfront_delta * ratios_front[index];
             vector back_position = center_position + headback_delta * ratios_back[index];
@@ -291,12 +302,18 @@ def _fill_side_faces(
             append(headsidefronts, add_named_point(front_position, front_id));
             append(headsidemiddles, add_named_point(middle_position, middle_id));
             append(headsidebacks, add_named_point(back_position, back_id));
+            append(headsidefront_ids, front_id);
+            append(headsidemiddle_ids, middle_id);
+            append(headsideback_ids, back_id);
         }
 
         int current_front = headfront;
         int current_middle = headmiddle;
         int current_back = headback;
-        for (int layer = 0; layer < len(headsidefronts); ++layer) {
+        string current_front_id = "headfront1";
+        string current_middle_id = "headtopmiddle1";
+        string current_back_id = "headback1";
+        for (int layer = 0; layer < len(headsidefront_ids); ++layer) {
             int next_front = headsidefronts[layer];
             int next_middle = headsidemiddles[layer];
             int next_back = headsidebacks[layer];
@@ -308,6 +325,9 @@ def _fill_side_faces(
             current_front = next_front;
             current_middle = next_middle;
             current_back = next_back;
+            current_front_id = headsidefront_ids[layer];
+            current_middle_id = headsidemiddle_ids[layer];
+            current_back_id = headsideback_ids[layer];
         }
 
         fillfacebypoints(array(current_front, front_points[-1], center, current_middle));

@@ -11,8 +11,8 @@ IDS = (
     "cheliceraeupper2",
 )
 
-def build(cephalothroax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
-    chelicerae = cephalothroax.createNode("subnet", "chelicerae")
+def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
+    chelicerae = cephalothorax.createNode("subnet", "chelicerae")
     chelicerae.setInput(0, base)
     parameters = _add_parameters(chelicerae)
     geometry = _add_geometry(chelicerae)

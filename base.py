@@ -51,8 +51,8 @@ _OUTER_EDGE_START_IDS_VEX = ", ".join(f'"{p}"' for p, _ in EDGE_IDS)
 _OUTER_EDGE_END_IDS_VEX = ", ".join(f'"{p}"' for _, p in EDGE_IDS)
 
 
-def build(cephalothroax: hou.SopNode) -> hou.SopNode:
-    base = cephalothroax.createNode("subnet", "base")
+def build(cephalothorax: hou.SopNode) -> hou.SopNode:
+    base = cephalothorax.createNode("subnet", "base")
     _add_parameters(base)
 
     sternum = build_sternum(base)

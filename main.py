@@ -6,12 +6,12 @@ editable and inspectable as a SOP network.
 """
 
 import hou
-from cephalothroax import build as build_cephalothroax
+from cephalothorax import build as build_cephalothorax
 
 
 def build() -> hou.ObjNode:
     spider = _add_spider()
-    cephalothroax = build_cephalothroax(spider)
+    cephalothorax = build_cephalothorax(spider)
     spider.layoutChildren()
     return spider
 
