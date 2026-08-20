@@ -44,7 +44,7 @@ def add_id_attr(geo: hou.Geometry, skip_if_existing: bool = True) -> None:
     geo.addAttrib(hou.attribType.Point, "id", "")
 
 
-def affix_id(prefix: str, affix: int) -> str:
+def affix_id(prefix: str, affix: int | str) -> str:
     return prefix + str(affix)
 
 

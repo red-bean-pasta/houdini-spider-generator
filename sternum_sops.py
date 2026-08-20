@@ -11,11 +11,11 @@ class ID(StrEnum):
     STERNUMMIDDLE = auto()
     STERNUMSPINE = auto()
 
-def sternumrim(i: int) -> str:
+def sternumrim(i: int | str) -> str:
     return affix_id(ID.STERNUMRIM, i)
-def sternummiddle(i: int) -> str:
+def sternummiddle(i: int | str) -> str:
     return affix_id(ID.STERNUMMIDDLE, i)
-def sternumspine(i: int) -> str:
+def sternumspine(i: int | str) -> str:
     return affix_id(ID.STERNUMSPINE, i)
 
 
