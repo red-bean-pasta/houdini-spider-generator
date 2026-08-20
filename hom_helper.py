@@ -1,6 +1,17 @@
-from typing import Callable
+import re
+from collections import defaultdict
+from typing import Callable, Any
 
 import hou
+
+
+def assert_node(condition: bool, message: str = "") -> None:
+   if not condition:
+       raise hou.NodeError(message)
+
+
+def affix_id(prefix: str, *affixes: int | str) -> str:
+    return prefix + "_".join(map(str, affixes))
 
 
 def sopify(
@@ -30,7 +41,6 @@ def get_parent(node: hou.SopNode) -> hou.SopNode:
         raise hou.NodeError("Expected Python SOP to be inside a SOP network")
     return parent
 
-
 def get_float_parm(node: hou.SopNode, name: str) -> float:
     parm = node.parm(name)
     if parm is None:
@@ -38,34 +48,90 @@ def get_float_parm(node: hou.SopNode, name: str) -> float:
     return parm.evalAsFloat()
 
 
-def add_id_attr(geo: hou.Geometry, skip_if_existing: bool = True) -> None:
-    if skip_if_existing and geo.findPointAttrib("id"):
-        return
-    geo.addAttrib(hou.attribType.Point, "id", "")
+def add_new_id_attr(geo: hou.Geometry) -> hou.Attrib:
+    return add_new_attr(geo, hou.attribType.Point, "id", "")
+
+def add_new_prim_attr(geo: hou.Geometry, name: str, default: Any) -> hou.Attrib:
+    return add_new_attr(geo, hou.attribType.Prim, name, default)
+
+def add_new_edge_attr(geo: hou.Geometry, name: str, default: Any) -> hou.Attrib:
+    return add_new_attr(geo, hou.attribType.Edge, name, default)
+
+def add_new_attr(
+        geo: hou.Geometry,
+        p_type: hou.attribType,
+        name: str,
+        default: Any,
+        skip_existing: bool = True,
+) -> hou.Attrib:
+    found = geo.findPointAttrib(name)
+    if skip_existing and found:
+        return found
+    return geo.addAttrib(p_type, name, default)
 
 
-def affix_id(prefix: str, affix: int | str) -> str:
-    return prefix + str(affix)
-
-
-def points_by_id(geo: hou.Geometry, attribute: str = "id") -> dict[str, hou.Point]:
-    result: dict[str, hou.Point] = {}
+def points_by_id(geo: hou.Geometry | hou.Prim, attribute: str = "id") -> dict[str, hou.Point]:
+    result = {}
+    point: hou.Point
     for point in geo.points():
-        point_id = point.stringAttribValue(attribute)
-        if point_id and point_id not in result:
-            result[point_id] = point
+        value = point.stringAttribValue(attribute)
+        if not value:
+            continue
+        if value in result:
+            raise hou.NodeError(f"Duplicate point {attribute}: {value}")
+        result[value] = point
     return result
 
+def unique_points_start_with(
+    geo: hou.Geometry,
+    prefixes: tuple[str, ...],
+    attribute: str = "id",
+) -> dict[str, hou.Point]:
+    result = {}
+    for point, value in zip(
+            geo.points(),
+            geo.pointStringAttribValues(attribute),
+    ):
+        if not value:
+            continue
+        if value in result:
+            raise hou.NodeError(f"Duplicate point {attribute}: {value}")
+        if not value.startswith(prefixes):
+            continue
+        result[value] = point
+    return result
 
-def set_id(
+def points_starting_with(
+    geo: hou.Geometry,
+    prefixes: tuple[str, ...] | str,
+    attribute: str = "id",
+) -> list[hou.Point]:
+    return [
+        point
+        for point, value in zip(
+            geo.points(),
+            geo.pointStringAttribValues(attribute),
+        )
+        if value.startswith(prefixes)
+    ]
+
+
+def set_point_id(
+    point: hou.Point,
+    value: str,
+    attribute: str = "id",
+) -> None:
+    point.setAttribValue(attribute, value)
+
+def set_points_id(
     points: list[hou.Point],
     values: list[str],
     attribute: str = "id",
 ) -> None:
     if len(points) != len(values):
         raise hou.NodeError("Expected matching point and value array sizes")
-    for point, p_id in zip(points, values):
-        point.setAttribValue(attribute, p_id)
+    for p_point, p_id in zip(points, values):
+        set_point_id(p_point, p_id, attribute)
 
 
 def fill_face(
@@ -76,7 +142,6 @@ def fill_face(
     for point in points:
         polygon.addVertex(point)
     return polygon
-
 
 def fill_face_by_id(
     geo: hou.Geometry,
@@ -93,15 +158,38 @@ def fill_face_by_id(
     return fill_face(geo, face_points)
 
 
+def get_id_range(
+        geo: hou.Geometry,
+        prefix: str,
+        attribute: str = "id",
+) -> tuple[int, int] | None:
+    values = geo.pointStringAttribValues(attribute)
+    numbers: list[int] = []
+    for value in values:
+        if prefix:
+            if not value.startswith(prefix):
+                continue
+            remainder = value[len(prefix):]
+            match = re.search(r"-?\d+", remainder)
+        else:
+            match = re.search(r"-?\d+", value)
+        if match is not None:
+            numbers.append(int(match.group()))
+
+    if not numbers:
+        return None
+    return min(numbers), max(numbers)
+
+
 def find_quad_polyextrude_splits(
     geo: hou.Geometry,
-    split_points: list[hou.Point],
+    reference_points: list[hou.Point],
     split_group_name: str,
 ) -> None:
     split_group = geo.findEdgeGroup(split_group_name)
     if split_group is None:
         split_group = geo.createEdgeGroup(split_group_name)
-    for split_point in split_points:
+    for split_point in reference_points:
         primitives = split_point.prims()
         if len(primitives) != 2:
             raise hou.NodeError(f"Expected point {split_point.number()} to belong to exactly 2 primitives, got {len(primitives)}")
@@ -130,3 +218,20 @@ def find_quad_polyextrude_splits(
             if edge is None:
                 raise hou.NodeError(f"Expected opposite points of primitive {primitive.number()} to form an edge")
             split_group.add(edge)
+
+
+def deduplicate_points(
+        geo: hou.Geometry,
+        prefix: tuple[str, ...] | str,
+        attribute: str = "id"
+) -> None:
+    points = points_starting_with(geo, prefix, attribute) if prefix else geo.points()
+    grouped: defaultdict[str, list[hou.Point]] = defaultdict(list)
+    for p in points:
+        v = p.stringAttribValue(attribute)
+        grouped[v].append(p)
+    for value, duplicates in grouped.items():
+        if len(duplicates) <= 1:
+            continue
+        for i, point in enumerate(duplicates):
+            set_point_id(point, f"{value}_{i+1}", attribute)

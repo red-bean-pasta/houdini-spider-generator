@@ -3,7 +3,7 @@ from enum import StrEnum, auto
 
 import hou
 
-from hom_helper import fill_face, points_by_id, set_id, get_parent, get_float_parm, add_id_attr, affix_id
+from hom_helper import fill_face, points_by_id, set_points_id, get_parent, get_float_parm, add_new_id_attr, affix_id, assert_node
 
 
 class ID(StrEnum):
@@ -11,19 +11,21 @@ class ID(StrEnum):
     STERNUMMIDDLE = auto()
     STERNUMSPINE = auto()
 
-def sternumrim(i: int | str) -> str:
-    return affix_id(ID.STERNUMRIM, i)
-def sternummiddle(i: int | str) -> str:
-    return affix_id(ID.STERNUMMIDDLE, i)
-def sternumspine(i: int | str) -> str:
-    return affix_id(ID.STERNUMSPINE, i)
+def sternumrim(*i: int | str) -> str:
+    return affix_id(ID.STERNUMRIM, *i)
+def sternummiddle(*i: int | str) -> str:
+    return affix_id(ID.STERNUMMIDDLE, *i)
+def sternumspine(*i: int | str) -> str:
+    return affix_id(ID.STERNUMSPINE, *i)
+
+def outer_loop_ids() -> tuple[str, str]:
+    return ID.STERNUMRIM, ID.STERNUMMIDDLE
 
 
 def left_half(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
-    control = parent.node("CONTROL")
-    assert control
+    control = parent.node("CONTROL"); assert_node(control is not None)
 
     ratio_x = get_float_parm(parent, "width_length_ratiox")
     ratio_y = get_float_parm(parent, "width_length_ratioy")
@@ -70,7 +72,7 @@ def add_midpoints(node: hou.SopNode) -> None:
     positions = sorted(
         (point.position() for point in geo.points()),
         key=lambda p: -p.z(),
-    ); assert len(positions) >= 2
+    ); assert_node(len(positions) >= 2)
 
     result: list[hou.Vector3] = []
     for index, position in enumerate(positions):
@@ -85,13 +87,13 @@ def add_midpoints(node: hou.SopNode) -> None:
 
 def add_point_ids(node: hou.SopNode) -> None:
     geo = node.geometry()
-    primitives = geo.prims(); assert len(primitives) == 2
+    primitives = geo.prims(); assert_node(len(primitives) == 2)
 
-    add_id_attr(geo)
+    add_new_id_attr(geo)
     right_points = list(primitives[0].points())
     left_points = list(primitives[1].points())
 
-    set_id([right_points[0]], [sternumrim(0)])
+    set_points_id([right_points[0]], [sternumrim(0)])
 
     for index in range(1, len(right_points)):
         point_id = (
@@ -99,7 +101,7 @@ def add_point_ids(node: hou.SopNode) -> None:
             if index % 2
             else sternummiddle(index // 2)
         )
-        set_id([right_points[index]], [point_id])
+        set_points_id([right_points[index]], [point_id])
 
     for index in range(1, len(left_points) - 1):
         # The mirrored primitive runs from sternumrim5 back toward sternumrim0.
@@ -109,20 +111,20 @@ def add_point_ids(node: hou.SopNode) -> None:
             if index % 2
             else sternumrim(-id_index)
         )
-        set_id([left_points[index]], [point_id])
+        set_points_id([left_points[index]], [point_id])
 
 
 def add_center_spine(node: hou.SopNode) -> None:
-    input_node = node.inputs()[0]; assert input_node
+    input_node = node.inputs()[0]; assert_node(input_node is not None)
     source_geo = input_node.geometry()
-    primitives = source_geo.prims(); assert primitives
+    primitives = source_geo.prims(); assert_node(primitives is not None)
 
     right_points = list(primitives[0].points())
     positions = [point.position() for point in right_points[2:-1]]
 
     geo = node.geometry()
     geo.clear()
-    add_id_attr(geo)
+    add_new_id_attr(geo)
 
     spine_points: list[hou.Point] = []
     for position in positions:
@@ -131,7 +133,7 @@ def add_center_spine(node: hou.SopNode) -> None:
         spine_points.append(point)
 
     ids = [sternumspine(index) for index in range(1, len(spine_points) + 1)]
-    set_id(spine_points, ids)
+    set_points_id(spine_points, ids)
 
 
 def descend_sternum_spine(node: hou.SopNode) -> None:
@@ -151,7 +153,7 @@ def descend_sternum_spine(node: hou.SopNode) -> None:
 
     upper_span = abs(middle[2] - top[2])
     lower_span = abs(bottom[2] - middle[2])
-    assert upper_span != 0.0 and lower_span != 0.0
+    assert_node(upper_span != 0.0 and lower_span != 0.0)
     for point_id, point in points.items():
         if not point_id.startswith(ID.STERNUMSPINE):
             continue
@@ -180,5 +182,6 @@ def build_sternum_faces(node: hou.SopNode) -> None:
     )
     for index in range(len(center) - 2):
         fill_face(geo, [center[index], right[index], right[index + 1], center[index + 1]])
-        fill_face(geo, [center[index], center[index + 1], left[index + 1], left[index]])
     fill_face(geo, [center[-2], right[-1], center[-1], left[-1]])
+    for index in range(len(center) - 2):
+        fill_face(geo, [center[index], center[index + 1], left[index + 1], left[index]])
