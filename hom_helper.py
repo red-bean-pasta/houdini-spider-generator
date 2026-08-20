@@ -52,7 +52,7 @@ def points_by_id(geo: hou.Geometry, attribute: str = "id") -> dict[str, hou.Poin
     result: dict[str, hou.Point] = {}
     for point in geo.points():
         point_id = point.stringAttribValue(attribute)
-        if point_id:
+        if point_id and point_id not in result:
             result[point_id] = point
     return result
 

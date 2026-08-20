@@ -60,33 +60,27 @@ def left_half(node: hou.SopNode) -> None:
         midpoint_z - p1_p3_x / p1_p3_length * midpoint_p2,
     )
 
-    points = []
     for position in (p0, p1, p2, p3, p4, p5):
         point = geo.createPoint()
         point.setPosition(position)
-        points.append(point)
 
 
 def add_midpoints(node: hou.SopNode) -> None:
     geo = node.geometry()
-    primitives = geo.prims()
-    assert len(primitives) == 1
+    positions = sorted(
+        (point.position() for point in geo.points()),
+        key=lambda p: -p.z(),
+    ); assert len(positions) >= 2
 
-    primitive = primitives[0]
-    original = list(primitive.points())
-    assert len(original) >= 2
-
-    points: list[hou.Point] = []
-    for index in range(len(original) - 1):
-        points.append(original[index])
-        if index == 0:
-            continue
-        a = original[index].position()
-        b = original[index + 1].position()
-        midpoint = geo.createPoint()
-        midpoint.setPosition((a + b) / 2.0)
-        points.append(midpoint)
-    points.append(original[-1])
+    result: list[hou.Vector3] = []
+    for index, position in enumerate(positions):
+        result.append(position)
+        if 0 < index < len(positions) - 1:
+            result.append((position + positions[index + 1]) / 2.0)
+    geo.clear()
+    for position in result:
+        point = geo.createPoint()
+        point.setPosition(position)
 
 
 def add_point_ids(node: hou.SopNode) -> None:
