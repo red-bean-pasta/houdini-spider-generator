@@ -1,0 +1,40 @@
+"""Build the procedural sternum SOP network described in ``instructions/``.
+
+Run this file with Houdini's Python interpreter (hython), or paste it into a
+Houdini Python Source Editor.  The script creates nodes; the shape remains
+editable and inspectable as a SOP network.
+"""
+
+import hou
+from cephalothroax import build as build_cephalothroax
+
+
+def build() -> hou.ObjNode:
+    spider = _add_spider()
+    cephalothroax = build_cephalothroax(spider)
+    spider.layoutChildren()
+    return spider
+
+
+def _add_spider() -> hou.ObjNode:
+    obj = _get_root()
+
+    spider = obj.node("spider")
+    if spider:
+        return spider
+
+    spider = obj.createNode("geo", "spider")
+    for child in spider.children():
+        child.destroy()
+
+    return spider
+
+
+def _get_root() -> hou.Node:
+    obj = hou.node("/obj")
+    assert obj is not None
+    return obj
+
+
+if __name__ == "__main__":
+    build()
