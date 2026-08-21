@@ -22,6 +22,7 @@ class ID(StrEnum):
     BASESTERNUM = auto()
     BASESTERNUMMIDDLE = auto()
     BASEMAXILLA = auto()
+    BASEEND = auto()
 
 def basesternum(*i: int | str) -> str:
     return affix_id(ID.BASESTERNUM, *i)
@@ -29,9 +30,11 @@ def basesternummiddle(*i: int | str) -> str:
     return affix_id(ID.BASESTERNUMMIDDLE, *i)
 def basemaxilla(*i: int | str) -> str:
     return affix_id(ID.BASEMAXILLA, *i)
+def baseend(*i: int | str) -> str:
+    return affix_id(ID.BASEEND, *i)
 
-def outer_loop_ids() -> tuple[str, str]:
-    return ID.BASESTERNUM, ID.BASESTERNUMMIDDLE
+def outer_loop_ids() -> tuple[str, ...]:
+    return ID.BASESTERNUM, ID.BASEMAXILLA, ID.BASESTERNUMMIDDLE, ID.BASEEND
 
 
 def _edge_group(geo: hou.Geometry, name: str) -> hou.EdgeGroup:
