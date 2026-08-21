@@ -1,10 +1,3 @@
-"""Build the procedural sternum SOP network described in ``instructions/``.
-
-Run this file with Houdini's Python interpreter (hython), or paste it into a
-Houdini Python Source Editor.  The script creates nodes; the shape remains
-editable and inspectable as a SOP network.
-"""
-
 import hou
 from cephalothorax import build as build_cephalothorax
 

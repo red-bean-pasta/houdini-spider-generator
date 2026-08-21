@@ -13,7 +13,6 @@ from hom_helper import (
     set_points_id,
     fill_face,
     affix_id, get_id_range,
-    assert_node,
 )
 from sternum_sops import sternumrim
 
@@ -92,7 +91,7 @@ def _extrude_edge_outward(
     start_position = start.position()
     end_position = end.position()
     direction = end_position - start_position
-    edge_length =  start_position.distanceTo(end_position); assert_node(edge_length > 1e-6, f"Expected nonzero edge {edge.edgeId()}")
+    edge_length = start_position.distanceTo(end_position); assert edge_length > 1e-6, f"Expected nonzero edge {edge.edgeId()}"
 
     outward = hou.Vector3(
         direction[2],
@@ -144,7 +143,7 @@ def rotate_coxa_flaps(node: hou.SopNode) -> None:
 
     for primitive in geo.prims():
         points = list(primitive.points())
-        assert_node(len(points) == 4, f"Expected a coxa flap quad, got {len(points)} points")
+        assert len(points) == 4, f"Expected a coxa flap quad, got {len(points)} points"
         for origin, outer in ((points[0], points[3]), (points[1], points[2])):
             offset = outer.position() - origin.position()
             height = offset.length()
@@ -168,7 +167,7 @@ def adjust_frontest_line(node: hou.SopNode) -> None:
     line_end = points[basesternum(1, 2)].position()
     line_direction = line_end - line_start
     line_length_squared = line_direction.dot(line_direction)
-    assert_node(line_length_squared > 1e-12, "Expected distinct frontest line endpoints")
+    assert line_length_squared > 1e-12, "Expected distinct frontest line endpoints"
 
     for point_id in (
         basesternum(0),
@@ -227,7 +226,7 @@ def fill_pedicel_membrane(node: hou.SopNode) -> None:
     e5_1_offset = e5_1.position() - p5_position
     e5_2_offset = e5_2.position() - p5_position
     horizontal = hou.Vector3(e5_1_offset[0] + e5_2_offset[0], 0.0, e5_1_offset[2] + e5_2_offset[2])
-    horizontal_length = horizontal.length(); assert_node(horizontal_length > 1e-6, "Expected a nonzero pedicel direction")
+    horizontal_length = horizontal.length(); assert horizontal_length > 1e-6, "Expected a nonzero pedicel direction"
     horizontal /= horizontal_length
     px_offset = horizontal * math.sqrt(e5_1_offset[0] ** 2 + e5_1_offset[2] ** 2)
     px_offset[1] = (e5_1_offset[1] + e5_2_offset[1]) / 2.0
@@ -252,7 +251,7 @@ def prepare_maxilla_membrane(node: hou.SopNode) -> None:
         p
         for p in geo.prims()
         if p.stringAttribValue("region") == "maxillasocket"
-    ]; assert_node(prims is not None and len(prims) == 2)
+    ]; assert prims is not None and len(prims) == 2
     pivot = points[sternumrim(1)]
     outer = points[basesternum(1, 1)]
     for pm in prims:

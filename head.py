@@ -9,7 +9,6 @@ from chelicerae import cheliceraeupper
 from hom_helper import (
     add_new_id_attr,
     affix_id,
-    assert_node,
     fill_face,
     fill_face_by_id,
     get_float_parm,
@@ -182,7 +181,7 @@ def _add_corners_half(node: hou.SopNode) -> None:
     basesternum1_2 = base_sops.basesternum(1, 2)
     baseend0 = base_sops.baseend(0)
     expected_ids = (sternumrim0, cheliceraeupper0, basesternum1_2, baseend0)
-    assert_node(all(point_id in points for point_id in expected_ids), "Expected head reference points")
+    assert all(point_id in points for point_id in expected_ids), "Expected head reference points"
 
     sternumrim0_position = points[sternumrim0].position()
     cheliceraeupper0_position = points[cheliceraeupper0].position()
@@ -291,20 +290,20 @@ def _fill_side_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
     points = points_by_id(geo)
     right_side = _sorted_right_side_points(geo)
-    assert_node(len(right_side) >= 3 and len(right_side) % 2 == 1, "Expected an odd, symmetric right-side sternum loop")
+    assert len(right_side) >= 3 and len(right_side) % 2 == 1, "Expected an odd, symmetric right-side sternum loop"
 
     center_index = (len(right_side) - 1) // 2
     center = right_side[center_index]
     center_position = center.position()
     front_points = list(reversed(right_side[center_index + 1:]))
     back_points = right_side[:center_index]
-    assert_node(len(front_points) == len(back_points), "Expected matching front and back sternum loops")
+    assert len(front_points) == len(back_points), "Expected matching front and back sternum loops"
 
     front_offsets = [center_position - point.position() for point in front_points]
     back_offsets = [center_position - point.position() for point in back_points]
     front_outer_length = front_offsets[0].length()
     back_outer_length = back_offsets[0].length()
-    assert_node(front_outer_length > 1e-6 and back_outer_length > 1e-6, "Expected nonzero sternum side offsets")
+    assert front_outer_length > 1e-6 and back_outer_length > 1e-6, "Expected nonzero sternum side offsets"
 
     front_ratios = [
         offset.length() / front_outer_length
@@ -318,12 +317,11 @@ def _fill_side_faces(node: hou.SopNode) -> None:
     headfront_point = points.get(headfront(1))
     headmiddle_point = points.get(headtopmiddle(1))
     headback_point = points.get(headback(1))
-    assert_node(
+    assert (
         headfront_point is not None
         and headmiddle_point is not None
-        and headback_point is not None,
-        "Expected head side reference points",
-    )
+        and headback_point is not None
+    ), "Expected head side reference points"
     headfront_position = headfront_point.position()
     headback_position = headback_point.position()
 
@@ -385,7 +383,7 @@ def _rename_left_ids(node: hou.SopNode) -> None:
             (index for index, character in enumerate(point_id) if character.isdigit()),
             None,
         )
-        assert_node(first_digit is not None, f"Expected a numeric suffix in point id {point_id}")
+        assert first_digit is not None, f"Expected a numeric suffix in point id {point_id}"
         point.setAttribValue(
             "id",
             f"{point_id[:first_digit]}-{point_id[first_digit:]}",

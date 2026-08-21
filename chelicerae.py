@@ -7,7 +7,6 @@ from hom_helper import (
     add_new_id_attr,
     add_new_prim_attr,
     affix_id,
-    assert_node,
     fill_face,
     get_float_parm,
     get_parent,
@@ -124,14 +123,14 @@ def _identify_inset_split(node: hou.SopNode) -> None:
     upper_id = cheliceraeupper(0)
     lower = points.get(lower_id)
     upper = points.get(upper_id)
-    assert_node(lower is not None and upper is not None, f"Expected chelicerae points {lower_id!r} and {upper_id!r}")
+    assert lower is not None and upper is not None, f"Expected chelicerae points {lower_id!r} and {upper_id!r}"
 
     inset_scale = lower.position().distanceTo(upper.position())
     for primitive in geo.prims():
         primitive.setAttribValue("tmp_insetscale", inset_scale)
 
     edge = geo.findEdge(lower, upper)
-    assert_node(edge is not None, f"Expected chelicerae edge {lower_id!r}-{upper_id!r}")
+    assert edge is not None, f"Expected chelicerae edge {lower_id!r}-{upper_id!r}"
     edge_group = add_edge_group(geo, "tmp_chelicera_split")
     edge_group.add(edge)
 

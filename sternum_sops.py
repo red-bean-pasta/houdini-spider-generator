@@ -3,7 +3,7 @@ from enum import StrEnum, auto
 
 import hou
 
-from hom_helper import fill_face, points_by_id, set_points_id, get_parent, get_float_parm, add_new_id_attr, affix_id, assert_node
+from hom_helper import fill_face, points_by_id, set_points_id, get_parent, get_float_parm, add_new_id_attr, affix_id
 
 
 class ID(StrEnum):
@@ -25,7 +25,7 @@ def outer_loop_ids() -> tuple[str, str]:
 def left_half(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
-    control = parent.node("CONTROL"); assert_node(control is not None)
+    control = parent.node("CONTROL"); assert control is not None
 
     ratio_x = get_float_parm(parent, "width_length_ratiox")
     ratio_y = get_float_parm(parent, "width_length_ratioy")
@@ -72,7 +72,7 @@ def add_midpoints(node: hou.SopNode) -> None:
     positions = sorted(
         (point.position() for point in geo.points()),
         key=lambda p: -p.z(),
-    ); assert_node(len(positions) >= 2)
+    ); assert len(positions) >= 2
 
     result: list[hou.Vector3] = []
     for index, position in enumerate(positions):
@@ -87,7 +87,7 @@ def add_midpoints(node: hou.SopNode) -> None:
 
 def add_point_ids(node: hou.SopNode) -> None:
     geo = node.geometry()
-    primitives = geo.prims(); assert_node(len(primitives) == 2)
+    primitives = geo.prims(); assert len(primitives) == 2
 
     add_new_id_attr(geo)
     right_points = list(primitives[0].points())
@@ -115,9 +115,9 @@ def add_point_ids(node: hou.SopNode) -> None:
 
 
 def add_center_spine(node: hou.SopNode) -> None:
-    input_node = node.inputs()[0]; assert_node(input_node is not None)
+    input_node = node.inputs()[0]; assert input_node is not None
     source_geo = input_node.geometry()
-    primitives = source_geo.prims(); assert_node(primitives is not None)
+    primitives = source_geo.prims(); assert primitives is not None
 
     right_points = list(primitives[0].points())
     positions = [point.position() for point in right_points[2:-1]]
@@ -141,8 +141,7 @@ def descend_sternum_spine(node: hou.SopNode) -> None:
     parent = get_parent(node)
 
     control = parent.node("CONTROL")
-    if control is None:
-        raise hou.NodeError("Expected CONTROL node")
+    assert control is not None, "Expected CONTROL node"
 
     depth = get_float_parm(control, "half_width") * get_float_parm(parent, "width_depth_ratio")
     points = points_by_id(geo)
@@ -153,7 +152,7 @@ def descend_sternum_spine(node: hou.SopNode) -> None:
 
     upper_span = abs(middle[2] - top[2])
     lower_span = abs(bottom[2] - middle[2])
-    assert_node(upper_span != 0.0 and lower_span != 0.0)
+    assert upper_span != 0.0 and lower_span != 0.0
     for point_id, point in points.items():
         if not point_id.startswith(ID.STERNUMSPINE):
             continue
