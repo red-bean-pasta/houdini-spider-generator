@@ -1,31 +1,46 @@
+from enum import StrEnum, auto
+
 import hou
 
-from helper import add_output
-
-
-IDS = (
-    "cheliceraeupper-2",
-    "cheliceraeupper-1",
-    "cheliceraeupper0",
-    "cheliceraeupper1",
-    "cheliceraeupper2",
+import base_sops
+from hom_helper import (
+    add_new_id_attr,
+    add_new_prim_attr,
+    affix_id,
+    assert_node,
+    fill_face,
+    get_float_parm,
+    get_parent,
+    points_by_id,
+    set_points_id,
+    sopify, add_edge_group,
 )
+from sop_helper import add_output
+
+
+class ID(StrEnum):
+    CHELICERAEUPPER = auto()
+
+def cheliceraeupper(*i: int | str) -> str:
+    return affix_id(ID.CHELICERAEUPPER, *i)
+
 
 def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
     chelicerae = cephalothorax.createNode("subnet", "chelicerae")
     chelicerae.setInput(0, base)
-    parameters = _add_parameters(chelicerae)
-    geometry = _add_geometry(chelicerae)
-    regions = _identify_inset_flaps(chelicerae, geometry)
-    inset = _inset_flaps(chelicerae, regions)
-    cleanup = _cleanup_inset_flaps(chelicerae, inset)
-    output = add_output(chelicerae, "OUT_CHELICERAE", cleanup)
+    _add_parameters(chelicerae)
 
+    geometry = sopify(chelicerae, chelicerae.indirectInputs()[0], _build_geometry)
+    regions = sopify(chelicerae, geometry, _identify_inset_split)
+    inset = _inset_flaps(chelicerae, regions)
+    cleanup = sopify(chelicerae, inset, _cleanup_inset_flaps)
+
+    add_output(chelicerae, "OUT_CHELICERAE", cleanup)
     chelicerae.layoutChildren()
     return chelicerae
 
 
-def _add_parameters(chelicerae: hou.SopNode) -> hou.SopNode:
+def _add_parameters(chelicerae: hou.SopNode) -> None:
     templates = chelicerae.parmTemplateGroup()
     templates.append(
         hou.FloatParmTemplate(
@@ -48,127 +63,109 @@ def _add_parameters(chelicerae: hou.SopNode) -> hou.SopNode:
         )
     )
     chelicerae.setParmTemplateGroup(templates)
-    return chelicerae
 
 
-def _add_geometry(chelicerae: hou.SopNode) -> hou.SopNode:
-    geometry = chelicerae.createNode("attribwrangle", "build_chelicerae")
-    geometry.setInput(0, chelicerae.indirectInputs()[0])
-    geometry.parm("class").set(0)
-    geometry.parm("snippet").set(r'''
-        #include "$HIP/helper.h"
-        int e0 = findbyid("basesternum0");
-        int e1_1 = findbyid("basesternum1_1");
-        int mx1 = findbyid("basemaxilla1");
-        int mx_neg1 = findbyid("basemaxilla-1");
-        int e_neg1_1 = findbyid("basesternum-1_1");
-        if (e0 < 0 || e1_1 < 0 || mx1 < 0 || e_neg1_1 < 0 || mx_neg1 < 0)
-            error("Expected five chelicerae base-loop points");
+def _build_geometry(node: hou.SopNode) -> None:
+    geo = node.geometry()
 
-        vector e0_position = point(0, "P", e0);
-        vector e1_1_position = point(0, "P", e1_1);
-        vector e_neg1_1_position = point(0, "P", e_neg1_1);
-        vector mx1_position = point(0, "P", mx1);
-        vector mx_neg1_position = point(0, "P", mx_neg1);
-        vector base_positions[] = array(
-            mx_neg1_position,
-            e_neg1_1_position,
-            e0_position,
-            e1_1_position,
-            mx1_position
-        );
-        string base_ids[] = array("basemaxilla-1", "basesternum-1_1", "basesternum0", "basesternum1_1", "basemaxilla1");
-        for (int primitive = nprimitives(0) - 1; primitive >= 0; --primitive)
-            removeprim(0, primitive, 1);
+    source_points = points_by_id(geo)
+    base_ids = (
+        base_sops.basemaxilla(-1),
+        base_sops.basesternum(-1, 1),
+        base_sops.basesternum(0),
+        base_sops.basesternum(1, 1),
+        base_sops.basemaxilla(1),
+    )
+    base_positions = [source_points[point_id].position() for point_id in base_ids]
 
-        int base_points[];
-        for (int index = 0; index < len(base_positions); ++index) {
-            int base_point = addpoint(0, base_positions[index]);
-            setid(array(base_point), array(base_ids[index]));
-            append(base_points, base_point);
-        }
+    geo.clear()
+    add_new_id_attr(geo)
+    add_new_prim_attr(geo, "region", "")
+    base_points = []
+    for point_id, position in zip(base_ids, base_positions):
+        point = geo.createPoint()
+        point.setPosition(position)
+        base_points.append(point)
+    set_points_id(base_points, list(base_ids))
 
-        int upper_points[];
-        string upper_ids[];
-        float height = distance(mx1_position, e0_position) * ch("../height_ratio");
-        vector height_offset = set(0, height, 0);
+    height_ratio = get_float_parm(get_parent(node), "height_ratio")
+    height = base_positions[-1].distanceTo(base_positions[2]) * height_ratio
+    height_offset = hou.Vector3(0.0, height, 0.0)
 
-        for (int index = 0; index < len(base_points); ++index) {
-            int upper_point = addpoint(0, base_positions[index] + height_offset);
-            string upper_id = sprintf("cheliceraeupper%d", index - 2);
-            setid(array(upper_point), array(upper_id));
-            append(upper_points, upper_point);
-            append(upper_ids, upper_id);
-        }
+    upper_points = []
+    upper_ids = []
+    for index, position in enumerate(base_positions):
+        point_id = cheliceraeupper(index - 2)
+        point = geo.createPoint()
+        point.setPosition(position + height_offset)
+        upper_points.append(point)
+        upper_ids.append(point_id)
+    set_points_id(upper_points, upper_ids)
 
-        for (int segment = 0; segment < len(base_points) - 1; ++segment) {
-            fillfacebypoints(array(
-                base_points[segment],
-                base_points[segment + 1],
-                upper_points[segment + 1],
-                upper_points[segment]
-            ));
-            setprimattrib(0, "id", nprimitives(0) - 1, "chelicera", "set");
-        }
-    ''')
-    return geometry
+    for index in range(len(base_points) - 1):
+        primitive = fill_face(
+            geo,
+            [
+                base_points[index],
+                base_points[index + 1],
+                upper_points[index + 1],
+                upper_points[index],
+            ],
+        )
+        primitive.setAttribValue("region", "chelicerasocket")
 
 
-def _identify_inset_flaps(parent: hou.SopNode, p_input: hou.SopNode) -> hou.SopNode:
-    regions = parent.createNode("attribwrangle", "identify_inset_flaps")
-    regions.setInput(0, p_input)
-    regions.parm("class").set(0)
-    regions.parm("snippet").set(r'''
-        #include "$HIP/helper.h"
-        addattrib(0, "prim", "tmp_insetscale", 0.0);
-        int lower = findbyid("basesternum0");
-        int upper = findbyid("cheliceraeupper0");
-        if (lower < 0 || upper < 0)
-            error("Expected chelicera points basesternum0 and cheliceraeupper0");
-        vector lower_position = point(0, "P", lower);
-        vector upper_position = point(0, "P", upper);
-        float insetscale = distance(lower_position, upper_position);
-        for (int primitive = 0; primitive < nprimitives(0); ++primitive)
-            setprimattrib(0, "tmp_insetscale", primitive, insetscale);
-        setedgegroup(0, "tmp_chelicera_flap_borders", lower, upper, 1);
-    ''')
-    return regions
+def _identify_inset_split(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    add_new_prim_attr(geo, "tmp_insetscale", 0.0)
+
+    points = points_by_id(geo)
+    lower_id = base_sops.basesternum(0)
+    upper_id = cheliceraeupper(0)
+    lower = points.get(lower_id)
+    upper = points.get(upper_id)
+    assert_node(lower is not None and upper is not None, f"Expected chelicerae points {lower_id!r} and {upper_id!r}")
+
+    inset_scale = lower.position().distanceTo(upper.position())
+    for primitive in geo.prims():
+        primitive.setAttribValue("tmp_insetscale", inset_scale)
+
+    edge = geo.findEdge(lower, upper)
+    assert_node(edge is not None, f"Expected chelicerae edge {lower_id!r}-{upper_id!r}")
+    edge_group = add_edge_group(geo, "tmp_chelicera_split")
+    edge_group.add(edge)
 
 
 def _inset_flaps(parent: hou.SopNode, p_input: hou.SopNode) -> hou.SopNode:
-    inset = parent.createNode("polyextrude", "inset_flaps")
+    inset = parent.createNode("polyextrude", "inset_membrane")
     inset.setInput(0, p_input)
-    inset.parm("group").set("@id=chelicera")
+    inset.parm("group").set("@tmp_inset_region=chelicerasocket")
     inset.parm("splittype").set(1)
     inset.parm("usesplitgroup").set(1)
-    inset.parm("splitgroup").set("tmp_chelicera_flap_borders")
+    inset.parm("splitgroup").set("tmp_chelicera_split")
     inset.parm("inset").setExpression('ch("../membrane_ratio")')
     inset.parm("uselocalinsetscaleattrib").set(1)
     inset.parm("localinsetscaleattrib").set("tmp_insetscale")
     return inset
 
 
-def _cleanup_inset_flaps(parent: hou.SopNode, p_input: hou.SopNode) -> hou.SopNode:
-    cleanup = parent.createNode("attribwrangle", "cleanup_inset_flaps")
-    cleanup.setInput(0, p_input)
-    cleanup.parm("class").set(0)
-    cleanup.parm("snippet").set(r'''
-        #include "$HIP/helper.h"
-        removeprimattrib(0, "tmp_insetscale");
-        for (int point_number = npoints(0) - 1; point_number >= 0; --point_number) {
-            string id = point(0, "id", point_number);
-            if (id == "")
-                continue;
-            int original = findbyid(id);
-            if (point_number != original)
-                setid(array(point_number), array(""));
-        }
-    ''')
+def _cleanup_inset_flaps(node: hou.SopNode) -> None:
+    geo = node.geometry()
 
-    groups = parent.createNode("groupdelete", "cleanup_inset_flap_borders")
-    groups.setInput(0, cleanup)
-    groups.parm("deletions").set(1)
-    groups.parm("enable1").set(1)
-    groups.parm("grouptype1").set(3)
-    groups.parm("group1").set("tmp_chelicera_flap_borders")
-    return groups
+    inset_scale = geo.findPrimAttrib("tmp_insetscale")
+    if inset_scale is not None:
+        inset_scale.destroy()
+
+    edge_group = geo.findEdgeGroup("tmp_chelicera_split")
+    if edge_group is not None:
+        edge_group.destroy()
+
+    seen_ids: set[str] = set()
+    for point in geo.points():
+        point_id = point.stringAttribValue("id")
+        if not point_id:
+            continue
+        if point_id in seen_ids:
+            point.setAttribValue("id", "")
+        else:
+            seen_ids.add(point_id)
