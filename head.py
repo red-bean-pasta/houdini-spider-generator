@@ -15,7 +15,7 @@ from hom_helper import (
     get_parent,
     points_by_id,
     set_point_id,
-    sopify,
+    sopify, add_new_prim_attr,
 )
 from sop_helper import add_fuse, add_merge, add_mirror, add_output
 
@@ -58,7 +58,8 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
     corners = sopify(head, base_points, _add_corners_half)
     back_faces = sopify(head, corners, _fill_back_loop_faces)
     right_half = sopify(head, back_faces, _fill_side_faces)
-    mirrored = add_mirror(head, "left_mirror", right_half, (1, 0, 0), True, False)
+    regions = sopify(head, right_half, _add_side_regions)
+    mirrored = add_mirror(head, "left_mirror", regions, (1, 0, 0), True, False)
     faces = sopify(head, mirrored, _rename_left_ids)
 
     merged = add_merge(head, "merge_base_rim", base_rim, faces)
@@ -259,8 +260,12 @@ def _fill_back_loop_faces(node: hou.SopNode) -> None:
             base_sops.baseend(0),
         ),
     )
-    for face in faces:
-        fill_face_by_id(geo, list(face))
+    regions = ("headfrontmain", "headfrontcheek", "headtop", "headtop", "headback")
+
+    add_new_prim_attr(geo, "region", "")
+    for i, face in enumerate(faces):
+        prim = fill_face_by_id(geo, list(face))
+        prim.setAttribValue("region", regions[i])
 
 
 def _sorted_right_side_points(geo: hou.Geometry) -> list[hou.Point]:
@@ -371,6 +376,13 @@ def _fill_side_faces(node: hou.SopNode) -> None:
         geo,
         [current_middle, center, back_points[-1], current_back]
     )
+
+
+def _add_side_regions(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    for prim in geo.prims():
+        if not prim.stringAttribValue("region"):
+            prim.setAttribValue("region", "headside")
 
 
 def _rename_left_ids(node: hou.SopNode) -> None:

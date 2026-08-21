@@ -3,7 +3,8 @@ from enum import StrEnum, auto
 
 import hou
 
-from hom_helper import fill_face, points_by_id, set_points_id, get_parent, get_float_parm, add_new_id_attr, affix_id
+from hom_helper import fill_face, points_by_id, set_points_id, get_parent, get_float_parm, add_new_id_attr, affix_id, \
+    add_new_prim_attr
 
 
 class ID(StrEnum):
@@ -184,3 +185,11 @@ def build_sternum_faces(node: hou.SopNode) -> None:
         fill_face(geo, [center[index], right[index], right[index + 1], center[index + 1]])
         fill_face(geo, [center[index], center[index + 1], left[index + 1], left[index]])
     fill_face(geo, [center[-2], right[-1], center[-1], left[-1]])
+
+
+def add_prim_regions(node: hou.SopNode) -> None:
+    geo = node.geometry()
+
+    add_new_prim_attr(geo, "region", "")
+    for prim in geo.prims():
+        prim.setAttribValue("region", "sternum")

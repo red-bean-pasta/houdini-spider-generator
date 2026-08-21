@@ -73,15 +73,21 @@ def add_new_edge_attr(geo: hou.Geometry, name: str, default: Any) -> hou.Attrib:
 
 def add_new_attr(
         geo: hou.Geometry,
-        p_type: hou.attribType,
+        type: hou.attribType,
         name: str,
         default: Any,
         skip_existing: bool = True,
 ) -> hou.Attrib:
-    found = geo.findPointAttrib(name)
+    find_attrib = {
+        hou.attribType.Point: geo.findPointAttrib,
+        hou.attribType.Prim: geo.findPrimAttrib,
+        hou.attribType.Vertex: geo.findVertexAttrib,
+        hou.attribType.Global: geo.findGlobalAttrib,
+    }[type]
+    found = find_attrib(name)
     if skip_existing and found:
         return found
-    return geo.addAttrib(p_type, name, default)
+    return geo.addAttrib(type, name, default)
 
 
 def points_by_id(geo: hou.Geometry | hou.Prim, attribute: str = "id") -> dict[str, hou.Point]:

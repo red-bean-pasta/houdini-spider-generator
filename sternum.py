@@ -23,8 +23,9 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
 
     depth = sopify(sternum, fuse, sternum_sops.descend_sternum_spine)
     faces = sopify(sternum, depth, sternum_sops.build_sternum_faces)
+    regions = sopify(sternum, faces, sternum_sops.add_prim_regions)
 
-    output = add_output(sternum, "OUT_STERNUM", faces)
+    output = add_output(sternum, "OUT_STERNUM", regions)
     sternum.layoutChildren()
     return sternum
 
