@@ -22,7 +22,7 @@ def sopify(
     module = function.__module__
     qualname = function.__qualname__
 
-    node = parent.createNode("python", function.__name__)
+    node = parent.createNode("python", function.__name__.strip('_'))
     if input_node is not None:
         node.setInput(0, input_node)
     node.parm("python").set(
