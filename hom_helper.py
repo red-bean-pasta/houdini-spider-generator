@@ -1,6 +1,6 @@
 import re
 from collections import defaultdict
-from typing import Callable, Any
+from typing import Callable, Any, Sequence
 
 import hou
 
@@ -46,6 +46,13 @@ def get_float_parm(node: hou.SopNode, name: str) -> float:
     if parm is None:
         raise hou.NodeError(f"Expected parameter {name!r} on {node.path()}")
     return parm.evalAsFloat()
+
+
+def add_edge_group(geo: hou.Geometry, name: str) -> hou.EdgeGroup:
+    group = geo.findEdgeGroup(name)
+    if group is None:
+        group = geo.createEdgeGroup(name)
+    return group
 
 
 def add_new_id_attr(geo: hou.Geometry) -> hou.Attrib:
@@ -124,8 +131,8 @@ def set_point_id(
     point.setAttribValue(attribute, value)
 
 def set_points_id(
-    points: list[hou.Point],
-    values: list[str],
+    points: Sequence[hou.Point],
+    values: Sequence[str],
     attribute: str = "id",
 ) -> None:
     if len(points) != len(values):

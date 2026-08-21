@@ -211,7 +211,7 @@ def fill_maxilla(node: hou.SopNode) -> None:
         maxilla.setPosition(start_position + direction * (center_position - start_position).length())
         maxilla.setAttribValue("id", f"basemaxilla{1 if side == 0 else -1}")
         primitive = fill_face(geo, [start, maxilla, end, pivot])
-        primitive.setAttribValue("region", "maxilla")
+        primitive.setAttribValue("region", "maxillasocket")
 
 def fill_pedicel_membrane(node: hou.SopNode) -> None:
     geo = node.geometry()
@@ -234,7 +234,7 @@ def fill_pedicel_membrane(node: hou.SopNode) -> None:
     px0.setAttribValue("id", "baseend0")
     primitive = fill_face(geo, [px0, e5_1, p5, e5_2])
     add_new_prim_attr(geo, "region", "")
-    primitive.setAttribValue("region", "cephalothorax_pedicel")
+    primitive.setAttribValue("region", "basepedicel")
 
 
 def prepare_membrane_attributes(node: hou.SopNode) -> None:
@@ -248,7 +248,7 @@ def prepare_maxilla_membrane(node: hou.SopNode) -> None:
     prims = [
         p
         for p in geo.prims()
-        if p.stringAttribValue("region") == "maxilla"
+        if p.stringAttribValue("region") == "maxillasocket"
     ]; assert_node(prims is not None and len(prims) == 2)
     pivot = points[sternumrim(1)]
     outer = points[basesternum(1, 1)]
