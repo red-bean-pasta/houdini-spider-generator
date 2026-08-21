@@ -3,7 +3,7 @@ import hou
 from base import build as build_base
 from chelicerae import build as build_chelicerae
 from head import build as build_head
-from helper import add_fuse, add_merge, add_output, propagate_parameters
+from sop_helper import add_fuse, add_merge, add_output, propagate_parameters
 
 
 def build(spider: hou.OpNode) -> hou.SopNode:
