@@ -284,7 +284,7 @@ def inset_membrane(parent: hou.SopNode, coxa: hou.SopNode) -> hou.SopNode:
 
     side = parent.createNode("polyextrude", "inset_side_membrane")
     side.setInput(0, side_split)
-    side.parm("group").set("@tmp_inset_region=side_flap")
+    side.parm("group").set("@region=coxa")
     side.parm("splittype").set(1)
     side.parm("usesplitgroup").set(1)
     side.parm("splitgroup").set("tmp_side_split")
@@ -294,7 +294,7 @@ def inset_membrane(parent: hou.SopNode, coxa: hou.SopNode) -> hou.SopNode:
 
     front = parent.createNode("polyextrude", "inset_front_membrane")
     front.setInput(0, side)
-    front.parm("group").set("@tmp_inset_region=front_flap")
+    front.parm("group").set("@region=labium")
     front.parm("splittype").set(1)
     front.parm("inset").setExpression('ch("../membrane_ratio")')
     front.parm("uselocalinsetscaleattrib").set(1)
@@ -302,7 +302,7 @@ def inset_membrane(parent: hou.SopNode, coxa: hou.SopNode) -> hou.SopNode:
 
     maxilla = parent.createNode("polyextrude", "inset_maxilla")
     maxilla.setInput(0, front)
-    maxilla.parm("group").set("@tmp_inset_region=maxilla")
+    maxilla.parm("group").set("@region=maxilla")
     maxilla.parm("splittype").set(0)
     maxilla.parm("inset").setExpression('ch("../membrane_ratio")')
     maxilla.parm("uselocalinsetscaleattrib").set(1)
@@ -314,7 +314,6 @@ def inset_membrane(parent: hou.SopNode, coxa: hou.SopNode) -> hou.SopNode:
 def _prepare_membrane_attributes(node: hou.SopNode) -> None:
     geo = node.geometry()
     add_new_prim_attr(geo, "tmp_insetscale", 0.0)
-    add_new_prim_attr(geo, "tmp_inset_region", "")
 
 def _prepare_maxilla_membrane(node: hou.SopNode) -> None:
     geo = node.geometry()
@@ -327,7 +326,6 @@ def _prepare_maxilla_membrane(node: hou.SopNode) -> None:
     pivot = points[sternumrim(1)]
     outer = points[basesternum(1, 1)]
     for pm in prims:
-        pm.setAttribValue("tmp_inset_region", "maxilla")
         pm.setAttribValue("tmp_insetscale", (pivot.position() - outer.position()).length())
 
 def _prepare_front_membrane(node: hou.SopNode) -> None:
@@ -338,7 +336,6 @@ def _prepare_front_membrane(node: hou.SopNode) -> None:
         outer = points.get(basesternum(0))
         if pivot is None or outer is None:
             continue
-        prim.setAttribValue("tmp_inset_region", "front_flap")
         prim.setAttribValue("tmp_insetscale", (pivot.position() - outer.position()).length())
 
 def _prepare_side_membrane(node: hou.SopNode) -> None:
@@ -363,7 +360,6 @@ def _prepare_side_membrane(node: hou.SopNode) -> None:
             continue
 
         outer = points[outer_index]
-        prim.setAttribValue("tmp_inset_region", "side_flap")
         prim.setAttribValue("tmp_insetscale", (midpoint.position() - outer.position()).length())
 
 def _identify_side_inset_split(node: hou.SopNode) -> None:
@@ -383,10 +379,6 @@ def _cleanup_temp_attributes(node: hou.SopNode) -> None:
     inset_scale = geo.findPrimAttrib("tmp_insetscale")
     if inset_scale is not None:
         inset_scale.destroy()
-
-    primitive_id = geo.findPrimAttrib("tmp_inset_region")
-    if primitive_id is not None:
-        primitive_id.destroy()
 
     split_group = geo.findEdgeGroup("tmp_side_split")
     if split_group is not None:
