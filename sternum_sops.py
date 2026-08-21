@@ -22,6 +22,10 @@ def outer_loop_ids() -> tuple[str, str]:
     return ID.STERNUMRIM, ID.STERNUMMIDDLE
 
 
+def _ordered_points(points: list[hou.Point]) -> list[hou.Point]:
+    return sorted(points, key=lambda point: (point.position()[2], point.position()[0]))
+
+
 def left_half(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
@@ -69,10 +73,8 @@ def left_half(node: hou.SopNode) -> None:
 
 def add_midpoints(node: hou.SopNode) -> None:
     geo = node.geometry()
-    positions = sorted(
-        (point.position() for point in geo.points()),
-        key=lambda p: -p.z(),
-    ); assert len(positions) >= 2
+    positions = [point.position() for point in geo.points()]
+    assert len(positions) >= 2
 
     result: list[hou.Vector3] = []
     for index, position in enumerate(positions):
@@ -87,11 +89,12 @@ def add_midpoints(node: hou.SopNode) -> None:
 
 def add_point_ids(node: hou.SopNode) -> None:
     geo = node.geometry()
-    primitives = geo.prims(); assert len(primitives) == 2
+    right_points = _ordered_points([point for point in geo.points() if point.position()[0] >= 0.0])
+    left_points = _ordered_points([point for point in geo.points() if point.position()[0] < 0.0])
+    assert len(right_points) == 10
+    assert len(left_points) == len(right_points) - 2
 
     add_new_id_attr(geo)
-    right_points = list(primitives[0].points())
-    left_points = list(primitives[1].points())
 
     set_points_id([right_points[0]], [sternumrim(0)])
 
@@ -103,23 +106,21 @@ def add_point_ids(node: hou.SopNode) -> None:
         )
         set_points_id([right_points[index]], [point_id])
 
-    for index in range(1, len(left_points) - 1):
-        # The mirrored primitive runs from sternumrim5 back toward sternumrim0.
-        id_index = (len(left_points) - index) // 2
+    for index, point in enumerate(left_points):
+        id_index = index // 2 + 1
         point_id = (
-            sternummiddle(-id_index)
-            if index % 2
-            else sternumrim(-id_index)
+            sternumrim(-id_index)
+            if index % 2 == 0
+            else sternummiddle(-id_index)
         )
-        set_points_id([left_points[index]], [point_id])
+        set_points_id([point], [point_id])
 
 
 def add_center_spine(node: hou.SopNode) -> None:
     input_node = node.inputs()[0]; assert input_node is not None
     source_geo = input_node.geometry()
-    primitives = source_geo.prims(); assert primitives is not None
-
-    right_points = list(primitives[0].points())
+    right_points = _ordered_points([point for point in source_geo.points() if point.position()[0] >= 0.0])
+    assert len(right_points) == 10
     positions = [point.position() for point in right_points[2:-1]]
 
     geo = node.geometry()
@@ -166,7 +167,7 @@ def descend_sternum_spine(node: hou.SopNode) -> None:
 
 def build_sternum_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
-    sort_by_z = lambda point: -point.position().z()
+    sort_by_z = lambda point: point.position().z()
     center = sorted(
         (point for point in geo.points() if point.position().x() == 0),
         key=sort_by_z,
@@ -181,6 +182,5 @@ def build_sternum_faces(node: hou.SopNode) -> None:
     )
     for index in range(len(center) - 2):
         fill_face(geo, [center[index], right[index], right[index + 1], center[index + 1]])
-    fill_face(geo, [center[-2], right[-1], center[-1], left[-1]])
-    for index in range(len(center) - 2):
         fill_face(geo, [center[index], center[index + 1], left[index + 1], left[index]])
+    fill_face(geo, [center[-2], right[-1], center[-1], left[-1]])
