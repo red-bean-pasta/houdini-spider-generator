@@ -23,8 +23,13 @@ This is a project that tries to model a spider in a biologically topology way in
 - No over-engineering or speculative future-proofing.
 - No over-defensiveness; prefer assertions or explicit errors for invalid expected topology.
 - Do not hardcode points, names, positions, variables repetitively... Prefer looping, array and array builder. Hardcoding is only acceptable when it highly simplifies the code and avoids over-engineering.
+- Do not do exhaust listing. Prefer extraction, pattern, and positions (if robust). Exhaust listing is only acceptable if the logic is naturally "identifier" based, instead of geometry based.
 - New lines communicate grouping and logical separation; do not use them merely to wrap a short call or expression, especially in one liner methods that holds small significance like `assert` or `raise_error`. Abusing newlines only make navigation harder.
 - prefer `assert` over `NodeError` as assertion is correctly bundled in .hip file.
+
+## Agent thinking
+
+- Dynamically adjust the thinking chain based on task difficulty. If the task is small, bounded or obvious, don't over-think. Balance token efficiency, intelligence and development speed.
 
 ## Reiterate
 
