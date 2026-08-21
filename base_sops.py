@@ -36,22 +36,35 @@ def outer_loop_ids() -> tuple[str, ...]:
     return ID.BASESTERNUM, ID.BASEMAXILLA, ID.BASESTERNUMMIDDLE, ID.BASEEND
 
 
-def _edge_group(geo: hou.Geometry, name: str) -> hou.EdgeGroup:
-    group = geo.findEdgeGroup(name)
-    if group is None:
-        group = geo.createEdgeGroup(name)
-    return group
-
-
 def extract_sternum_rim(node: hou.SopNode) -> None:
     geo = node.geometry()
-    sternum_rim = unique_points_start_with(geo, sternum_sops.outer_loop_ids())
+    sternum_rim = {
+        point_id: point.position()
+        for point_id, point in unique_points_start_with(geo, sternum_sops.outer_loop_ids()).items()
+    }
+    rim_edges = [
+        tuple(point.stringAttribValue("id") for point in edge.points())
+        for edge in geo.globEdges("*")
+        if all(
+            point.stringAttribValue("id") in sternum_rim
+            for point in edge.points()
+        )
+    ]
+    assert len(rim_edges) == len(sternum_rim), "Expected one edge per sternum rim point"
+
     geo.clear()
     add_new_id_attr(geo)
-    for k, p in sternum_rim:
+    points = {}
+    for point_id, position in sternum_rim.items():
         point = geo.createPoint()
-        point.setPosition(p)
-        point.setAttribValue("id", k)
+        point.setPosition(position)
+        point.setAttribValue("id", point_id)
+        points[point_id] = point
+
+    for start_id, end_id in rim_edges:
+        edge = geo.createPolygon(is_closed=False)
+        edge.addVertex(points[start_id])
+        edge.addVertex(points[end_id])
 
 
 def build_coxa_flaps(node: hou.SopNode) -> None:
@@ -62,36 +75,42 @@ def build_coxa_flaps(node: hou.SopNode) -> None:
     width_y = get_float_parm(parent, "coxa_width_ratioy")
     flap_ratio = width_y / max(width_x, 1e-6)
 
-    edges = geo.globEdges("*")
     flap_edges = [
-        edge
-        for edge in edges
+        tuple(edge.points())
+        for edge in geo.globEdges("*")
         if not any(
             point.stringAttribValue("id").startswith(STERNUM_ID.STERNUMSPINE)
             for point in edge.points()
         )
     ]
-    for edge in flap_edges:
-        _extrude_edge_outward(geo, edge, flap_ratio)
-
-    hom_helper.deduplicate_points(geo, ID.BASESTERNUM)
+    assert flap_edges, "Expected sternum rim edges"
+    flap_edges.sort(
+        key=lambda edge: (
+            (edge[0].position()[2] + edge[1].position()[2]) / 2.0,
+            -(edge[0].position()[0] + edge[1].position()[0]) / 2.0,
+        )
+    )
+    geo.deletePrims(list(geo.prims()), keep_points=True)
+    for start, end in flap_edges:
+        _extrude_edge_outward(geo, start, end, flap_ratio)
 
 def _extrude_edge_outward(
     geo: hou.Geometry,
-    edge: hou.Edge,
+    start: hou.Point,
+    end: hou.Point,
     flap_ratio: float,
 ) -> None:
     def _get_extruded_id(source: hou.Point) -> str:
-        source_id = source.attribValue("id")
-        source_id.replace(STERNUM_ID.STERNUMRIM, ID.BASESTERNUM)
-        source_id.replace(STERNUM_ID.STERNUMMIDDLE, ID.BASESTERNUMMIDDLE)
+        source_id = source.stringAttribValue("id")
+        source_id = source_id.replace(STERNUM_ID.STERNUMRIM, ID.BASESTERNUM)
+        source_id = source_id.replace(STERNUM_ID.STERNUMMIDDLE, ID.BASESTERNUMMIDDLE)
         return source_id
 
-    start, end = edge.points()
     start_position = start.position()
     end_position = end.position()
     direction = end_position - start_position
-    edge_length = start_position.distanceTo(end_position); assert edge_length > 1e-6, f"Expected nonzero edge {edge.edgeId()}"
+    edge_length = start_position.distanceTo(end_position)
+    assert edge_length > 1e-6, f"Expected nonzero edge from {start.number()} to {end.number()}"
 
     outward = hou.Vector3(
         direction[2],
@@ -113,6 +132,7 @@ def _extrude_edge_outward(
 
 def connect_side_flaps(node: hou.SopNode) -> None:
     geo = node.geometry()
+    hom_helper.deduplicate_points(geo, ID.BASESTERNUM)
     points = points_by_id(geo)
     count = get_id_range(geo, ID.BASESTERNUM)[1]
     for side in (-1, 1):
@@ -128,9 +148,16 @@ def cleanup_connected_side_flap_ids(node: hou.SopNode) -> None:
     points = points_by_id(geo)
     count = get_id_range(geo, ID.BASESTERNUM)[1]
     for i in range(2, count):
-        for major, minor in {i: 1, -i: 2}.items():
-            old = basesternum(major, minor)
-            point = points[old]
+        for major in (i, -i):
+            point = next(
+                (
+                    points.get(basesternum(major, minor))
+                    for minor in (1, 2)
+                    if points.get(basesternum(major, minor)) is not None
+                ),
+                None,
+            )
+            assert point is not None, f"Expected connected side-flap point {basesternum(major)}"
             point.setAttribValue("id", basesternum(major))
 
 
@@ -235,7 +262,6 @@ def fill_pedicel_membrane(node: hou.SopNode) -> None:
     px0.setPosition(p5_position + px_offset)
     px0.setAttribValue("id", "baseend0")
     primitive = fill_face(geo, [px0, e5_1, p5, e5_2])
-    add_new_prim_attr(geo, "region", "")
     primitive.setAttribValue("region", "basepedicel")
 
 
@@ -303,7 +329,7 @@ def identify_side_inset_split(node: hou.SopNode) -> None:
             for point in geo.points()
             if point.stringAttribValue("id").startswith(STERNUM_ID.STERNUMMIDDLE)
         ],
-        "tmp_inset_split"
+        "tmp_side_split"
     )
 
 def cleanup_temp_attributes(node: hou.SopNode) -> None:

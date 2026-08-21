@@ -108,3 +108,4 @@ def _inset_membrane(parent: hou.SopNode, coxa: hou.SopNode) -> hou.SopNode:
     maxilla.parm("localinsetscaleattrib").set("tmp_insetscale")
 
     cleanup = sopify(parent, maxilla, base_sops.cleanup_temp_attributes)
+    return cleanup
