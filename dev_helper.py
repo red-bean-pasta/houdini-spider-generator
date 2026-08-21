@@ -9,6 +9,8 @@ def reload_hip_modules() -> None:
 
     modules = []
     for module in list(sys.modules.values()):
+        if getattr(module, "__name__", "") == "hou.session":
+            continue
         module_file = getattr(module, "__file__", None)
         if not module_file:
             continue
