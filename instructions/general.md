@@ -7,7 +7,7 @@ This is a project that tries to model a spider in a biologically topology way in
 - Scoped under `~/Documents/git-him-back/one-day/models/spider/generator/`. Do not inspect outside.
 - Build the requested change instead of only proposing it.
 - Inspect cooked SOP geometry before considering topology work complete. Do not treat a successful full build cook as proof that an intermediate SOP is correct.
-- Run `hython test_builder.py` after changes and retain the regenerated `test.hip` for manual inspection. No need for backing up.
+- Run `hython test_builder.py` after SOP changes and retain the regenerated `test.hip` for manual inspection. No need for backing up. If only modifying existing python SOP's code, rerun is not needed as hot reload mechanism is implemented. See `sopify` for better understanding. 
 - When debugging, inspect the exact node's errors, point positions, primitive vertex order, and relevant attributes/groups.
 - Preserve user edits; do not revert or overwrite them.
 
