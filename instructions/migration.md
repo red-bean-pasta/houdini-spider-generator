@@ -6,7 +6,6 @@ Use this guide when replacing inline VEX that constructs or edits geometry.
 
 - Use `sopify`, `hom_helper` and `sop_helper`. 
 - Be much more modular. Each method represents a SOP. Therefore, don't be afraid to add SOP since `sopify` offers a convenient wrapper.
-- Each SOP-representing method should ideally not break down into smaller methods. Modulation should not happen at SOP level, but orchestration. This rule enables debuging and experimenting in the GUI editor, with method content directly inside the SOP.
 - Prefer to generalize and put reused/reusable/common methods in `hom_helper` or `sop_helper`. 
 - This project heavily uses "id" for point identifier. "id" is a point level attribute. When referencing, prefer to use patterns similar as:
 ```python
