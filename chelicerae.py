@@ -138,7 +138,7 @@ def _identify_inset_split(node: hou.SopNode) -> None:
 def _inset_flaps(parent: hou.SopNode, p_input: hou.SopNode) -> hou.SopNode:
     inset = parent.createNode("polyextrude", "inset_membrane")
     inset.setInput(0, p_input)
-    inset.parm("group").set("@tmp_inset_region=chelicerasocket")
+    inset.parm("group").set("@region=chelicerasocket")
     inset.parm("splittype").set(1)
     inset.parm("usesplitgroup").set(1)
     inset.parm("splitgroup").set("tmp_chelicera_split")
