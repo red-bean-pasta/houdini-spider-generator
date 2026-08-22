@@ -143,7 +143,7 @@ def add_flap_regions(node: hou.SopNode) -> None:
 
 def connect_side_flaps(node: hou.SopNode) -> None:
     geo = node.geometry()
-    hom_helper.deduplicate_points(geo, ID.BASESTERNUM)
+    hom_helper.deduplicate_points(geo, ID.BASESTERNUM, affix=True)
     points = points_by_id(geo)
     count = get_id_range(geo, ID.BASESTERNUM)[1]
     for side in (-1, 1):
@@ -401,6 +401,6 @@ def _classify_membrane_and_socket(
 
 def _cleanup_temp_attributes(node: hou.SopNode) -> None:
     geo = node.geometry()
-    hom_helper.remove_attributes(geo, "tmp_insetscale")
+    hom_helper.remove_attributes(geo, prim_attribs="tmp_insetscale")
     hom_helper.remove_groups(geo, edge_groups="tmp_side_split")
     hom_helper.deduplicate_points(geo, None, "id", False)

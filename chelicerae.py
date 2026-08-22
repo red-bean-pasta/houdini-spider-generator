@@ -161,6 +161,6 @@ def _classify_after_inset(node: hou.SopNode) -> None:
 
 def _cleanup_inset_flaps(node: hou.SopNode) -> None:
     geo = node.geometry()
-    hom_helper.remove_attributes(geo, "tmp_insetscale")
+    hom_helper.remove_attributes(geo, prim_attribs="tmp_insetscale")
     hom_helper.remove_groups(geo, edge_groups="tmp_chelicera_split")
     hom_helper.deduplicate_points(geo, None, "id", False)
