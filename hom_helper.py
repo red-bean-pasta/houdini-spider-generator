@@ -233,9 +233,18 @@ def find_quad_polyextrude_splits(
 
 def deduplicate_points(
         geo: hou.Geometry,
-        prefix: tuple[str, ...] | str,
-        attribute: str = "id"
+        prefix: tuple[str, ...] | str | None,
+        attribute: str = "id",
+        affix: bool = False,
 ) -> None:
+    """
+
+    :param geo:
+    :param prefix:
+    :param attribute:
+    :param affix: If true, affix like "_1" will be added, else later duplicates will simply be clear
+    :return:
+    """
     points = points_starting_with(geo, prefix, attribute) if prefix else geo.points()
     grouped: defaultdict[str, list[hou.Point]] = defaultdict(list)
     for p in points:
@@ -244,8 +253,12 @@ def deduplicate_points(
     for value, duplicates in grouped.items():
         if len(duplicates) <= 1:
             continue
-        for i, point in enumerate(duplicates):
-            set_point_id(point, f"{value}_{i+1}", attribute)
+        if affix:
+            for i, point in enumerate(duplicates):
+                set_point_id(point, f"{value}_{i+1}", attribute)
+        else:
+            for point in duplicates[1:]:
+                point.setAttribValue(attribute, "")
 
 
 def classify_after_inset(
@@ -336,3 +349,43 @@ def get_point_on_ellipse_2d(
     assert math.isclose(v_upper.dot(v_left), 0.0, abs_tol=1e-5), f"upper-origin ({v_upper}) and left-origin ({v_left}) must be perpendicular"
 
     return origin + v_upper * math.cos(rad_from_y) + v_left * math.sin(rad_from_y)
+
+
+def remove_attributes(
+        geo: hou.Geometry,
+        point_attribs: str | tuple[str, ...] | None = None,
+        prim_attribs: str | tuple[str, ...] | None = None,
+        global_attribs: str | tuple[str, ...] | None = None,
+) -> None:
+    for attribs, finder in zip(
+        (point_attribs, prim_attribs, global_attribs),
+        (geo.findPointAttrib, geo.findPrimAttrib, geo.findGlobalAttrib),
+    ):
+        if attribs is None:
+            continue
+        if isinstance(attribs, str):
+            attribs = (attribs,)
+        for name in attribs:
+            attrib = finder(name)
+            if attrib is not None:
+                attrib.destroy()
+
+
+def remove_groups(
+        geo: hou.Geometry,
+        point_groups: str | tuple[str, ...] | None = None,
+        edge_groups: str | tuple[str, ...] | None = None,
+        prim_groups: str | tuple[str, ...] | None = None,
+) -> None:
+    for groups, finder in zip(
+        (point_groups, edge_groups, prim_groups),
+        (geo.findPointGroup, geo.findEdgeGroup, geo.findPrimGroup),
+    ):
+        if groups is None:
+            continue
+        if isinstance(groups, str):
+            groups = (groups,)
+        for name in groups:
+            group = finder(name)
+            if group is not None:
+                group.destroy()

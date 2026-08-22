@@ -401,20 +401,6 @@ def _classify_membrane_and_socket(
 
 def _cleanup_temp_attributes(node: hou.SopNode) -> None:
     geo = node.geometry()
-    inset_scale = geo.findPrimAttrib("tmp_insetscale")
-    if inset_scale is not None:
-        inset_scale.destroy()
-
-    split_group = geo.findEdgeGroup("tmp_side_split")
-    if split_group is not None:
-        split_group.destroy()
-
-    seen_ids: set[str] = set()
-    for point in geo.points():
-        point_id = point.stringAttribValue("id")
-        if not point_id:
-            continue
-        if point_id in seen_ids:
-            point.setAttribValue("id", "")
-        else:
-            seen_ids.add(point_id)
+    hom_helper.remove_attributes(geo, "tmp_insetscale")
+    hom_helper.remove_groups(geo, edge_groups="tmp_side_split")
+    hom_helper.deduplicate_points(geo, None, "id", False)

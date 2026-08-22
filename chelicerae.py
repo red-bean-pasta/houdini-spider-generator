@@ -161,21 +161,6 @@ def _classify_after_inset(node: hou.SopNode) -> None:
 
 def _cleanup_inset_flaps(node: hou.SopNode) -> None:
     geo = node.geometry()
-
-    inset_scale = geo.findPrimAttrib("tmp_insetscale")
-    if inset_scale is not None:
-        inset_scale.destroy()
-
-    edge_group = geo.findEdgeGroup("tmp_chelicera_split")
-    if edge_group is not None:
-        edge_group.destroy()
-
-    seen_ids: set[str] = set()
-    for point in geo.points():
-        point_id = point.stringAttribValue("id")
-        if not point_id:
-            continue
-        if point_id in seen_ids:
-            point.setAttribValue("id", "")
-        else:
-            seen_ids.add(point_id)
+    hom_helper.remove_attributes(geo, "tmp_insetscale")
+    hom_helper.remove_groups(geo, edge_groups="tmp_chelicera_split")
+    hom_helper.deduplicate_points(geo, None, "id", False)
