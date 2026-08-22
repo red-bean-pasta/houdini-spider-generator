@@ -6,7 +6,7 @@ import main
 
 OUTPUT_PATH = Path(__file__).with_name("test.hip")
 
-hou.hipFile.clear(suppress_save_prompt=True) # type: ignore
+OUTPUT_PATH.unlink(missing_ok=True)
 hou.hipFile.save(str(OUTPUT_PATH)) # type: ignore
 
 hou.setSessionModuleSource(textwrap.dedent("""
