@@ -1,3 +1,4 @@
+import math
 import re
 from collections import defaultdict
 from pathlib import Path
@@ -319,3 +320,19 @@ def get_prim_centroid(prims: Sequence[hou.Prim]) -> hou.Vector3:
     for prim in prims:
         center += prim.boundingBox().center()
     return center / len(prims)
+
+
+def get_point_on_ellipse_2d(
+        origin: hou.Vector3,
+        upper: hou.Vector3,
+        left: hou.Vector3,
+        rad_from_y: float,
+) -> hou.Vector3:
+    assert upper.y() > origin.y(), f"upper ({upper}) must be above origin ({origin})"
+    assert left.x() < origin.x(), f"left ({left}) must be to the left of origin ({origin})"
+
+    v_upper = upper - origin
+    v_left = left - origin
+    assert math.isclose(v_upper.dot(v_left), 0.0, abs_tol=1e-5), f"upper-origin ({v_upper}) and left-origin ({v_left}) must be perpendicular"
+
+    return origin + v_upper * math.cos(rad_from_y) + v_left * math.sin(rad_from_y)
