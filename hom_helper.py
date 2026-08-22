@@ -324,15 +324,15 @@ def get_prim_centroid(prims: Sequence[hou.Prim]) -> hou.Vector3:
 
 def get_point_on_ellipse_2d(
         origin: hou.Vector3,
-        upper: hou.Vector3,
-        left: hou.Vector3,
-        rad_from_y: float,
+        vertical_end: hou.Vector3,
+        side_end: hou.Vector3,
+        rad_from_y: float = math.pi / 4,
 ) -> hou.Vector3:
-    assert upper.y() > origin.y(), f"upper ({upper}) must be above origin ({origin})"
-    assert left.x() < origin.x(), f"left ({left}) must be to the left of origin ({origin})"
+    assert not math.isclose(vertical_end.y(), origin.y(), abs_tol=1e-5), f"upper ({vertical_end}) and origin ({origin}) must have different y"
+    assert not math.isclose(side_end.x(), origin.x(), abs_tol=1e-5), f"left ({side_end}) and origin ({origin}) must have different x"
 
-    v_upper = upper - origin
-    v_left = left - origin
+    v_upper = vertical_end - origin
+    v_left = side_end - origin
     assert math.isclose(v_upper.dot(v_left), 0.0, abs_tol=1e-5), f"upper-origin ({v_upper}) and left-origin ({v_left}) must be perpendicular"
 
     return origin + v_upper * math.cos(rad_from_y) + v_left * math.sin(rad_from_y)
