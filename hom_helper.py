@@ -245,3 +245,77 @@ def deduplicate_points(
             continue
         for i, point in enumerate(duplicates):
             set_point_id(point, f"{value}_{i+1}", attribute)
+
+
+def classify_after_inset(
+        geo: hou.Geometry,
+        prim_count_before: int,
+        horizontal_pack_size: int = 1,
+        vertical_pack_size: int = 1,
+) -> tuple[
+        list[tuple[hou.Prim, ...]],
+        list[tuple[hou.Prim, ...]],
+]:
+    """
+
+    :param geo:
+    :param prim_count_before:
+    :param horizontal_pack_size:
+    :param vertical_pack_size:
+    :return: [panes, sills]
+    """
+    assert horizontal_pack_size > 0 and vertical_pack_size > 0
+    assert prim_count_before >= horizontal_pack_size * vertical_pack_size
+    prims_after: tuple[hou.Prim, ...] = geo.prims(); assert len(prims_after) > prim_count_before
+    prims_added = prims_after[prim_count_before:]
+
+    # len(prims_added) = n * (4 * horizontal_pack_size * vertical_pack_size - (horizontal_pack_size - 1) * 2 - (vertical_pack_size - 1) * 2)
+    grid_size = horizontal_pack_size * vertical_pack_size
+    sill_size = 4 * grid_size - (horizontal_pack_size - 1) * 2 - (vertical_pack_size - 1) * 2
+    assert len(prims_added) % sill_size == 0, f"primitives added {len(prims_added)} should be a multiple of sill size {sill_size}"
+    group_count = len(prims_added) // sill_size
+
+    assert prim_count_before >= group_count * grid_size
+    pane_start = prim_count_before - group_count * grid_size # This is how Houdini internally implements
+
+    panes: list[tuple[hou.Prim, ...]] = []
+    sills: list[tuple[hou.Prim, ...]] = []
+    for i in range(group_count):
+        panes.append(prims_after[pane_start + i * grid_size : pane_start + (i + 1) * grid_size])
+        sills.append(prims_added[i * sill_size : (i + 1) * sill_size])
+
+    return panes, sills
+
+
+def attribute_after_inset(
+        node: hou.SopNode,
+        attribute: str,
+        pane_prefix: str,
+        sill_prefix: str,
+        horizontal_pack_size: int = 1,
+        vertical_pack_size: int = 1,
+) -> None:
+    assert pane_prefix != sill_prefix
+    geo = node.geometry()
+    prim_count_before = len(node.input(0).input(0).geometry().prims())
+    panes, sills = classify_after_inset(geo, prim_count_before, horizontal_pack_size, vertical_pack_size)
+    for prefix, compos in {pane_prefix: panes, sill_prefix: sills}.items():
+        i1 = 1; i2 = -1
+        for compo in compos:
+            centroid = get_prim_centroid(compo)
+            i = i2 if centroid.x() < 0 else i1
+            if len(compo) == 1:
+                compo[0].setAttribValue(attribute, prefix + str(i))
+                continue
+            for j, part in enumerate(compo, start=1):
+                part.setAttribValue(attribute, f"{prefix}{i}_{j}")
+            if centroid.x() < 0:
+                i2 -= 1
+            else:
+                i1 += 1
+
+def get_prim_centroid(prims: Sequence[hou.Prim]) -> hou.Vector3:
+    center = hou.Vector3()
+    for prim in prims:
+        center += prim.boundingBox().center()
+    return center / len(prims)
