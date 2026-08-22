@@ -3,6 +3,7 @@ from enum import StrEnum, auto
 import hou
 
 import base_sops
+import hom_helper
 from hom_helper import (
     add_new_id_attr,
     add_new_prim_attr,
@@ -32,7 +33,8 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
     geometry = sopify(chelicerae, chelicerae.indirectInputs()[0], _build_geometry)
     regions = sopify(chelicerae, geometry, _identify_inset_split)
     inset = _inset_flaps(chelicerae, regions)
-    cleanup = sopify(chelicerae, inset, _cleanup_inset_flaps)
+    classified = sopify(chelicerae, inset, _classify_after_inset)
+    cleanup = sopify(chelicerae, classified, _cleanup_inset_flaps)
 
     add_output(chelicerae, "OUT_CHELICERAE", cleanup)
     chelicerae.layoutChildren()
@@ -101,7 +103,12 @@ def _build_geometry(node: hou.SopNode) -> None:
         upper_ids.append(point_id)
     set_points_id(upper_points, upper_ids)
 
-    for index in range(len(base_points) - 1):
+    middle_index = base_ids.index(base_sops.basesternum(0))
+    face_indices = (
+        list(range(middle_index, len(base_points) - 1))
+        + list(range(middle_index - 1, -1, -1))
+    )
+    for index in face_indices:
         primitive = fill_face(
             geo,
             [
@@ -146,6 +153,10 @@ def _inset_flaps(parent: hou.SopNode, p_input: hou.SopNode) -> hou.SopNode:
     inset.parm("uselocalinsetscaleattrib").set(1)
     inset.parm("localinsetscaleattrib").set("tmp_insetscale")
     return inset
+
+
+def _classify_after_inset(node: hou.SopNode) -> None:
+    hom_helper.attribute_after_inset(node, "region", "chelicerasocket", "cheliceramembrane", 2)
 
 
 def _cleanup_inset_flaps(node: hou.SopNode) -> None:

@@ -1,5 +1,6 @@
 import math
 from enum import StrEnum, auto
+from typing import Iterable, Sequence
 
 import hou
 
@@ -292,23 +293,29 @@ def inset_membrane(parent: hou.SopNode, coxa: hou.SopNode) -> hou.SopNode:
     side.parm("uselocalinsetscaleattrib").set(1)
     side.parm("localinsetscaleattrib").set("tmp_insetscale")
 
+    classify_side = sopify(parent, side, _classify_side)
+
     front = parent.createNode("polyextrude", "inset_front_membrane")
-    front.setInput(0, side)
+    front.setInput(0, classify_side)
     front.parm("group").set("@region=labium")
     front.parm("splittype").set(1)
     front.parm("inset").setExpression('ch("../membrane_ratio")')
     front.parm("uselocalinsetscaleattrib").set(1)
     front.parm("localinsetscaleattrib").set("tmp_insetscale")
 
+    classify_front = sopify(parent, front, _classify_front)
+
     maxilla = parent.createNode("polyextrude", "inset_maxilla")
-    maxilla.setInput(0, front)
+    maxilla.setInput(0, classify_front)
     maxilla.parm("group").set("@region=maxilla")
     maxilla.parm("splittype").set(0)
     maxilla.parm("inset").setExpression('ch("../membrane_ratio")')
     maxilla.parm("uselocalinsetscaleattrib").set(1)
     maxilla.parm("localinsetscaleattrib").set("tmp_insetscale")
 
-    cleanup = sopify(parent, maxilla, _cleanup_temp_attributes)
+    classify_maxilla = sopify(parent, maxilla, _classify_maxilla)
+
+    cleanup = sopify(parent, classify_maxilla, _cleanup_temp_attributes)
     return cleanup
 
 def _prepare_membrane_attributes(node: hou.SopNode) -> None:
@@ -373,6 +380,24 @@ def _identify_side_inset_split(node: hou.SopNode) -> None:
         ],
         "tmp_side_split"
     )
+
+def _classify_side(node: hou.SopNode) -> None:
+    _classify_membrane_and_socket(node, "coxasocket", "coxamembrane", 2)
+
+def _classify_front(node: hou.SopNode) -> None:
+    _classify_membrane_and_socket(node, "labiumsocket", "labiummembrane", 2)
+
+def _classify_maxilla(node: hou.SopNode) -> None:
+    _classify_membrane_and_socket(node, "maxillasocket", "maxillamembrane")
+
+def _classify_membrane_and_socket(
+        node: hou.SopNode,
+        socket_prefix: str,
+        membrane_prefix: str,
+        horizontal_pack_size: int = 1,
+) -> None:
+    hom_helper.attribute_after_inset(node, "region", socket_prefix, membrane_prefix, horizontal_pack_size)
+
 
 def _cleanup_temp_attributes(node: hou.SopNode) -> None:
     geo = node.geometry()
