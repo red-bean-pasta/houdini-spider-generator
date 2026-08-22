@@ -1,3 +1,4 @@
+import math
 from enum import StrEnum, auto
 
 import hou
@@ -7,8 +8,10 @@ from hom_helper import (
     add_new_attr,
     add_new_id_attr,
     affix_id,
+    fill_face,
     get_float_parm,
     get_parent,
+    get_point_on_ellipse_2d,
     points_by_id,
     sopify,
 )
@@ -19,6 +22,8 @@ class ID(StrEnum):
     ABDOMENRIM = auto()
     ABDOMENHORIZONTALRIM = auto()
     ABDOMENVERTICALRIM = auto()
+    ABDOMENSIDEUPPER = auto()
+    ABDOMENSIDELOWER = auto()
 
 def abdomenrim(*i: int | str) -> str:
     return affix_id(ID.ABDOMENRIM, *i)
@@ -28,6 +33,12 @@ def abdomenhorizontalrim(*i: int | str) -> str:
 
 def abdomenverticalrim(*i: int | str) -> str:
     return affix_id(ID.ABDOMENVERTICALRIM, *i)
+
+def abdomensideupper(*i: int | str) -> str:
+    return affix_id(ID.ABDOMENSIDEUPPER, *i)
+
+def abdomensidelower(*i: int | str) -> str:
+    return affix_id(ID.ABDOMENSIDELOWER, *i)
 
 
 def build(spider: hou.OpNode, cephalothorax: hou.SopNode) -> hou.SopNode:
@@ -43,12 +54,17 @@ def build(spider: hou.OpNode, cephalothorax: hou.SopNode) -> hou.SopNode:
 
     merged = add_merge(abdomen, "merge_frames", width_frame, height_frame)
     fused = add_fuse(abdomen, "fuse_frames", merged)
+    upper_middle_frame = sopify(abdomen, fused, _add_upper_middle_frame)
+    lower_middle_frame = sopify(abdomen, upper_middle_frame, _add_lower_middle_frame)
+    right_side_faces = sopify(abdomen, lower_middle_frame, _fill_right_side_faces)
 
-    # connected = sopify(abdomen, fused, _connect_frames_tmp)
+    # Kept for in-editor debug and visualize purpose
+    connected = sopify(abdomen, lower_middle_frame, _connect_frames_tmp)
+    connection_point_merge = add_merge(abdomen, "merge_frames_and_points", lower_middle_frame, connected)
 
-    # mirrored_width = add_mirror(abdomen, "mirror_width_frame", width_frame, (1, 0, 0), True, False)
+    mirrored = add_mirror(abdomen, "mirror_left_faces", right_side_faces, (1, 0, 0), True, False)
 
-    add_output(abdomen, "OUT_ABDOMEN", fused)
+    add_output(abdomen, "OUT_ABDOMEN", mirrored)
     abdomen.layoutChildren()
     return abdomen
 
@@ -237,6 +253,64 @@ def _add_height_frame(node: hou.SopNode) -> None:
         point.setAttribValue("id", point_id)
 
 
+def _add_middle_frame(node: hou.SopNode, negative: bool = False) -> None:
+    geo = node.geometry()
+    points = points_by_id(geo)
+
+    sign = -1 if negative else 1
+    side_attr = abdomensidelower if negative else abdomensideupper
+
+    rim0 = points[abdomenrim(0)].position()
+    v1 = points[abdomenverticalrim(sign * 1)].position()
+    h1 = points[abdomenhorizontalrim(1)].position()
+    s1 = get_point_on_ellipse_2d(rim0, v1, h1, math.pi / 4)
+
+    s_points = [s1]
+    for i in range(2, 5):
+        vi = points[abdomenverticalrim(sign * i)].position()
+        hi = points[abdomenhorizontalrim(i)].position()
+        origin = hou.Vector3(0.0, 0.0, vi.z())
+        s_points.append(get_point_on_ellipse_2d(origin, vi, hi))
+
+    for i, pos in enumerate(s_points, start=1):
+        point = geo.createPoint()
+        point.setPosition(pos)
+        point.setAttribValue("id", side_attr(i))
+
+def _add_upper_middle_frame(node: hou.SopNode) -> None:
+    _add_middle_frame(node, negative=False)
+
+def _add_lower_middle_frame(node: hou.SopNode) -> None:
+    _add_middle_frame(node, negative=True)
+
+
+_add_lowe_middle_frame = _add_lower_middle_frame
+
+
+def _fill_right_side_faces(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    points = points_by_id(geo)
+
+    r = lambda i: points[abdomenrim(i)]
+    v = lambda i: points[abdomenverticalrim(i)]
+    vn = lambda i: points[abdomenverticalrim(-i)]
+    h = lambda i: points[abdomenhorizontalrim(i)]
+    su = lambda i: points[abdomensideupper(i)]
+    sl = lambda i: points[abdomensidelower(i)]
+
+    fill_face(geo, [r(0), v(1), su(1), h(1)])
+    fill_face(geo, [r(0), h(1), sl(1), vn(1)])
+
+    for i in range(1, 4):
+        fill_face(geo, [v(i), v(i + 1), su(i + 1), su(i)])
+        fill_face(geo, [su(i), su(i + 1), h(i + 1), h(i)])
+        fill_face(geo, [h(i), h(i + 1), sl(i + 1), sl(i)])
+        fill_face(geo, [sl(i), sl(i + 1), vn(i + 1), vn(i)])
+
+    fill_face(geo, [r(5), h(4), su(4), v(4)])
+    fill_face(geo, [r(5), vn(4), sl(4), h(4)])
+
+
 def _connect_frames_tmp(node: hou.SopNode) -> None:
     geo = node.geometry()
     points = points_by_id(geo)
@@ -245,6 +319,8 @@ def _connect_frames_tmp(node: hou.SopNode) -> None:
         [abdomenrim(0)] + [abdomenhorizontalrim(i) for i in range(1, 5)] + [abdomenrim(5)],
         [abdomenrim(0)] + [abdomenverticalrim(i) for i in range(1, 5)] + [abdomenrim(5)],
         [abdomenrim(0)] + [abdomenverticalrim(-i) for i in range(1, 5)] + [abdomenrim(5)],
+        [abdomenrim(0)] + [abdomensideupper(i) for i in range(1, 5)] + [abdomenrim(5)],
+        [abdomenrim(0)] + [abdomensidelower(i) for i in range(1, 5)] + [abdomenrim(5)],
     ]
 
     for chain in chains:
