@@ -3,8 +3,8 @@ from enum import StrEnum, auto
 
 import hou
 
+import base_sops
 import hom_helper
-import sternum_sops
 from hom_helper import (
     add_new_attr,
     add_new_id_attr,
@@ -77,7 +77,7 @@ def _add_parameters(abdomen: hou.SopNode) -> hou.SopNode:
             "size_ratio",
             "Size Ratio",
             3,
-            default_value=(1.2, 1.0, 1.5),
+            default_value=(1.2, 1.0, 1.2),
             min=0.0,
             min_is_strict=True,
             naming_scheme=hou.parmNamingScheme.XYZW,
@@ -135,10 +135,10 @@ def _prepare_cephalothorax_info(node: hou.SopNode) -> None:
     y_min = bbox.minvec().y()
 
     points = points_by_id(geo)
-    sternumrim5_id = sternum_sops.sternumrim(5)
-    sternumrim5_point = points.get(sternumrim5_id)
-    assert sternumrim5_point is not None, f"Expected {sternumrim5_id!r} in cephalothorax"
-    sternumrim5_y = sternumrim5_point.position().y()
+    baseend_id = base_sops.baseend(0)
+    baseend_point = points.get(baseend_id)
+    assert baseend_point is not None, f"Expected {baseend_id!r} in cephalothorax"
+    sternumrim5_y = baseend_point.position().y()
 
     upper_span = y_max - sternumrim5_y
     lower_span = sternumrim5_y - y_min
@@ -276,10 +276,8 @@ def _add_middle_frame(node: hou.SopNode, negative: bool = False) -> None:
         point.setPosition(pos)
         point.setAttribValue("id", side_attr(i))
 
-
 def _add_upper_middle_frame(node: hou.SopNode) -> None:
     _add_middle_frame(node, negative=False)
-
 
 def _add_lower_middle_frame(node: hou.SopNode) -> None:
     _add_middle_frame(node, negative=True)
