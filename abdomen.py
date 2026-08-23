@@ -5,9 +5,11 @@ import hou
 
 import base_sops
 import hom_helper
+import sternum_sops
 from hom_helper import (
     add_new_attr,
     add_new_id_attr,
+    add_new_prim_attr,
     affix_id,
     fill_face,
     get_float_parm,
@@ -63,7 +65,8 @@ def build(spider: hou.OpNode, cephalothorax: hou.SopNode) -> hou.SopNode:
     connection_point_merge = add_merge(abdomen, "merge_frames_and_points", lower_middle_frame, connected)
 
     mirrored = add_mirror(abdomen, "mirror_left_faces", right_side_faces, (1, 0, 0), True, False)
-    cleaned = sopify(abdomen, mirrored, _cleanup_temp_attributes)
+    renamed = sopify(abdomen, mirrored, _rename_left_ids)
+    cleaned = sopify(abdomen, renamed, _cleanup_temp_attributes)
 
     recalculate = add_outside_recalculation(abdomen, "recalculate_normals", cleaned)
     add_output(abdomen, "OUT_ABDOMEN", recalculate)
@@ -93,16 +96,6 @@ def _add_parameters(abdomen: hou.SopNode) -> hou.SopNode:
             min=0.0,
             min_is_strict=True,
             naming_scheme=hou.parmNamingScheme.XYZW,
-        )
-    )
-    templates.append(
-        hou.FloatParmTemplate(
-            "pedicel_flatness",
-            "Pedicel Flatness",
-            1,
-            default_value=(0.5,),
-            min=0.0,
-            min_is_strict=True,
         )
     )
     abdomen.setParmTemplateGroup(templates)
@@ -136,21 +129,33 @@ def _prepare_cephalothorax_info(node: hou.SopNode) -> None:
     y_min = bbox.minvec().y()
 
     points = points_by_id(geo)
-    baseend_id = base_sops.baseend(0)
-    baseend_point = points.get(baseend_id)
-    assert baseend_point is not None, f"Expected {baseend_id!r} in cephalothorax"
-    sternumrim5_y = baseend_point.position().y()
+    baseend0 = points.get(base_sops.baseend(0))
+    assert baseend0 is not None, f"Expected {base_sops.baseend(0)!r} in cephalothorax"
+    basesternum5_1 = points.get(base_sops.basesternum(5, 1))
+    assert basesternum5_1 is not None, f"Expected {base_sops.basesternum(5, 1)!r} in cephalothorax"
+    sternumrim5 = points.get(sternum_sops.sternumrim(5))
+    assert sternumrim5 is not None, f"Expected {sternum_sops.sternumrim(5)!r} in cephalothorax"
 
-    upper_span = y_max - sternumrim5_y
-    lower_span = sternumrim5_y - y_min
+    baseend0_y = baseend0.position().y()
+    upper_span = y_max - baseend0_y
+    lower_span = baseend0_y - y_min
     assert lower_span > 1e-6, "Expected positive cephalothorax lower span"
     upper_lower_ratio = upper_span / lower_span
+
+    tmp_pedicel_length = basesternum5_1.position().x() - baseend0.position().x()
+    tmp_pedicel_height = baseend0.position().y() - sternumrim5.position().y()
 
     add_new_attr(geo, hou.attribType.Global, "tmp_cepha_size", (0.0, 0.0, 0.0))
     geo.setGlobalAttribValue("tmp_cepha_size", (cw, ch, cl))
 
     add_new_attr(geo, hou.attribType.Global, "tmp_cepha_upper_lower_ratio", 0.0)
     geo.setGlobalAttribValue("tmp_cepha_upper_lower_ratio", upper_lower_ratio)
+
+    add_new_attr(geo, hou.attribType.Global, "tmp_pedicel_length", 0.0)
+    geo.setGlobalAttribValue("tmp_pedicel_length", tmp_pedicel_length)
+
+    add_new_attr(geo, hou.attribType.Global, "tmp_pedicel_height", 0.0)
+    geo.setGlobalAttribValue("tmp_pedicel_height", tmp_pedicel_height)
 
 
 def _add_width_frame(node: hou.SopNode) -> None:
@@ -163,18 +168,20 @@ def _add_width_frame(node: hou.SopNode) -> None:
     assert tmp_cepha_size is not None, "Expected tmp_cepha_size attribute"
     cw, _, cl = tmp_cepha_size
 
+    tmp_pedicel_length = geo.attribValue("tmp_pedicel_length")
+    assert tmp_pedicel_length is not None, "Expected tmp_pedicel_length attribute"
+
     size_ratio_x = get_float_parm(parent, "size_ratiox")
     size_ratio_z = get_float_parm(parent, "size_ratioz")
     plateau_start = get_float_parm(parent, "plateau_durationx")
     plateau_end = get_float_parm(parent, "plateau_durationy")
-    pedicel_flatness = get_float_parm(parent, "pedicel_flatness")
     end_ratio = get_float_parm(control, "end_ratio")
 
     length = cl * size_ratio_z
     half_width = cw * size_ratio_x / 2.0
 
     origin = hou.Vector3(0.0, 0.0, 0.0)
-    r1 = hou.Vector3(half_width * pedicel_flatness, 0.0, 0.0)
+    r1 = hou.Vector3(tmp_pedicel_length, 0.0, 0.0)
     r2 = hou.Vector3(half_width, 0.0, plateau_start * length)
     r3 = hou.Vector3(half_width, 0.0, plateau_end * length)
     r4 = hou.Vector3(half_width * end_ratio, 0.0, length)
@@ -209,11 +216,13 @@ def _add_height_frame(node: hou.SopNode) -> None:
     upper_lower_ratio = geo.attribValue("tmp_cepha_upper_lower_ratio")
     assert upper_lower_ratio is not None, "Expected tmp_cepha_upper_lower_ratio attribute"
 
+    tmp_pedicel_height = geo.attribValue("tmp_pedicel_height")
+    assert tmp_pedicel_height is not None, "Expected tmp_pedicel_height attribute"
+
     size_ratio_y = get_float_parm(parent, "size_ratioy")
     size_ratio_z = get_float_parm(parent, "size_ratioz")
     plateau_start = get_float_parm(parent, "plateau_durationx")
     plateau_end = get_float_parm(parent, "plateau_durationy")
-    pedicel_flatness = get_float_parm(parent, "pedicel_flatness")
     end_ratio = get_float_parm(control, "end_ratio")
 
     length = cl * size_ratio_z
@@ -230,8 +239,8 @@ def _add_height_frame(node: hou.SopNode) -> None:
     rn3 = hou.Vector3(0.0, -lower_height, plateau_end * length)
     rn2 = hou.Vector3(0.0, -lower_height, plateau_start * length)
 
-    r1 = r2 * pedicel_flatness
-    rn1 = rn2 * pedicel_flatness
+    r1 = r2 * (tmp_pedicel_height / r2.y())
+    rn1 = rn2 * (tmp_pedicel_height / abs(rn2.y()))
 
     geo.clear()
     add_new_id_attr(geo)
@@ -284,12 +293,10 @@ def _add_lower_middle_frame(node: hou.SopNode) -> None:
     _add_middle_frame(node, negative=True)
 
 
-_add_lowe_middle_frame = _add_lower_middle_frame
-
-
 def _fill_right_side_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
     points = points_by_id(geo)
+    add_new_prim_attr(geo, "region", "abdomen")
 
     o = points[abdomenorigin()]
     e = points[abdomenend()]
@@ -302,14 +309,18 @@ def _fill_right_side_faces(node: hou.SopNode) -> None:
     fill_face(geo, [o, v(1), su(1), h(1)])
     fill_face(geo, [o, h(1), sl(1), vn(1)])
 
-    for i in range(1, 4):
-        fill_face(geo, [v(i), v(i + 1), su(i + 1), su(i)])
-        fill_face(geo, [su(i), su(i + 1), h(i + 1), h(i)])
-        fill_face(geo, [h(i), h(i + 1), sl(i + 1), sl(i)])
-        fill_face(geo, [sl(i), sl(i + 1), vn(i + 1), vn(i)])
+    for j in range(1, 4):
+        fill_face(geo, [v(j), v(j + 1), su(j + 1), su(j)])
+        fill_face(geo, [su(j), su(j + 1), h(j + 1), h(j)])
+        fill_face(geo, [h(j), h(j + 1), sl(j + 1), sl(j)])
+        fill_face(geo, [sl(j), sl(j + 1), vn(j + 1), vn(j)])
 
     fill_face(geo, [e, h(4), su(4), v(4)])
     fill_face(geo, [e, vn(4), sl(4), h(4)])
+
+
+def _rename_left_ids(node: hou.SopNode) -> None:
+    hom_helper.rename_left_ids(node.geometry())
 
 
 def _connect_frames_tmp(node: hou.SopNode) -> None:
@@ -337,4 +348,7 @@ def _connect_frames_tmp(node: hou.SopNode) -> None:
 
 def _cleanup_temp_attributes(node: hou.SopNode) -> None:
     geo = node.geometry()
-    hom_helper.remove_attributes(geo, global_attribs=("tmp_cepha_size", "tmp_cepha_upper_lower_ratio"))
+    hom_helper.remove_attributes(
+        geo,
+        global_attribs=("tmp_cepha_size", "tmp_cepha_upper_lower_ratio", "tmp_pedicel_length", "tmp_pedicel_height"),
+    )
