@@ -27,8 +27,6 @@ def sopify(
     if input_node is not None:
         node.setInput(0, input_node)
     node.parm("python").set(
-        f"from {_hip_module_name(dev_helper)} import {dev_helper.reload_hip_modules.__name__} as reload\n"
-        f"reload()\n"
         f"import {module}\n"
         f"{module}.{qualname}(hou.pwd())"
     )
@@ -393,8 +391,10 @@ def attribute_after_inset(
             else:
                 i1 += 1
 
-def get_prim_centroid(prims: Sequence[hou.Prim]) -> hou.Vector3:
+def get_prim_centroid(prims: hou.Prim | Sequence[hou.Prim]) -> hou.Vector3:
     center = hou.Vector3()
+    if isinstance(prims, hou.Prim):
+        prims = (prims,)
     for prim in prims:
         center += prim.boundingBox().center()
     return center / len(prims)
