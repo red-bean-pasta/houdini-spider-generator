@@ -16,7 +16,7 @@ from hom_helper import (
     points_by_id,
     sopify,
 )
-from sop_helper import add_fuse, add_merge, add_mirror, add_output
+from sop_helper import add_fuse, add_merge, add_mirror, add_output, add_outside_recalculation
 
 
 class ID(StrEnum):
@@ -65,7 +65,8 @@ def build(spider: hou.OpNode, cephalothorax: hou.SopNode) -> hou.SopNode:
     mirrored = add_mirror(abdomen, "mirror_left_faces", right_side_faces, (1, 0, 0), True, False)
     cleaned = sopify(abdomen, mirrored, _cleanup_temp_attributes)
 
-    add_output(abdomen, "OUT_ABDOMEN", cleaned)
+    recalculate = add_outside_recalculation(abdomen, "recalculate_normals", cleaned)
+    add_output(abdomen, "OUT_ABDOMEN", recalculate)
     abdomen.layoutChildren()
     return abdomen
 
