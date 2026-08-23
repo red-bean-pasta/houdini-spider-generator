@@ -152,6 +152,25 @@ def set_points_id(
         set_point_id(p_point, p_id, attribute)
 
 
+def rename_left_ids(geo: hou.Geometry) -> None:
+    for point in geo.points():
+        if point.position()[0] >= 0.0:
+            continue
+        point_id = point.stringAttribValue("id")
+        if not point_id:
+            continue
+        first_digit = next(
+            (index for index, character in enumerate(point_id) if character.isdigit()),
+            None,
+        )
+        if first_digit is None:
+            continue
+        point.setAttribValue(
+            "id",
+            f"{point_id[:first_digit]}-{point_id[first_digit:]}",
+        )
+
+
 def fill_face(
     geo: hou.Geometry,
     points: list[hou.Point],
@@ -173,6 +192,52 @@ def fill_face_by_id(
         assert p is not None, f"Expected point with id {v}"
         face_points.append(p)
     return fill_face(geo, face_points)
+
+
+def fill_pentagon(
+    geo: hou.Geometry,
+    points: Sequence[hou.Point],
+    mid_edge: tuple[hou.Point, hou.Point],
+) -> tuple[hou.Point, hou.Point]:
+    assert len(set(points)) == 5, "Expected 5 distinct points for fill_pentagon"
+
+    p_a, p_b = mid_edge; assert p_a in points and p_b in points and p_a != p_b, f"mid_edge {mid_edge} must be in points"
+    idx_a = points.index(p_a)
+    idx_b = points.index(p_b)
+    diff = (idx_b - idx_a) % 5; assert diff in (1, 4), f"mid_edge points must be adjacent in points sequence, got diff {diff}"
+    if diff == 1:
+        ordered = [points[(idx_a + k) % 5] for k in range(5)]
+    else:
+        ordered = [points[(idx_a - k) % 5] for k in range(5)]
+
+    p0, p1, p2, p3, p4 = ordered
+
+    m_pos = (p0.position() + p1.position()) / 2.0
+    midpoint = geo.createPoint()
+    midpoint.setPosition(m_pos)
+
+    v_edge = p1.position() - p0.position()
+    edge_len = v_edge.length(); assert edge_len > 1e-6, "Expected nonzero mid_edge length"
+    def dist_to_line(pt: hou.Point) -> float:
+        v = pt.position() - p0.position()
+        return v.cross(v_edge).length() / edge_len
+    dist_p2 = dist_to_line(p2)
+    dist_p4 = dist_to_line(p4)
+    if dist_p2 <= dist_p4:
+        m_base = (p0.position() + p4.position()) / 2.0
+        f_pos = (p2.position() + m_base) / 2.0
+    else:
+        m_base = (p1.position() + p2.position()) / 2.0
+        f_pos = (p4.position() + m_base) / 2.0
+
+    floatpoint = geo.createPoint()
+    floatpoint.setPosition(f_pos)
+
+    fill_face(geo, [p1, midpoint, floatpoint, p2])
+    fill_face(geo, [midpoint, p0, p4, floatpoint])
+    fill_face(geo, [floatpoint, p4, p3, p2])
+
+    return midpoint, floatpoint
 
 
 def get_id_range(
