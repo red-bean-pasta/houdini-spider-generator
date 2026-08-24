@@ -31,6 +31,7 @@ This is a project that tries to model a spider in a biologically topology way in
 ## Agent thinking
 
 - Dynamically adjust the thinking chain based on task difficulty. If the task is small, bounded or obvious, don't over-think. Balance token efficiency, intelligence and development speed.
+- Dynamically choose the most efficent command for token, time and context efficiency.
 
 ## Reiterate
 
@@ -38,3 +39,4 @@ This is a project that tries to model a spider in a biologically topology way in
 - No newline abusing
 - Choose between identifier, position or other pattern based construction based on the task's true nature.
 - DO NOT REVERT user changes unless requested, broken, problematic or buggy, or if there's a better way.
+- DO NOT MAKE TOO MUCH STRUCTURL CHANGE unless user requested or approved.

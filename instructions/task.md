@@ -1,42 +1,25 @@
 ## Task 1
 
-build chelicerae mesh in the existing `chelicerae.py`, which currently only insets membrane but does no extrusion.
+update stale utility method references across this project
+
+#### Background
+
+the original utility class, `hom_helper`, `sop_helper` and `dev_helper` are now migrated to its own project. they are system linked under `./utilities` and get rearranged into six scripts. Some project specific helper methods are still retained and put in `helper.py`.
+
 
 #### Steps
 
-* read `instructions/general.md`
+* read `instructions/general.md`.
 
-* reactor current "height_ratio" parameter to "socket_height_ratio". add help message "Relative to chelicerae region width"
+* query stale references across `*.py` scripts under `../generator`, aka this very project.
+you can query them easily by `grep 'hom_helper|sop_helper|dev_helper'` or similar commands.
 
-* add vector2 parameters "middle_section_ratio", "middle_section_offset", "middle_section_rotation", "end_section_ratio", "end_section_offset", and "end_section_rotation", respectively default to (1.1, 1.2), (-0.1, 0), (-90, 0), (0.5, 0.5), (0.25, 0) and (-90, 0).
-Yeah, it's kinda complex.
+* patch those references file by file. do not patch them all together as i will revise the changes.
 
-* add vector2 parameter "section_offsets_y", default to (2, 5). add help message "Relative to the socket height"
+#### Notes
 
-* add method "_build_extrusion". call it after `cleanup = sopify(chelicerae, classified, _cleanup_inset_flaps)`
+* the method names, argument signatures and its inner logics may be updated or generalized. 
 
-* in `_build_extrusion`:
-    // following operations only consider the right side
-    * get the height and width length of the socket, excluding the membrane. this can be done by identifying the prims with "chelicerasocket" "region" attribute, get the ones who are right to the world origin, get the `h = y_max - y_min` and `w = x_max - x_min`. let's say the (x_min, y_min) point as c1_1, (x_min, y_max) as c1_2, (x_max, y_max) as c1_3, and (x_max, y_min) as c1_4
-    * `up_pivot = vector3((x_max + x_min) / 2, ...)`
-    * `offset_baseline = vector3(h, h, w)`
-    * `middle_pivot_offset =  vector3(middle_section_offset.x, section_offsets_y.x, middle_section_offset.y)`
-    * `end_pivot_offset =  vector3(end_section_offset.x, section_offsets_y.y, end_section_offset.y)`
-    * `middle_pivot = up_pivot + offset_baseline * middle_pivot_offset`
-    * `end_pivot = up_pivot + offset_baseline * end_pivot_offset`
-    * you can therefore construct the rectangles around pivot using `(w, h) * middle_section_ratio`, then rotate it to get the roated one. "..._section_rotation" does not contain rotation around `y`.
-    * then you can connect the quads. let's name the one connecting c1_1 as ci_1, c1_2 as ci_2 etc. so the rectangle around middle pivot is c2_1...4
-    * but before we connect them, let's add another section loop between middle loop c2 and end loop c4:
-        * c3_4.x = c2_4.x * 1/3 + c4_4.x * 2/3
-        * similar to c3_3.x
-        * c3_1.x = c2_1.x * 2/3 + c4_1.x * 1/3
-        * similar to c3_2.x
-        * c3_i.y = c2_i.y * 1/3 + c4_i * 2/3; same for c3_i.z
-        * combine for new loop
-    * now connect faces. fill the end loop as well, despite it further extrude as the fang
-    * add attributes "cheliceraei_j" to these `ci_j` points. you can `tuple or array((), (), (), ())` structure for storing and then smartly add attributes
-    * there are a lot of similar codes. so you can generlize them into small methods or intermediate methods then make _build_extrusion a orchestration method
-    * face orientation doesn't matter. use loop
-    
-    There might be typos and bugs in my description. you can validate and adjust them as long as you understand what mesh i'm building.
-    
+* the generalized utility methods can wrapped further in `./utilities/helper.py` if you find it can benefiticial. for example, `add_id_attr`, `points_by_id` and `set_id` etc., since this project is heavily built around "id" as the identifier. 
+
+* if you happen to find bugs in utility scripts, you can request to patch them if your sandbox allows. if it doesn't, record them in the answer. but this is not the focus of the task, and you don't have to inspect the scripts just for this.
