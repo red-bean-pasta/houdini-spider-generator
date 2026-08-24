@@ -7,9 +7,10 @@ This is a project that tries to model a spider in a biologically topology way in
 - Scoped under `~/Documents/git-him-back/one-day/models/spider/generator/`. Do not inspect outside.
 - Build the requested change instead of only proposing it.
 - Inspect cooked SOP geometry before considering topology work complete. Do not treat a successful full build cook as proof that an intermediate SOP is correct.
-- Run `hython test_builder.py` after SOP changes and retain the regenerated `test.hip` for manual inspection. No need for backing up. If only modifying existing python SOP's code, rerun is not needed as hot reload mechanism is implemented. See `sopify` for better understanding. 
+- Run `hython test_builder.py` after SOP changes and retain the regenerated `test.hip` for manual inspection. No need for backing up.
 - When debugging, inspect the exact node's errors, point positions, primitive vertex order, and relevant attributes/groups.
-- Preserve user edits; do not revert or overwrite them.
+- Preserve user edits; do not revert or overwrite them unbased or unrequested.
+- Do not over-rely on git history because many changes are not staged during development.
 
 ## SOP and VEX conventions
 
@@ -25,7 +26,7 @@ This is a project that tries to model a spider in a biologically topology way in
 - Do not hardcode points, names, positions, variables repetitively... Prefer looping, array and array builder. Hardcoding is only acceptable when it highly simplifies the code and avoids over-engineering.
 - Do not do exhaust listing. Prefer extraction, pattern, and positions (if robust). Exhaust listing is only acceptable if the logic is naturally "identifier" based, instead of geometry based.
 - New lines communicate grouping and logical separation; do not use them merely to wrap a short call or expression, especially in one liner methods that holds small significance like `assert` or `raise_error`. Abusing newlines only make navigation harder.
-- prefer `assert` over `NodeError` as assertion is correctly bundled in .hip file.
+- prefer `assert` over `NodeError` as assertion is correctly shown in .hip file.
 
 ## Agent thinking
 
@@ -35,3 +36,5 @@ This is a project that tries to model a spider in a biologically topology way in
 
 - Use `sopify`
 - No newline abusing
+- Choose between identifier, position or other pattern based construction based on the task's true nature.
+- DO NOT REVERT user changes unless requested, broken, problematic or buggy, or if there's a better way.

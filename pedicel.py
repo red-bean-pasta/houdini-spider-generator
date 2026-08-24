@@ -4,17 +4,16 @@ import hou
 
 import abdomen
 import base_sops
-import hom_helper
 import sternum_sops
 from hom_helper import (
-    add_new_id_attr,
+    add_point_attr,
     add_new_prim_attr,
     affix_id,
     fill_pentagon,
-    points_by_id,
+    points_by_attribute,
     sopify,
 )
-from sop_helper import add_fuse, add_merge, add_output, add_outside_recalculation
+from sop_helper import add_output
 
 
 class ID(StrEnum):
@@ -39,16 +38,14 @@ def build(spider: hou.OpNode, merged_cepha_and_abdomen: hou.SopNode) -> hou.SopN
     cleaned = pedicel.createNode("clean", "clean_unused_points")
     cleaned.setInput(0, connected)
 
-    recalculated = add_outside_recalculation(pedicel, "recalculate_normals", cleaned)
-
-    add_output(pedicel, "OUT_PEDICEL", recalculated)
+    add_output(pedicel, "OUT_PEDICEL", cleaned)
     pedicel.layoutChildren()
     return pedicel
 
 
 def _extract_needed_points(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
+    points = points_by_attribute(geo)
 
     needed_ids = (
         base_sops.baseend(0),
@@ -72,7 +69,7 @@ def _extract_needed_points(node: hou.SopNode) -> None:
         point_data.append((point_id, point.position()))
 
     geo.clear()
-    add_new_id_attr(geo)
+    add_point_attr(geo)
     for point_id, position in point_data:
         point = geo.createPoint()
         point.setPosition(position)
@@ -81,7 +78,7 @@ def _extract_needed_points(node: hou.SopNode) -> None:
 
 def _connect_pedicel(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
+    points = points_by_attribute(geo)
 
     baseend0 = points[base_sops.baseend(0)]
     basesternum5_1 = points[base_sops.basesternum(5, 1)]

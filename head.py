@@ -7,13 +7,13 @@ import base_sops
 import sternum_sops
 from chelicerae import cheliceraeupper
 from hom_helper import (
-    add_new_id_attr,
+    add_point_attr,
     affix_id,
     fill_face,
     fill_face_by_id,
     get_float_parm,
     get_parent,
-    points_by_id,
+    points_by_attribute,
     set_point_id,
     sopify, add_new_prim_attr,
 )
@@ -109,7 +109,7 @@ def _add_points(
     point_data: list[tuple[str, hou.Vector3]],
 ) -> None:
     geo.clear()
-    add_new_id_attr(geo)
+    add_point_attr(geo)
     for point_id, position in point_data:
         point = geo.createPoint()
         point.setPosition(position)
@@ -175,7 +175,7 @@ def _extract_base_rim(node: hou.SopNode) -> None:
 def _add_corners_half(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
-    points = points_by_id(geo)
+    points = points_by_attribute(geo)
 
     sternumrim0 = sternum_sops.sternumrim(0)
     cheliceraeupper0 = cheliceraeupper(0)
@@ -293,7 +293,7 @@ def _sorted_right_side_points(geo: hou.Geometry) -> list[hou.Point]:
 
 def _fill_side_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
+    points = points_by_attribute(geo)
     right_side = _sorted_right_side_points(geo)
     assert len(right_side) >= 3 and len(right_side) % 2 == 1, "Expected an odd, symmetric right-side sternum loop"
 

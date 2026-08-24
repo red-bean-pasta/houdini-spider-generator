@@ -8,14 +8,14 @@ import hom_helper
 import sternum_sops
 from hom_helper import (
     add_new_attr,
-    add_new_id_attr,
+    add_point_attr,
     add_new_prim_attr,
     affix_id,
     fill_face,
     get_float_parm,
     get_parent,
     get_point_on_ellipse_2d,
-    points_by_id,
+    points_by_attribute,
     sopify,
 )
 from sop_helper import add_fuse, add_merge, add_mirror, add_output, add_outside_recalculation
@@ -128,7 +128,7 @@ def _prepare_cephalothorax_info(node: hou.SopNode) -> None:
     y_max = bbox.maxvec().y()
     y_min = bbox.minvec().y()
 
-    points = points_by_id(geo)
+    points = points_by_attribute(geo)
     baseend0 = points.get(base_sops.baseend(0))
     assert baseend0 is not None, f"Expected {base_sops.baseend(0)!r} in cephalothorax"
     basesternum5_1 = points.get(base_sops.basesternum(5, 1))
@@ -188,7 +188,7 @@ def _add_width_frame(node: hou.SopNode) -> None:
     end = hou.Vector3(0.0, 0.0, length)
 
     geo.clear()
-    add_new_id_attr(geo)
+    add_point_attr(geo)
     points_data = [
         (abdomenorigin(), origin),
         (abdomenhorizontalrim(1), r1),
@@ -243,7 +243,7 @@ def _add_height_frame(node: hou.SopNode) -> None:
     rn1 = rn2 * (tmp_pedicel_height / abs(rn2.y()))
 
     geo.clear()
-    add_new_id_attr(geo)
+    add_point_attr(geo)
     points_data = [
         (abdomenorigin(), o),
         (abdomenverticalrim(1), r1),
@@ -264,7 +264,7 @@ def _add_height_frame(node: hou.SopNode) -> None:
 
 def _add_middle_frame(node: hou.SopNode, negative: bool = False) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
+    points = points_by_attribute(geo)
 
     sign = -1 if negative else 1
     side_attr = abdomensidelower if negative else abdomensideupper
@@ -295,7 +295,7 @@ def _add_lower_middle_frame(node: hou.SopNode) -> None:
 
 def _fill_right_side_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
+    points = points_by_attribute(geo)
     add_new_prim_attr(geo, "region", "abdomen")
 
     o = points[abdomenorigin()]
@@ -325,7 +325,7 @@ def _rename_left_ids(node: hou.SopNode) -> None:
 
 def _connect_frames_tmp(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
+    points = points_by_attribute(geo)
 
     o = abdomenorigin()
     e = abdomenend()

@@ -6,8 +6,6 @@ from typing import Callable, Any, Sequence
 
 import hou
 
-import dev_helper
-
 
 def affix_id(prefix: str, *affixes: int | str) -> str:
     return prefix + "_".join(map(str, affixes))
@@ -50,8 +48,14 @@ def get_parent(node: hou.SopNode) -> hou.SopNode:
 
 def get_float_parm(node: hou.SopNode, name: str) -> float:
     parm = node.parm(name)
+    node.parm
     assert parm is not None, f"Expected parameter {name!r} on {node.path()}"
     return parm.evalAsFloat()
+
+def get_vector2_parm(node: hou.SopNode, name: str) -> hou.Vector2:
+    parm_tuple = node.parmTuple(name)
+    assert parm_tuple is not None, f"Expected parameter {name!r} on {node.path()}"
+    return hou.Vector2(parm_tuple.eval())
 
 
 def add_edge_group(geo: hou.Geometry, name: str) -> hou.EdgeGroup:
@@ -63,6 +67,9 @@ def add_edge_group(geo: hou.Geometry, name: str) -> hou.EdgeGroup:
 
 def add_new_id_attr(geo: hou.Geometry) -> hou.Attrib:
     return add_new_attr(geo, hou.attribType.Point, "id", "")
+
+def add_point_attr(geo: hou.Geometry, name: str, default: Any) -> hou.Attrib:
+    return add_new_attr(geo, hou.attribType.Point, name, default)
 
 def add_new_prim_attr(geo: hou.Geometry, name: str, default: Any) -> hou.Attrib:
     return add_new_attr(geo, hou.attribType.Prim, name, default)
@@ -89,15 +96,21 @@ def add_new_attr(
     return geo.addAttrib(type, name, default)
 
 
-def points_by_id(geo: hou.Geometry | hou.Prim, attribute: str = "id") -> dict[str, hou.Point]:
+def points_by_attribute(
+        geo: hou.Geometry | hou.Prim | Sequence[hou.Prim],
+        attribute: str = "id"
+) -> dict[str, hou.Point]:
     result = {}
     point: hou.Point
-    for point in geo.points():
-        value = point.stringAttribValue(attribute)
-        if not value:
-            continue
-        assert value not in result, f"Duplicate point {attribute}: {value}"
-        result[value] = point
+    if not isinstance(geo, Sequence):
+        geo = (geo, )
+    for g in geo:
+        for point in g.points():
+            value = point.stringAttribValue(attribute)
+            if not value:
+                continue
+            assert value not in result, f"Duplicate point {attribute}: {value}"
+            result[value] = point
     return result
 
 def unique_points_start_with(
@@ -183,7 +196,7 @@ def fill_face_by_id(
     values: list[str],
     attribute: str = "id",
 ) -> hou.Polygon:
-    all_points = points_by_id(geo, attribute)
+    all_points = points_by_attribute(geo, attribute)
     face_points = []
     for v in values:
         p = all_points.get(v)
@@ -333,14 +346,6 @@ def classify_after_inset(
         list[tuple[hou.Prim, ...]],
         list[tuple[hou.Prim, ...]],
 ]:
-    """
-
-    :param geo:
-    :param prim_count_before:
-    :param horizontal_pack_size:
-    :param vertical_pack_size:
-    :return: [panes, sills]
-    """
     assert horizontal_pack_size > 0 and vertical_pack_size > 0
     assert prim_count_before >= horizontal_pack_size * vertical_pack_size
     prims_after: tuple[hou.Prim, ...] = geo.prims(); assert len(prims_after) > prim_count_before
@@ -371,7 +376,10 @@ def attribute_after_inset(
         sill_prefix: str,
         horizontal_pack_size: int = 1,
         vertical_pack_size: int = 1,
-) -> None:
+) -> tuple[
+        list[tuple[hou.Prim, ...]],
+        list[tuple[hou.Prim, ...]],
+]:
     assert pane_prefix != sill_prefix
     geo = node.geometry()
     prim_count_before = len(node.input(0).input(0).geometry().prims())
@@ -390,6 +398,8 @@ def attribute_after_inset(
                 i2 -= 1
             else:
                 i1 += 1
+    return panes, sills
+
 
 def get_prim_centroid(prims: hou.Prim | Sequence[hou.Prim]) -> hou.Vector3:
     center = hou.Vector3()
@@ -414,6 +424,101 @@ def get_point_on_ellipse_2d(
     assert math.isclose(v_upper.dot(v_left), 0.0, abs_tol=1e-5), f"upper-origin ({v_upper}) and left-origin ({v_left}) must be perpendicular"
 
     return origin + v_upper * math.cos(rad_from_y) + v_left * math.sin(rad_from_y)
+
+
+def interpolate_conic(
+        p0: hou.Vector3 | hou.Point,
+        p1: hou.Vector3 | hou.Point,
+        p2: hou.Vector3 | hou.Point,
+        slope0: hou.Vector3,
+        slope1: hou.Vector3,
+) -> Callable[[float], tuple[hou.Vector3, ...]]:
+    """
+    Construct the planar conic passing through p0, p1, p2, with the specified tangent directions at p0 and p1.
+    :param p0:
+    :param p1:
+    :param p2:
+    :param slope0:
+    :param slope1:
+    :return: A function that accepts a signed distance along the p0 to p1 axis,
+             and returns the 0, 1, or 2 points on the conic.
+    """
+    vector0 = p0.position() if isinstance(p0, hou.Point) else hou.Vector3(p0)
+    vector1 = p1.position() if isinstance(p1, hou.Point) else hou.Vector3(p1)
+    vector2 = p2.position() if isinstance(p2, hou.Point) else hou.Vector3(p2)
+
+    delta01 = vector1 - vector0
+    delta02 = vector2 - vector0
+    assert delta01.length() != 0.0, "p0 and p1 must be distinct"
+
+    along_axis = delta01.normalized()
+    normal = along_axis.cross(delta02); assert normal.length() != 0.0, "p0, p1, and p2 must not be collinear"
+    normal = normal.normalized()
+    across_axis = normal.cross(along_axis).normalized()
+
+    along1 = delta01.length()
+    along2 = delta02.dot(along_axis)
+    across2 = delta02.dot(across_axis)
+
+    def project_slope(slope: hou.Vector3) -> tuple[float, float]:
+        tangent = slope - slope.dot(normal) * normal
+        assert tangent.length() != 0.0, "Slope must have a non-zero component in the conic plane"
+        tangent = tangent.normalized()
+        return tangent.dot(along_axis), tangent.dot(across_axis)
+    along_slope0, across_slope0 = project_slope(slope0)
+    along_slope1, across_slope1 = project_slope(slope1)
+
+    import numpy as np
+    # A*x² + B*x*y + C*y² + D*x + E*y = 0
+    matrix = np.array([
+        [along1**2, 0.0, 0.0, along1, 0.0],
+        [along2**2, along2 * across2, across2**2, along2, across2],
+        [0.0, 0.0, 0.0, along_slope0, across_slope0],
+        [2.0 * along1 * along_slope1, along1 * across_slope1, 0.0, along_slope1, across_slope1],
+    ], dtype=float)
+    _, singular_values, vh = np.linalg.svd(matrix)
+    A, B, C, D, E = map(float, vh[-1])
+
+    tolerance = np.finfo(float).eps * max(matrix.shape) * singular_values[0]
+    assert np.sum(singular_values > tolerance) == 4, "The supplied points and slopes do not determine a unique conic"
+
+    coefficient_scale = max(abs(A), abs(B), abs(C), abs(D), abs(E))
+    assert coefficient_scale != 0.0, "Failed to construct a valid conic"
+    A /= coefficient_scale
+    B /= coefficient_scale
+    C /= coefficient_scale
+    D /= coefficient_scale
+    E /= coefficient_scale
+
+    def to_3d(along: float, across: float) -> hou.Vector3:
+        return vector0 + along * along_axis + across * across_axis
+
+    def evaluate(along: float) -> tuple[hou.Vector3, ...]:
+        quadratic = C
+        linear = B * along + E
+        constant = A * along**2 + D * along
+        eps = 1e-12
+
+        if abs(quadratic) <= eps:
+            if abs(linear) <= eps:
+                return ()
+            across = -constant / linear
+            return (to_3d(along, across),)
+
+        discriminant = linear**2 - 4.0 * quadratic * constant
+        if discriminant < -eps:
+            return ()
+
+        if abs(discriminant) <= eps:
+            across = -linear / (2.0 * quadratic)
+            return (to_3d(along, across),)
+
+        sqrt_discriminant = math.sqrt(discriminant)
+        across0 = (-linear + sqrt_discriminant) / (2.0 * quadratic)
+        across1 = (-linear - sqrt_discriminant) / (2.0 * quadratic)
+        return to_3d(along, across0), to_3d(along, across1)
+
+    return evaluate
 
 
 def remove_attributes(

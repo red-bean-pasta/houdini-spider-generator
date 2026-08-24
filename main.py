@@ -5,7 +5,7 @@ import base_sops
 import head
 from abdomen import build as build_abdomen
 from cephalothorax import build as build_cephalothorax
-from hom_helper import points_by_id, sopify
+from hom_helper import points_by_attribute, sopify
 from pedicel import build as build_pedicel
 from sop_helper import add_merge, add_fuse
 
@@ -48,7 +48,7 @@ def _add_spider() -> hou.SopNode:
 
 def _position_cephalothorax(cephalothorax: hou.SopNode) -> None:
     geo: hou.Geometry = cephalothorax.geometry()
-    points = points_by_id(geo)
+    points = points_by_attribute(geo)
     end = points[base_sops.baseend(0)].position()
     offset = hou.Vector3() - end
     for point in geo.points():
@@ -59,11 +59,11 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
 
     abdomen_input = node.inputs()[1]; assert abdomen_input is not None, "Expected abdomen connected as input 1"
-    ab_points = points_by_id(abdomen_input.geometry())
+    ab_points = points_by_attribute(abdomen_input.geometry())
     v1 = ab_points.get(abdomen.abdomenverticalrim(1)); assert v1 is not None, "Expected abdomenverticalrim1 point in abdomen"
     new_y = v1.position().y()
 
-    cepha_points = points_by_id(geo)
+    cepha_points = points_by_attribute(geo)
     baseend0 = cepha_points.get(base_sops.baseend(0)); assert baseend0 is not None, "Expected baseend0 point in cephalothorax"
     headback0 = cepha_points.get(head.headback(0)); assert headback0 is not None, "Expected headback0 point in cephalothorax"
 

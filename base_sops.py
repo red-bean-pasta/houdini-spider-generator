@@ -9,8 +9,8 @@ import sternum_sops
 from sternum_sops import ID as STERNUM_ID
 from hom_helper import (
     get_parent, get_float_parm,
-    add_new_prim_attr, add_new_id_attr,
-    points_by_id, unique_points_start_with,
+    add_new_prim_attr, add_point_attr,
+    points_by_attribute, unique_points_start_with,
     set_points_id,
     fill_face,
     affix_id, get_id_range,
@@ -55,7 +55,7 @@ def extract_sternum_rim(node: hou.SopNode) -> None:
     assert len(rim_edges) == len(sternum_rim), "Expected one edge per sternum rim point"
 
     geo.clear()
-    add_new_id_attr(geo)
+    add_point_attr(geo)
     points = {}
     for point_id, position in sternum_rim.items():
         point = geo.createPoint()
@@ -144,7 +144,7 @@ def add_flap_regions(node: hou.SopNode) -> None:
 def connect_side_flaps(node: hou.SopNode) -> None:
     geo = node.geometry()
     hom_helper.deduplicate_points(geo, ID.BASESTERNUM, affix=True)
-    points = points_by_id(geo)
+    points = points_by_attribute(geo)
     count = get_id_range(geo, ID.BASESTERNUM)[1]
     for side in (-1, 1):
         for index in range(2, count):
@@ -156,7 +156,7 @@ def connect_side_flaps(node: hou.SopNode) -> None:
 
 def cleanup_connected_side_flap_ids(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
+    points = points_by_attribute(geo)
     count = get_id_range(geo, ID.BASESTERNUM)[1]
     for i in range(2, count):
         for major in (i, -i):
@@ -200,7 +200,7 @@ def rotate_coxa_flaps(node: hou.SopNode) -> None:
 
 def adjust_frontest_line(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
+    points = points_by_attribute(geo)
     line_start = points[basesternum(-1, 2)].position()
     line_end = points[basesternum(1, 2)].position()
     line_direction = line_end - line_start
@@ -220,7 +220,7 @@ def adjust_frontest_line(node: hou.SopNode) -> None:
 
 def fill_maxilla(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
+    points = points_by_attribute(geo)
     starts = [
         points[basesternum(1, 1)],
         points[basesternum(-1, 1)],
@@ -255,7 +255,7 @@ def fill_maxilla(node: hou.SopNode) -> None:
 
 def fill_pedicel_membrane(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
+    points = points_by_attribute(geo)
     p5 = points[sternumrim(5)]
     e5_1 = points[basesternum(5, 1)]
     e5_2 = points[basesternum(5, 2)]
@@ -324,7 +324,7 @@ def _prepare_membrane_attributes(node: hou.SopNode) -> None:
 
 def _prepare_maxilla_membrane(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
+    points = points_by_attribute(geo)
     prims = [
         p
         for p in geo.prims()
@@ -338,7 +338,7 @@ def _prepare_maxilla_membrane(node: hou.SopNode) -> None:
 def _prepare_front_membrane(node: hou.SopNode) -> None:
     geo = node.geometry()
     for prim in geo.prims():
-        points = points_by_id(prim)
+        points = points_by_attribute(prim)
         pivot = points.get(sternumrim(0))
         outer = points.get(basesternum(0))
         if pivot is None or outer is None:
@@ -349,7 +349,7 @@ def _prepare_side_membrane(node: hou.SopNode) -> None:
     geo = node.geometry()
 
     for prim in geo.prims():
-        dic = points_by_id(prim)
+        dic = points_by_attribute(prim)
         points = list(dic.values())
         midpoint = next(
             (p for k, p in dic.items() if k.startswith(STERNUM_ID.STERNUMMIDDLE)),
