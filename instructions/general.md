@@ -40,3 +40,8 @@ This is a project that tries to model a spider in a biologically topology way in
 - Choose between identifier, position or other pattern based construction based on the task's true nature.
 - DO NOT REVERT user changes unless requested, broken, problematic or buggy, or if there's a better way.
 - DO NOT MAKE TOO MUCH STRUCTURL CHANGE unless user requested or approved.
+
+
+## Notes
+
+- Some scripts under "./utilities" are system links. the agent sandbox environment may not be able to read them natively. identify, reference and read them in batch. 
