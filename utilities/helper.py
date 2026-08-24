@@ -1,7 +1,86 @@
+from collections.abc import Sequence
+from typing import Literal
+
 import hou
 
-from utility.meshing import classify_after_inset
-from utility.common import get_prim_centroid
+from utilities.common import (
+    add_point_attr,
+    affix_attribute_value,
+    get_prim_centroid,
+    set_point_attr,
+    set_points_attr,
+)
+from utilities.identifying import (
+    attribute_after_inset,
+    deduplicate_point_attributes,
+    fill_face_by_attr,
+    indexed_attr_range,
+    points_by_unique_attr,
+    rename_point_attr,
+    unique_points_start_with,
+)
+from utilities.topology import classify_after_inset
+
+
+def affix_id(prefix: str, *affixes: int | str) -> str:
+    return affix_attribute_value(prefix, *affixes)
+
+
+def add_id_attr(geo: hou.Geometry, default: str = "") -> hou.Attrib:
+    return add_point_attr(geo, "id", default)
+
+
+def points_by_id(
+    geo: hou.Geometry | hou.Prim | Sequence[hou.Prim],
+) -> dict[str, hou.Point]:
+    return points_by_unique_attr(geo, "id")
+
+
+def set_point_id(point: hou.Point, value: str) -> None:
+    set_point_attr(point, "id", value)
+
+
+def set_points_id(points: Sequence[hou.Point], values: Sequence[str]) -> None:
+    set_points_attr(points, "id", values)
+
+
+def get_id_range(geo: hou.Geometry, prefix: str) -> tuple[int, int] | None:
+    return indexed_attr_range(geo, "id", prefix)
+
+
+def fill_face_by_id(geo: hou.Geometry, values: list[str]) -> hou.Polygon:
+    return fill_face_by_attr(geo, "id", values)
+
+
+def unique_points_start_with_id(
+    geo: hou.Geometry,
+    prefixes: str | tuple[str, ...],
+) -> dict[str, hou.Point]:
+    return unique_points_start_with(geo, "id", prefixes)
+
+
+def deduplicate_id_attr(
+    geo: hou.Geometry,
+    prefix: str | tuple[str, ...] | None = None,
+    add_affix: bool = False,
+) -> None:
+    deduplicate_point_attributes(geo, "id", prefix, add_affix=add_affix)
+
+
+def rename_left_ids(geo: hou.Geometry) -> None:
+    def filtrate(p: hou.Point) -> bool:
+        return p.position()[0] < 0.0
+
+    def rename(point_id: str) -> str | Literal[False]:
+        first_digit = next(
+            (index for index, character in enumerate(point_id) if character.isdigit()),
+            None,
+        )
+        if first_digit is None:
+            return False
+        return f"{point_id[:first_digit]}-{point_id[first_digit:]}"
+
+    rename_point_attr(geo, "id", filtrate, rename)
 
 
 def find_quad_polyextrude_splits(
@@ -35,35 +114,3 @@ def find_quad_polyextrude_splits(
             edge = geo.findEdge(opposite_points[0],  opposite_points[1])
             assert edge is not None, f"Expected opposite points of primitive {primitive.number()} to form an edge"
             split_group.add(edge)
-
-
-def attribute_after_inset(
-        node: hou.SopNode,
-        attribute: str,
-        pane_prefix: str,
-        sill_prefix: str,
-        horizontal_pack_size: int = 1,
-        vertical_pack_size: int = 1,
-) -> tuple[
-        list[tuple[hou.Prim, ...]],
-        list[tuple[hou.Prim, ...]],
-]:
-    assert pane_prefix != sill_prefix
-    geo = node.geometry()
-    prim_count_before = len(node.input(0).input(0).geometry().prims())
-    panes, sills = classify_after_inset(geo, prim_count_before, horizontal_pack_size, vertical_pack_size)
-    for prefix, compos in {pane_prefix: panes, sill_prefix: sills}.items():
-        i1 = 1; i2 = -1
-        for compo in compos:
-            centroid = get_prim_centroid(compo)
-            i = i2 if centroid.x() < 0 else i1
-            if len(compo) == 1:
-                compo[0].setAttribValue(attribute, prefix + str(i))
-                continue
-            for j, part in enumerate(compo, start=1):
-                part.setAttribValue(attribute, f"{prefix}{i}_{j}")
-            if centroid.x() < 0:
-                i2 -= 1
-            else:
-                i1 += 1
-    return panes, sills

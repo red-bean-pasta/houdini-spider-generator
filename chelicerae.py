@@ -3,21 +3,30 @@ from enum import StrEnum, auto
 import hou
 
 import base_sops
-from utility import helper
-from utility.helper import (
-    add_point_attr,
-    add_new_prim_attr,
-    affix_id,
+from utilities.common import (
+    add_edge_group,
+    add_prim_attr,
     fill_face,
     get_float_parm,
     get_parent,
-    points_by_attribute,
+    get_vector2_parm,
+    remove_attrs,
+    remove_groups,
+)
+from utilities.helper import (
+    add_id_attr,
+    affix_id,
+    deduplicate_id_attr,
+    points_by_id,
     set_point_id,
     set_points_id,
-    sopify,
-    add_edge_group,
 )
-from sop_helper import add_output
+from utilities.identifying import attribute_after_inset
+from utilities.nodes import (
+    add_output,
+    add_reloadable_subnet,
+    sopify,
+)
 
 
 class ID(StrEnum):
@@ -28,7 +37,7 @@ def cheliceraeupper(*i: int | str) -> str:
 
 
 def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
-    chelicerae = cephalothorax.createNode("subnet", "chelicerae")
+    chelicerae = add_reloadable_subnet(cephalothorax, "chelicerae")
     chelicerae.setInput(0, base)
     _add_parameters(chelicerae)
 
@@ -141,7 +150,7 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
 def _build_geometry(node: hou.SopNode) -> None:
     geo = node.geometry()
 
-    source_points = points_by_attribute(geo)
+    source_points = points_by_id(geo)
     base_ids = (
         base_sops.basemaxilla(-1),
         base_sops.basesternum(-1, 1),
@@ -152,8 +161,8 @@ def _build_geometry(node: hou.SopNode) -> None:
     base_positions = [source_points[point_id].position() for point_id in base_ids]
 
     geo.clear()
-    add_point_attr(geo)
-    add_new_prim_attr(geo, "region", "")
+    add_id_attr(geo)
+    add_prim_attr(geo, "region", "")
     base_points = []
     for point_id, position in zip(base_ids, base_positions):
         point = geo.createPoint()
@@ -195,9 +204,9 @@ def _build_geometry(node: hou.SopNode) -> None:
 
 def _identify_inset_split(node: hou.SopNode) -> None:
     geo = node.geometry()
-    add_new_prim_attr(geo, "tmp_insetscale", 0.0)
+    add_prim_attr(geo, "tmp_insetscale", 0.0)
 
-    points = points_by_attribute(geo)
+    points = points_by_id(geo)
     lower_id = base_sops.basesternum(0)
     upper_id = cheliceraeupper(0)
     lower = points.get(lower_id)
@@ -228,7 +237,7 @@ def _inset_flaps(parent: hou.SopNode, p_input: hou.SopNode) -> hou.SopNode:
 
 
 def _classify_after_inset(node: hou.SopNode) -> None:
-    panes, _ = helper.attribute_after_inset(node, "region", "chelicerasocket", "cheliceramembrane", 2)
+    panes, _ = attribute_after_inset(node, "region", "chelicerasocket", "cheliceramembrane", 2)
     assert len(panes) == 2
     assert len(panes[0]) == 2
     assert panes[0][0].boundingBox().center().x() > 0
@@ -257,9 +266,9 @@ def _classify_after_inset(node: hou.SopNode) -> None:
 
 def _cleanup_inset_flaps(node: hou.SopNode) -> None:
     geo = node.geometry()
-    helper.remove_attributes(geo, prim_attribs="tmp_insetscale")
-    helper.remove_groups(geo, edge_groups="tmp_chelicera_split")
-    helper.deduplicate_points(geo, None, "id", False)
+    remove_attrs(geo, prim_attribs="tmp_insetscale")
+    remove_groups(geo, edge_groups="tmp_chelicera_split")
+    deduplicate_id_attr(geo, None, add_affix=False)
 
 
 def _build_extrusion(node: hou.SopNode) -> None:
@@ -271,7 +280,7 @@ def _build_extrusion(node: hou.SopNode) -> None:
         if prim.stringAttribValue("region").startswith("chelicerasocket")
     ]
 
-    id_points = points_by_attribute(geo)
+    id_points = points_by_id(geo)
     c1_1 = id_points["chelicera1_1"]
     c1_2 = id_points["chelicera1_2"]
     c1_3 = id_points["chelicera1_3"]
@@ -286,13 +295,13 @@ def _build_extrusion(node: hou.SopNode) -> None:
     up_pivot = hou.Vector3((x_max + x_min) / 2.0, (y_max + y_min) / 2.0, z)
     offset_baseline = hou.Vector3(w, h, h)
 
-    middle_section_ratio = _get_vector2_parm(parent, "middle_section_ratio")
-    middle_section_offset = _get_vector2_parm(parent, "middle_section_offset")
-    middle_section_rotation = _get_vector2_parm(parent, "middle_section_rotation")
-    end_section_ratio = _get_vector2_parm(parent, "end_section_ratio")
-    end_section_offset = _get_vector2_parm(parent, "end_section_offset")
-    end_section_rotation = _get_vector2_parm(parent, "end_section_rotation")
-    section_offsets_y = _get_vector2_parm(parent, "section_offsets_y")
+    middle_section_ratio = get_vector2_parm(parent, "middle_section_ratio")
+    middle_section_offset = get_vector2_parm(parent, "middle_section_offset")
+    middle_section_rotation = get_vector2_parm(parent, "middle_section_rotation")
+    end_section_ratio = get_vector2_parm(parent, "end_section_ratio")
+    end_section_offset = get_vector2_parm(parent, "end_section_offset")
+    end_section_rotation = get_vector2_parm(parent, "end_section_rotation")
+    section_offsets_y = get_vector2_parm(parent, "section_offsets_y")
 
     middle_pivot_offset = hou.Vector3(middle_section_offset.x(), -section_offsets_y.x(), -middle_section_offset.y())
     end_pivot_offset = hou.Vector3(end_section_offset.x(), -section_offsets_y.y(), -end_section_offset.y())
@@ -348,11 +357,6 @@ def _build_extrusion(node: hou.SopNode) -> None:
 
     fill_face(geo, loops[-1])
     geo.deletePrims(socket_prims)
-
-def _get_vector2_parm(node: hou.SopNode, name: str) -> hou.Vector2:
-    parm_tuple = node.parmTuple(name)
-    assert parm_tuple is not None, f"Expected parameter {name!r} on {node.path()}"
-    return hou.Vector2(parm_tuple.eval())
 
 def _construct_section_loop(
     pivot: hou.Vector3,

@@ -6,18 +6,28 @@ import hou
 import base_sops
 import sternum_sops
 from chelicerae import cheliceraeupper
-from utility.helper import (
-    add_point_attr,
-    affix_id,
+from utilities.common import (
+    add_prim_attr,
     fill_face,
-    fill_face_by_id,
     get_float_parm,
     get_parent,
-    points_by_attribute,
-    set_point_id,
-    sopify, add_new_prim_attr,
 )
-from sop_helper import add_fuse, add_merge, add_mirror, add_output
+from utilities.helper import (
+    add_id_attr,
+    affix_id,
+    fill_face_by_id,
+    points_by_id,
+    rename_left_ids,
+    set_point_id,
+)
+from utilities.nodes import (
+    add_fuse,
+    add_merge,
+    add_mirror,
+    add_output,
+    add_reloadable_subnet,
+    sopify,
+)
 
 
 class ID(StrEnum):
@@ -48,7 +58,7 @@ def headsideback(*i: int | str) -> str:
 
 
 def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
-    head = cephalothorax.createNode("subnet", "head")
+    head = add_reloadable_subnet(cephalothorax, "head")
     head.setInput(0, base)
     _add_parameters(head)
 
@@ -109,7 +119,7 @@ def _add_points(
     point_data: list[tuple[str, hou.Vector3]],
 ) -> None:
     geo.clear()
-    add_point_attr(geo)
+    add_id_attr(geo)
     for point_id, position in point_data:
         point = geo.createPoint()
         point.setPosition(position)
@@ -175,7 +185,7 @@ def _extract_base_rim(node: hou.SopNode) -> None:
 def _add_corners_half(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
-    points = points_by_attribute(geo)
+    points = points_by_id(geo)
 
     sternumrim0 = sternum_sops.sternumrim(0)
     cheliceraeupper0 = cheliceraeupper(0)
@@ -262,7 +272,7 @@ def _fill_back_loop_faces(node: hou.SopNode) -> None:
     )
     regions = ("headfrontmain", "headfrontcheek", "headtop", "headtop", "headback")
 
-    add_new_prim_attr(geo, "region", "")
+    add_prim_attr(geo, "region", "")
     for i, face in enumerate(faces):
         prim = fill_face_by_id(geo, list(face))
         prim.setAttribValue("region", regions[i])
@@ -293,7 +303,7 @@ def _sorted_right_side_points(geo: hou.Geometry) -> list[hou.Point]:
 
 def _fill_side_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_attribute(geo)
+    points = points_by_id(geo)
     right_side = _sorted_right_side_points(geo)
     assert len(right_side) >= 3 and len(right_side) % 2 == 1, "Expected an odd, symmetric right-side sternum loop"
 
@@ -386,17 +396,4 @@ def _add_side_regions(node: hou.SopNode) -> None:
 
 
 def _rename_left_ids(node: hou.SopNode) -> None:
-    geo = node.geometry()
-    for point in geo.points():
-        if point.position()[0] >= 0.0:
-            continue
-        point_id = point.stringAttribValue("id")
-        first_digit = next(
-            (index for index, character in enumerate(point_id) if character.isdigit()),
-            None,
-        )
-        assert first_digit is not None, f"Expected a numeric suffix in point id {point_id}"
-        point.setAttribValue(
-            "id",
-            f"{point_id[:first_digit]}-{point_id[first_digit:]}",
-        )
+    rename_left_ids(node.geometry())

@@ -3,19 +3,29 @@ from enum import StrEnum, auto
 
 import hou
 
-from utility import helper
 import sternum_sops
 from sternum_sops import ID as STERNUM_ID
-from utility.helper import (
-    get_parent, get_float_parm,
-    add_new_prim_attr, add_point_attr,
-    points_by_attribute, unique_points_start_with,
-    set_points_id,
-    fill_face,
-    affix_id, get_id_range,
-    sopify,
-)
 from sternum_sops import sternumrim
+from utilities.common import (
+    add_prim_attr,
+    fill_face,
+    get_float_parm,
+    get_parent,
+    remove_attrs,
+    remove_groups,
+)
+from utilities.helper import (
+    add_id_attr,
+    affix_id,
+    deduplicate_id_attr,
+    find_quad_polyextrude_splits,
+    get_id_range,
+    points_by_id,
+    set_points_id,
+    unique_points_start_with_id,
+)
+from utilities.identifying import attribute_after_inset
+from utilities.nodes import sopify
 
 
 class ID(StrEnum):
@@ -41,7 +51,7 @@ def extract_sternum_rim(node: hou.SopNode) -> None:
     geo = node.geometry()
     sternum_rim = {
         point_id: point.position()
-        for point_id, point in unique_points_start_with(geo, sternum_sops.outer_loop_ids()).items()
+        for point_id, point in unique_points_start_with_id(geo, sternum_sops.outer_loop_ids()).items()
     }
     rim_edges = [
         tuple(point.stringAttribValue("id") for point in edge.points())
@@ -54,7 +64,7 @@ def extract_sternum_rim(node: hou.SopNode) -> None:
     assert len(rim_edges) == len(sternum_rim), "Expected one edge per sternum rim point"
 
     geo.clear()
-    add_point_attr(geo)
+    add_id_attr(geo)
     points = {}
     for point_id, position in sternum_rim.items():
         point = geo.createPoint()
@@ -133,7 +143,7 @@ def _extrude_edge_outward(
 
 def add_flap_regions(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-    add_new_prim_attr(geo, "region", "")
+    add_prim_attr(geo, "region", "")
     for prim in geo.prims():
         prim.setAttribValue("region", "coxa")
     for prim in (geo.prim(0), geo.prim(1)):
@@ -142,8 +152,8 @@ def add_flap_regions(node: hou.SopNode) -> None:
 
 def connect_side_flaps(node: hou.SopNode) -> None:
     geo = node.geometry()
-    helper.deduplicate_points(geo, ID.BASESTERNUM, affix=True)
-    points = points_by_attribute(geo)
+    deduplicate_id_attr(geo, ID.BASESTERNUM, add_affix=True)
+    points = points_by_id(geo)
     count = get_id_range(geo, ID.BASESTERNUM)[1]
     for side in (-1, 1):
         for index in range(2, count):
@@ -155,7 +165,7 @@ def connect_side_flaps(node: hou.SopNode) -> None:
 
 def cleanup_connected_side_flap_ids(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_attribute(geo)
+    points = points_by_id(geo)
     count = get_id_range(geo, ID.BASESTERNUM)[1]
     for i in range(2, count):
         for major in (i, -i):
@@ -199,7 +209,7 @@ def rotate_coxa_flaps(node: hou.SopNode) -> None:
 
 def adjust_frontest_line(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_attribute(geo)
+    points = points_by_id(geo)
     line_start = points[basesternum(-1, 2)].position()
     line_end = points[basesternum(1, 2)].position()
     line_direction = line_end - line_start
@@ -219,7 +229,7 @@ def adjust_frontest_line(node: hou.SopNode) -> None:
 
 def fill_maxilla(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_attribute(geo)
+    points = points_by_id(geo)
     starts = [
         points[basesternum(1, 1)],
         points[basesternum(-1, 1)],
@@ -236,7 +246,7 @@ def fill_maxilla(node: hou.SopNode) -> None:
         points[sternumrim(1)],
         points[sternumrim(-1)],
     ]
-    add_new_prim_attr(geo, "region", "")
+    add_prim_attr(geo, "region", "")
 
     for side, (start, end, center, pivot) in enumerate(zip(starts, ends, centers, pivots)):
         start_position = start.position()
@@ -254,7 +264,7 @@ def fill_maxilla(node: hou.SopNode) -> None:
 
 def fill_pedicel_membrane(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_attribute(geo)
+    points = points_by_id(geo)
     p5 = points[sternumrim(5)]
     e5_1 = points[basesternum(5, 1)]
     e5_2 = points[basesternum(5, 2)]
@@ -319,11 +329,11 @@ def inset_membrane(parent: hou.SopNode, coxa: hou.SopNode) -> hou.SopNode:
 
 def _prepare_membrane_attributes(node: hou.SopNode) -> None:
     geo = node.geometry()
-    add_new_prim_attr(geo, "tmp_insetscale", 0.0)
+    add_prim_attr(geo, "tmp_insetscale", 0.0)
 
 def _prepare_maxilla_membrane(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_attribute(geo)
+    points = points_by_id(geo)
     prims = [
         p
         for p in geo.prims()
@@ -337,7 +347,7 @@ def _prepare_maxilla_membrane(node: hou.SopNode) -> None:
 def _prepare_front_membrane(node: hou.SopNode) -> None:
     geo = node.geometry()
     for prim in geo.prims():
-        points = points_by_attribute(prim)
+        points = points_by_id(prim)
         pivot = points.get(sternumrim(0))
         outer = points.get(basesternum(0))
         if pivot is None or outer is None:
@@ -348,7 +358,7 @@ def _prepare_side_membrane(node: hou.SopNode) -> None:
     geo = node.geometry()
 
     for prim in geo.prims():
-        dic = points_by_attribute(prim)
+        dic = points_by_id(prim)
         points = list(dic.values())
         midpoint = next(
             (p for k, p in dic.items() if k.startswith(STERNUM_ID.STERNUMMIDDLE)),
@@ -370,7 +380,7 @@ def _prepare_side_membrane(node: hou.SopNode) -> None:
 
 def _identify_side_inset_split(node: hou.SopNode) -> None:
     geo = node.geometry()
-    helper.find_quad_polyextrude_splits(
+    find_quad_polyextrude_splits(
         geo,
         [
             point
@@ -395,11 +405,11 @@ def _classify_membrane_and_socket(
         membrane_prefix: str,
         horizontal_pack_size: int = 1,
 ) -> None:
-    helper.attribute_after_inset(node, "region", socket_prefix, membrane_prefix, horizontal_pack_size)
+    attribute_after_inset(node, "region", socket_prefix, membrane_prefix, horizontal_pack_size)
 
 
 def _cleanup_temp_attributes(node: hou.SopNode) -> None:
     geo = node.geometry()
-    helper.remove_attributes(geo, prim_attribs="tmp_insetscale")
-    helper.remove_groups(geo, edge_groups="tmp_side_split")
-    helper.deduplicate_points(geo, None, "id", False)
+    remove_attrs(geo, prim_attribs="tmp_insetscale")
+    remove_groups(geo, edge_groups="tmp_side_split")
+    deduplicate_id_attr(geo, None, add_affix=False)

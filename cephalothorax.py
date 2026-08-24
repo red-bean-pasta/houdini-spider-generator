@@ -3,11 +3,18 @@ import hou
 from base import build as build_base
 from chelicerae import build as build_chelicerae
 from head import build as build_head
-from sop_helper import add_fuse, add_merge, add_output, propagate_parameters, add_outside_recalculation
+from utilities.nodes import (
+    add_fuse,
+    add_merge,
+    add_output,
+    add_outside_recalculation,
+    add_reloadable_subnet,
+    propagate_parameters,
+)
 
 
 def build(spider: hou.OpNode) -> hou.SopNode:
-    cephalothorax = spider.createNode("subnet", "cephalothorax")
+    cephalothorax = add_reloadable_subnet(spider, "cephalothorax")
     parameters = _add_parameters(cephalothorax)
 
     base = build_base(cephalothorax)

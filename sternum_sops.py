@@ -3,8 +3,18 @@ from enum import StrEnum, auto
 
 import hou
 
-from utility.helper import fill_face, points_by_attribute, set_points_id, get_parent, get_float_parm, add_point_attr, affix_id, \
-    add_new_prim_attr
+from utilities.common import (
+    add_prim_attr,
+    fill_face,
+    get_float_parm,
+    get_parent,
+)
+from utilities.helper import (
+    add_id_attr,
+    affix_id,
+    points_by_id,
+    set_points_id,
+)
 
 
 class ID(StrEnum):
@@ -95,7 +105,7 @@ def add_point_ids(node: hou.SopNode) -> None:
     assert len(right_points) == 10
     assert len(left_points) == len(right_points) - 2
 
-    add_point_attr(geo)
+    add_id_attr(geo)
 
     set_points_id([right_points[0]], [sternumrim(0)])
 
@@ -126,7 +136,7 @@ def add_center_spine(node: hou.SopNode) -> None:
 
     geo = node.geometry()
     geo.clear()
-    add_point_attr(geo)
+    add_id_attr(geo)
 
     spine_points: list[hou.Point] = []
     for position in positions:
@@ -146,7 +156,7 @@ def descend_sternum_spine(node: hou.SopNode) -> None:
     assert control is not None, "Expected CONTROL node"
 
     depth = get_float_parm(control, "half_width") * get_float_parm(parent, "width_depth_ratio")
-    points = points_by_attribute(geo)
+    points = points_by_id(geo)
 
     top = points[sternumrim(0)].position()
     middle = points[sternumrim(3)].position()
@@ -190,6 +200,6 @@ def build_sternum_faces(node: hou.SopNode) -> None:
 def add_prim_regions(node: hou.SopNode) -> None:
     geo = node.geometry()
 
-    add_new_prim_attr(geo, "region", "")
+    add_prim_attr(geo, "region", "")
     for prim in geo.prims():
         prim.setAttribValue("region", "sternum")

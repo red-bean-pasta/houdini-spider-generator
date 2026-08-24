@@ -16,6 +16,10 @@ you can query them easily by `grep 'hom_helper|sop_helper|dev_helper'` or simila
 
 * patch those references file by file. do not patch them all together as i will revise the changes.
 
+* this proejcts directly creates a lot of subnets by e.g., `createNode("subnet", "base")`. they should now migrate to use `utilities.nodes.add_reloadable_subnet` for hot reload capability.
+
+* migrate test_build.py logic to `utilities.developing.save`
+
 #### Notes
 
 * the method names, argument signatures and its inner logics may be updated or generalized. 

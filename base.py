@@ -1,13 +1,19 @@
 import hou
 
 import base_sops
-from utility.helper import sopify
-from sop_helper import add_fuse, add_merge, add_output, propagate_parameters
 from sternum import build as build_sternum
+from utilities.nodes import (
+    add_fuse,
+    add_merge,
+    add_output,
+    add_reloadable_subnet,
+    propagate_parameters,
+    sopify,
+)
 
 
 def build(cephalothorax: hou.SopNode) -> hou.SopNode:
-    base = cephalothorax.createNode("subnet", "base")
+    base = add_reloadable_subnet(cephalothorax, "base")
     _add_parameters(base)
 
     sternum = build_sternum(base)
@@ -73,4 +79,3 @@ def _add_parameters(base: hou.SopNode) -> hou.SopNode:
     )
     base.setParmTemplateGroup(templates)
     return base
-

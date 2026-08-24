@@ -4,21 +4,31 @@ from enum import StrEnum, auto
 import hou
 
 import base_sops
-from utility import helper
 import sternum_sops
-from utility.helper import (
-    add_new_attr,
-    add_point_attr,
-    add_new_prim_attr,
-    affix_id,
+from utilities.common import (
+    add_attr,
+    add_prim_attr,
     fill_face,
     get_float_parm,
     get_parent,
-    get_point_on_ellipse_2d,
-    points_by_attribute,
+    remove_attrs,
+)
+from utilities.helper import (
+    add_id_attr,
+    affix_id,
+    points_by_id,
+    rename_left_ids,
+)
+from utilities.nodes import (
+    add_fuse,
+    add_merge,
+    add_mirror,
+    add_output,
+    add_outside_recalculation,
+    add_reloadable_subnet,
     sopify,
 )
-from sop_helper import add_fuse, add_merge, add_mirror, add_output, add_outside_recalculation
+from utilities.topology import get_point_on_ellipse_2d
 
 
 class ID(StrEnum):
@@ -44,7 +54,7 @@ def abdomensidelower(*i: int | str) -> str:
 
 
 def build(spider: hou.OpNode, cephalothorax: hou.SopNode) -> hou.SopNode:
-    abdomen = spider.createNode("subnet", "abdomen")
+    abdomen = add_reloadable_subnet(spider, "abdomen")
     abdomen.setInput(0, cephalothorax)
     _add_parameters(abdomen)
     _add_controls(abdomen)
@@ -128,7 +138,7 @@ def _prepare_cephalothorax_info(node: hou.SopNode) -> None:
     y_max = bbox.maxvec().y()
     y_min = bbox.minvec().y()
 
-    points = points_by_attribute(geo)
+    points = points_by_id(geo)
     baseend0 = points.get(base_sops.baseend(0))
     assert baseend0 is not None, f"Expected {base_sops.baseend(0)!r} in cephalothorax"
     basesternum5_1 = points.get(base_sops.basesternum(5, 1))
@@ -145,16 +155,16 @@ def _prepare_cephalothorax_info(node: hou.SopNode) -> None:
     tmp_pedicel_length = basesternum5_1.position().x() - baseend0.position().x()
     tmp_pedicel_height = baseend0.position().y() - sternumrim5.position().y()
 
-    add_new_attr(geo, hou.attribType.Global, "tmp_cepha_size", (0.0, 0.0, 0.0))
+    add_attr(geo, hou.attribType.Global, "tmp_cepha_size", (0.0, 0.0, 0.0))
     geo.setGlobalAttribValue("tmp_cepha_size", (cw, ch, cl))
 
-    add_new_attr(geo, hou.attribType.Global, "tmp_cepha_upper_lower_ratio", 0.0)
+    add_attr(geo, hou.attribType.Global, "tmp_cepha_upper_lower_ratio", 0.0)
     geo.setGlobalAttribValue("tmp_cepha_upper_lower_ratio", upper_lower_ratio)
 
-    add_new_attr(geo, hou.attribType.Global, "tmp_pedicel_length", 0.0)
+    add_attr(geo, hou.attribType.Global, "tmp_pedicel_length", 0.0)
     geo.setGlobalAttribValue("tmp_pedicel_length", tmp_pedicel_length)
 
-    add_new_attr(geo, hou.attribType.Global, "tmp_pedicel_height", 0.0)
+    add_attr(geo, hou.attribType.Global, "tmp_pedicel_height", 0.0)
     geo.setGlobalAttribValue("tmp_pedicel_height", tmp_pedicel_height)
 
 
@@ -188,7 +198,7 @@ def _add_width_frame(node: hou.SopNode) -> None:
     end = hou.Vector3(0.0, 0.0, length)
 
     geo.clear()
-    add_point_attr(geo)
+    add_id_attr(geo)
     points_data = [
         (abdomenorigin(), origin),
         (abdomenhorizontalrim(1), r1),
@@ -243,7 +253,7 @@ def _add_height_frame(node: hou.SopNode) -> None:
     rn1 = rn2 * (tmp_pedicel_height / abs(rn2.y()))
 
     geo.clear()
-    add_point_attr(geo)
+    add_id_attr(geo)
     points_data = [
         (abdomenorigin(), o),
         (abdomenverticalrim(1), r1),
@@ -264,7 +274,7 @@ def _add_height_frame(node: hou.SopNode) -> None:
 
 def _add_middle_frame(node: hou.SopNode, negative: bool = False) -> None:
     geo = node.geometry()
-    points = points_by_attribute(geo)
+    points = points_by_id(geo)
 
     sign = -1 if negative else 1
     side_attr = abdomensidelower if negative else abdomensideupper
@@ -295,8 +305,8 @@ def _add_lower_middle_frame(node: hou.SopNode) -> None:
 
 def _fill_right_side_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_attribute(geo)
-    add_new_prim_attr(geo, "region", "abdomen")
+    points = points_by_id(geo)
+    add_prim_attr(geo, "region", "abdomen")
 
     o = points[abdomenorigin()]
     e = points[abdomenend()]
@@ -320,12 +330,12 @@ def _fill_right_side_faces(node: hou.SopNode) -> None:
 
 
 def _rename_left_ids(node: hou.SopNode) -> None:
-    helper.rename_left_ids(node.geometry())
+    rename_left_ids(node.geometry())
 
 
 def _connect_frames_tmp(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_attribute(geo)
+    points = points_by_id(geo)
 
     o = abdomenorigin()
     e = abdomenend()
@@ -348,7 +358,7 @@ def _connect_frames_tmp(node: hou.SopNode) -> None:
 
 def _cleanup_temp_attributes(node: hou.SopNode) -> None:
     geo = node.geometry()
-    helper.remove_attributes(
+    remove_attrs(
         geo,
         global_attribs=("tmp_cepha_size", "tmp_cepha_upper_lower_ratio", "tmp_pedicel_length", "tmp_pedicel_height"),
     )

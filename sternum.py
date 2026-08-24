@@ -1,12 +1,18 @@
 import hou
 
 import sternum_sops
-from utility.helper import sopify
-from sop_helper import add_fuse, add_merge, add_mirror, add_output
+from utilities.nodes import (
+    add_fuse,
+    add_merge,
+    add_mirror,
+    add_output,
+    add_reloadable_subnet,
+    sopify,
+)
 
 
 def build(cephalothorax: hou.SopNode) -> hou.SopNode:
-    sternum = cephalothorax.createNode("subnet", "sternum")
+    sternum = add_reloadable_subnet(cephalothorax, "sternum")
     parameters = _add_parameters(sternum)
     control = _add_controls(sternum)
 

@@ -5,15 +5,18 @@ import hou
 import abdomen
 import base_sops
 import sternum_sops
-from utility.helper import (
-    add_point_attr,
-    add_new_prim_attr,
+from utilities.common import add_prim_attr
+from utilities.helper import (
+    add_id_attr,
     affix_id,
-    fill_pentagon,
-    points_by_attribute,
+    points_by_id,
+)
+from utilities.nodes import (
+    add_output,
+    add_reloadable_subnet,
     sopify,
 )
-from sop_helper import add_output
+from utilities.topology import fill_pentagon
 
 
 class ID(StrEnum):
@@ -28,7 +31,7 @@ def pedicelmiddlelower(*i: int | str) -> str:
 
 
 def build(spider: hou.OpNode, merged_cepha_and_abdomen: hou.SopNode) -> hou.SopNode:
-    pedicel = spider.createNode("subnet", "pedicel")
+    pedicel = add_reloadable_subnet(spider, "pedicel")
     pedicel.setInput(0, merged_cepha_and_abdomen)
 
     source = pedicel.indirectInputs()[0]
@@ -45,7 +48,7 @@ def build(spider: hou.OpNode, merged_cepha_and_abdomen: hou.SopNode) -> hou.SopN
 
 def _extract_needed_points(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_attribute(geo)
+    points = points_by_id(geo)
 
     needed_ids = (
         base_sops.baseend(0),
@@ -69,7 +72,7 @@ def _extract_needed_points(node: hou.SopNode) -> None:
         point_data.append((point_id, point.position()))
 
     geo.clear()
-    add_point_attr(geo)
+    add_id_attr(geo)
     for point_id, position in point_data:
         point = geo.createPoint()
         point.setPosition(position)
@@ -78,7 +81,7 @@ def _extract_needed_points(node: hou.SopNode) -> None:
 
 def _connect_pedicel(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_attribute(geo)
+    points = points_by_id(geo)
 
     baseend0 = points[base_sops.baseend(0)]
     basesternum5_1 = points[base_sops.basesternum(5, 1)]
@@ -94,7 +97,7 @@ def _connect_pedicel(node: hou.SopNode) -> None:
     abdomensidelower1 = points[abdomen.abdomensidelower(1)]
     abdomensidelower_neg1 = points[abdomen.abdomensidelower(-1)]
 
-    add_new_prim_attr(geo, "region", "")
+    add_prim_attr(geo, "region", "")
 
     # 1. Upper Right
     mid_ur, flt_ur = fill_pentagon(
