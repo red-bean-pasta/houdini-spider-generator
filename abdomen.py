@@ -6,12 +6,11 @@ import hou
 import base_sops
 import sternum_sops
 from utilities.common import (
-    add_attr,
     add_prim_attr,
     fill_face,
     get_float_parm,
     get_parent,
-    remove_attrs,
+    remove_attrs, add_global_attr,
 )
 from utilities.helper import (
     add_id_attr,
@@ -72,7 +71,7 @@ def build(spider: hou.OpNode, cephalothorax: hou.SopNode) -> hou.SopNode:
 
     # Kept for in-editor debug and visualize purpose
     connected = sopify(abdomen, lower_middle_frame, _connect_frames_tmp)
-    connection_point_merge = add_merge(abdomen, "merge_frames_and_points", lower_middle_frame, connected)
+    _ = add_merge(abdomen, "merge_frames_and_points", lower_middle_frame, connected)
 
     mirrored = add_mirror(abdomen, "mirror_left_faces", right_side_faces, (1, 0, 0), True, False)
     renamed = sopify(abdomen, mirrored, _rename_left_ids)
@@ -155,16 +154,16 @@ def _prepare_cephalothorax_info(node: hou.SopNode) -> None:
     tmp_pedicel_length = basesternum5_1.position().x() - baseend0.position().x()
     tmp_pedicel_height = baseend0.position().y() - sternumrim5.position().y()
 
-    add_attr(geo, hou.attribType.Global, "tmp_cepha_size", (0.0, 0.0, 0.0))
+    add_global_attr(geo, "tmp_cepha_size", (0.0, 0.0, 0.0))
     geo.setGlobalAttribValue("tmp_cepha_size", (cw, ch, cl))
 
-    add_attr(geo, hou.attribType.Global, "tmp_cepha_upper_lower_ratio", 0.0)
+    add_global_attr(geo, "tmp_cepha_upper_lower_ratio", 0.0)
     geo.setGlobalAttribValue("tmp_cepha_upper_lower_ratio", upper_lower_ratio)
 
-    add_attr(geo, hou.attribType.Global, "tmp_pedicel_length", 0.0)
+    add_global_attr(geo, "tmp_pedicel_length", 0.0)
     geo.setGlobalAttribValue("tmp_pedicel_length", tmp_pedicel_length)
 
-    add_attr(geo, hou.attribType.Global, "tmp_pedicel_height", 0.0)
+    add_global_attr(geo, "tmp_pedicel_height", 0.0)
     geo.setGlobalAttribValue("tmp_pedicel_height", tmp_pedicel_height)
 
 

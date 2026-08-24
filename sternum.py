@@ -13,8 +13,8 @@ from utilities.nodes import (
 
 def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     sternum = add_reloadable_subnet(cephalothorax, "sternum")
-    parameters = _add_parameters(sternum)
-    control = _add_controls(sternum)
+    _ = _add_parameters(sternum)
+    _ = _add_controls(sternum)
 
     half = sopify(sternum, None, sternum_sops.left_half)
     midpoints = sopify(sternum, half, sternum_sops.add_midpoints)
@@ -31,7 +31,7 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     faces = sopify(sternum, depth, sternum_sops.build_sternum_faces)
     regions = sopify(sternum, faces, sternum_sops.add_prim_regions)
 
-    output = add_output(sternum, "OUT_STERNUM", regions)
+    _ = add_output(sternum, "OUT_STERNUM", regions)
     sternum.layoutChildren()
     return sternum
 

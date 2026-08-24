@@ -36,7 +36,7 @@ def build(spider: hou.OpNode) -> hou.SopNode:
     b_h_fuse = add_fuse(cephalothorax, "fuse_base_and_head", b_h_merge)
 
     recalculate = add_outside_recalculation(cephalothorax, "recalculate_normals", b_h_fuse)
-    output = add_output(cephalothorax, "OUT_CEPHALOTHORAX", recalculate)
+    _ = add_output(cephalothorax, "OUT_CEPHALOTHORAX", recalculate)
 
     cephalothorax.layoutChildren()
     return cephalothorax

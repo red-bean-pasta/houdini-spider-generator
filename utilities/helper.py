@@ -6,12 +6,10 @@ import hou
 from utilities.common import (
     add_point_attr,
     affix_attribute_value,
-    get_prim_centroid,
     set_point_attr,
     set_points_attr,
 )
 from utilities.identifying import (
-    attribute_after_inset,
     deduplicate_point_attributes,
     fill_face_by_attr,
     indexed_attr_range,
@@ -19,7 +17,6 @@ from utilities.identifying import (
     rename_point_attr,
     unique_points_start_with,
 )
-from utilities.topology import classify_after_inset
 
 
 def affix_id(prefix: str, *affixes: int | str) -> str:
