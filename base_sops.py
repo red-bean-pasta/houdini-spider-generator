@@ -1,13 +1,12 @@
 import math
 from enum import StrEnum, auto
-from typing import Iterable, Sequence
 
 import hou
 
-import hom_helper
+from utility import helper
 import sternum_sops
 from sternum_sops import ID as STERNUM_ID
-from hom_helper import (
+from utility.helper import (
     get_parent, get_float_parm,
     add_new_prim_attr, add_point_attr,
     points_by_attribute, unique_points_start_with,
@@ -143,7 +142,7 @@ def add_flap_regions(node: hou.SopNode) -> None:
 
 def connect_side_flaps(node: hou.SopNode) -> None:
     geo = node.geometry()
-    hom_helper.deduplicate_points(geo, ID.BASESTERNUM, affix=True)
+    helper.deduplicate_points(geo, ID.BASESTERNUM, affix=True)
     points = points_by_attribute(geo)
     count = get_id_range(geo, ID.BASESTERNUM)[1]
     for side in (-1, 1):
@@ -371,7 +370,7 @@ def _prepare_side_membrane(node: hou.SopNode) -> None:
 
 def _identify_side_inset_split(node: hou.SopNode) -> None:
     geo = node.geometry()
-    hom_helper.find_quad_polyextrude_splits(
+    helper.find_quad_polyextrude_splits(
         geo,
         [
             point
@@ -396,11 +395,11 @@ def _classify_membrane_and_socket(
         membrane_prefix: str,
         horizontal_pack_size: int = 1,
 ) -> None:
-    hom_helper.attribute_after_inset(node, "region", socket_prefix, membrane_prefix, horizontal_pack_size)
+    helper.attribute_after_inset(node, "region", socket_prefix, membrane_prefix, horizontal_pack_size)
 
 
 def _cleanup_temp_attributes(node: hou.SopNode) -> None:
     geo = node.geometry()
-    hom_helper.remove_attributes(geo, prim_attribs="tmp_insetscale")
-    hom_helper.remove_groups(geo, edge_groups="tmp_side_split")
-    hom_helper.deduplicate_points(geo, None, "id", False)
+    helper.remove_attributes(geo, prim_attribs="tmp_insetscale")
+    helper.remove_groups(geo, edge_groups="tmp_side_split")
+    helper.deduplicate_points(geo, None, "id", False)

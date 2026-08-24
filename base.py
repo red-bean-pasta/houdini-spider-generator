@@ -1,7 +1,7 @@
 import hou
 
 import base_sops
-from hom_helper import sopify
+from utility.helper import sopify
 from sop_helper import add_fuse, add_merge, add_output, propagate_parameters
 from sternum import build as build_sternum
 

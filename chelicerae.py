@@ -3,8 +3,8 @@ from enum import StrEnum, auto
 import hou
 
 import base_sops
-import hom_helper
-from hom_helper import (
+from utility import helper
+from utility.helper import (
     add_point_attr,
     add_new_prim_attr,
     affix_id,
@@ -228,7 +228,7 @@ def _inset_flaps(parent: hou.SopNode, p_input: hou.SopNode) -> hou.SopNode:
 
 
 def _classify_after_inset(node: hou.SopNode) -> None:
-    panes, _ = hom_helper.attribute_after_inset(node, "region", "chelicerasocket", "cheliceramembrane", 2)
+    panes, _ = helper.attribute_after_inset(node, "region", "chelicerasocket", "cheliceramembrane", 2)
     assert len(panes) == 2
     assert len(panes[0]) == 2
     assert panes[0][0].boundingBox().center().x() > 0
@@ -257,9 +257,9 @@ def _classify_after_inset(node: hou.SopNode) -> None:
 
 def _cleanup_inset_flaps(node: hou.SopNode) -> None:
     geo = node.geometry()
-    hom_helper.remove_attributes(geo, prim_attribs="tmp_insetscale")
-    hom_helper.remove_groups(geo, edge_groups="tmp_chelicera_split")
-    hom_helper.deduplicate_points(geo, None, "id", False)
+    helper.remove_attributes(geo, prim_attribs="tmp_insetscale")
+    helper.remove_groups(geo, edge_groups="tmp_chelicera_split")
+    helper.deduplicate_points(geo, None, "id", False)
 
 
 def _build_extrusion(node: hou.SopNode) -> None:

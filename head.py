@@ -6,7 +6,7 @@ import hou
 import base_sops
 import sternum_sops
 from chelicerae import cheliceraeupper
-from hom_helper import (
+from utility.helper import (
     add_point_attr,
     affix_id,
     fill_face,

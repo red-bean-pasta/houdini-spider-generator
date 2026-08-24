@@ -5,7 +5,7 @@ import base_sops
 import head
 from abdomen import build as build_abdomen
 from cephalothorax import build as build_cephalothorax
-from hom_helper import points_by_attribute, sopify
+from utility.helper import points_by_attribute, sopify
 from pedicel import build as build_pedicel
 from sop_helper import add_merge, add_fuse
 

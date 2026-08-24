@@ -4,9 +4,9 @@ from enum import StrEnum, auto
 import hou
 
 import base_sops
-import hom_helper
+from utility import helper
 import sternum_sops
-from hom_helper import (
+from utility.helper import (
     add_new_attr,
     add_point_attr,
     add_new_prim_attr,
@@ -320,7 +320,7 @@ def _fill_right_side_faces(node: hou.SopNode) -> None:
 
 
 def _rename_left_ids(node: hou.SopNode) -> None:
-    hom_helper.rename_left_ids(node.geometry())
+    helper.rename_left_ids(node.geometry())
 
 
 def _connect_frames_tmp(node: hou.SopNode) -> None:
@@ -348,7 +348,7 @@ def _connect_frames_tmp(node: hou.SopNode) -> None:
 
 def _cleanup_temp_attributes(node: hou.SopNode) -> None:
     geo = node.geometry()
-    hom_helper.remove_attributes(
+    helper.remove_attributes(
         geo,
         global_attribs=("tmp_cepha_size", "tmp_cepha_upper_lower_ratio", "tmp_pedicel_length", "tmp_pedicel_height"),
     )

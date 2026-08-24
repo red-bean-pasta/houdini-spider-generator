@@ -3,7 +3,7 @@ from enum import StrEnum, auto
 
 import hou
 
-from hom_helper import fill_face, points_by_attribute, set_points_id, get_parent, get_float_parm, add_point_attr, affix_id, \
+from utility.helper import fill_face, points_by_attribute, set_points_id, get_parent, get_float_parm, add_point_attr, affix_id, \
     add_new_prim_attr
 
 

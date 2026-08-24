@@ -5,7 +5,7 @@ import hou
 import abdomen
 import base_sops
 import sternum_sops
-from hom_helper import (
+from utility.helper import (
     add_point_attr,
     add_new_prim_attr,
     affix_id,
