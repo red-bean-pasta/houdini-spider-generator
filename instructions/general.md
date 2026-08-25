@@ -3,7 +3,6 @@ This is a project that tries to model a spider in a biologically topology way in
 
 
 ## Working conventions
-
 - Scoped under `~/Documents/git-him-back/one-day/models/spider/generator/`. Do not inspect outside.
 - Build the requested change instead of only proposing it.
 - Inspect cooked SOP geometry before considering topology work complete. Do not treat a successful full build cook as proof that an intermediate SOP is correct.
@@ -13,13 +12,11 @@ This is a project that tries to model a spider in a biologically topology way in
 - Do not over-rely on git history because many changes are not staged during development.
 
 ## SOP and VEX conventions
-
 - Prefer dedicated, small SOP-building methods.
 - Use built-in SOPs when they fit the task.
 - Use stable temporary attributes only when needed to carry identity through multiple SOPs. Name temporary attributes with a `tmp_` prefix.
 
 ## Code style
-
 - No code nesting like r'''HOM or VEX codes'''. Do not use VEX unless highly necessary. Use `sopify` method under `sop_helper.py`.
 - No over-engineering or speculative future-proofing.
 - No over-defensiveness; prefer assertions or explicit errors for invalid expected topology.
@@ -28,15 +25,13 @@ This is a project that tries to model a spider in a biologically topology way in
 - New lines communicate grouping and logical separation; do not use them merely to wrap a short call or expression, especially in one liner methods that holds small significance like `assert` or `raise_error`. Abusing newlines only make navigation harder.
 - prefer `assert` over `NodeError` as assertion is correctly shown in .hip file.
 
-## Agent thinking
-
+## Agent
 - Dynamically adjust the thinking chain based on task difficulty. If the task is small, bounded or obvious, don't over-think. Balance token efficiency, intelligence and development speed.
-- Dynamically choose the most efficent command for token, time and context efficiency.
+- Dynamically choose the most efficent command for token, time and context efficiency. 
+- Use `client_edit_file` and `run_command rm` ACP tool over MCP tool `apply_patch` for better user experience.
 
 ## Reiterate
-
-- Use `sopify`
 - No newline abusing
 - Choose between identifier, position or other pattern based construction based on the task's true nature.
-- DO NOT REVERT user changes unless requested, broken, problematic or buggy, or if there's a better way.
-- DO NOT MAKE TOO MUCH STRUCTURL CHANGE unless user requested or approved.
+- DO NOT REVERT USER CHANGES unless requested, broken, problematic or buggy, or if there's a better way. DO NOT MAKE TOO MUCH STRUCTURL CHANGE unless user requested or approved.
+- Do not use `apply_patch` unless `client_edit_file` and `run_command` fail due to e.g., project boundary.
