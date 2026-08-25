@@ -13,7 +13,7 @@ from utilities.common import (
     get_vector2_parm,
     get_vector3_parm,
     remove_attrs,
-    remove_groups, get_prim_normal,
+    remove_groups, get_prim_normal, rotation_to,
 )
 from utilities.helper import (
     add_id_attr,
@@ -235,29 +235,30 @@ def _inset_flaps(parent: hou.SopNode, p_input: hou.SopNode) -> hou.SopNode:
 def _classify_after_inset(node: hou.SopNode) -> None:
     panes, _ = attribute_after_inset(node, "region", "chelicerasocket", "cheliceramembrane", 2)
     assert len(panes) == 2
-    assert len(panes[0]) == 2
-    assert panes[0][0].boundingBox().center().x() > 0
 
-    right1, right2 = panes[0]
-    left1, left2 = panes[1]
-    right1_points = right1.points()
-    right2_points = right2.points()
-    left1_points = left1.points()
-    left2_points = left2.points()
+    pts_dict = {}
+    for pane in (panes[0], panes[1]):
+        for prim in pane:
+            for pt in prim.points():
+                pts_dict[pt.number()] = pt
+    points = list(pts_dict.values())
+    points.sort(key=lambda pt: (pt.position().x(), pt.position().y()))
 
-    # Right side (affix = 1)
-    right_corners = (right1_points[0], right2_points[1], right2_points[2], right1_points[3])
-    for subfix, pt in enumerate(right_corners, start=1):
-        set_point_id(pt, cheliceraestart(subfix))
-    set_point_id(right1_points[1], "cheliceramiddlelower1")
-    set_point_id(right1_points[2], "cheliceramiddleupper1")
-
-    # Left side (affix = -1)
-    left_corners = (left1_points[1], left2_points[0], left2_points[3], left1_points[2])
-    for subfix, pt in enumerate(left_corners, start=1):
-        set_point_id(pt, cheliceraestart(-subfix))
-    set_point_id(left1_points[0], "cheliceramiddlelower-1")
-    set_point_id(left1_points[3], "cheliceramiddleupper-1")
+    target_ids = (
+        cheliceraestart(-4),
+        cheliceraestart(-3),
+        "cheliceramiddlelower-1",
+        "cheliceramiddleupper-1",
+        cheliceraestart(-1),
+        cheliceraestart(-2),
+        cheliceraestart(1),
+        cheliceraestart(2),
+        "cheliceramiddlelower1",
+        "cheliceramiddleupper1",
+        cheliceraestart(4),
+        cheliceraestart(3),
+    )
+    set_points_id(points, list(target_ids))
 
 
 def _cleanup_inset_flaps(node: hou.SopNode) -> None:
@@ -280,16 +281,15 @@ def _build_extrusion(node: hou.SopNode) -> None:
     socket_prims: list[hou.Prim] = [
         prim for prim in geo.prims()
         if prim.stringAttribValue("region").startswith("chelicerasocket")
-    ]
-    right_prim = socket_prims[0]
+    ]; assert len(socket_prims) == 4
     id_points = points_by_id(geo)
     c1_1 = id_points[cheliceraestart(1)]
     c1_2 = id_points[cheliceraestart(2)]
     c1_3 = id_points[cheliceraestart(3)]
     c1_4 = id_points[cheliceraestart(4)]
 
-    x_min, x_max = c1_1.position().x(), c1_2.position().x()
-    y_min, y_max = c1_1.position().y(), c1_4.position().y()
+    x_min, x_max = c1_1.position().x(), c1_4.position().x()
+    y_min, y_max = c1_1.position().y(), c1_2.position().y()
     z = c1_1.position().z()
     w = x_max - x_min
     h = y_max - y_min
@@ -311,26 +311,32 @@ def _build_extrusion(node: hou.SopNode) -> None:
         offset_baseline.z() * middle_pivot_offset.z(),
     )
 
-    normal0 = (c1_1.position() - c1_4.position()).normalized() # Normal0 is not the face normal
+    start_face_along = (c1_4.position() - c1_1.position()).normalized()
+    start_face_normal = get_prim_normal(socket_prims[0])
     end_rot_matrix = hou.hmath.buildRotate(end_section_rotation.x(), 0.0, end_section_rotation.y())
-    normal1 = -get_prim_normal(right_prim) * end_rot_matrix
-    middle_section_rotation = _interpolate_middle_section_rotation(
+    end_surface_normal = start_face_normal * end_rot_matrix
+    conic_normal0 = -start_face_along # Normal0 is not the face normal
+    conic_normal1 = -end_surface_normal
+    middle_section_dir = _interpolate_middle_section_direction(
         up_pivot,
         end_pivot,
         middle_pivot,
-        normal0,
-        normal1,
+        conic_normal0,
+        conic_normal1,
     )
+    middle_section_normal = rotation_to(conic_normal0, middle_section_dir).rotate(start_face_normal)
 
     c2_positions = _construct_section_loop(
         middle_pivot,
-        hou.Vector2(w * middle_section_ratio.x(), h * middle_section_ratio.y()),
-        middle_section_rotation,
+        hou.Vector2(h * middle_section_ratio.y(), w * middle_section_ratio.x()),
+        middle_section_dir,
+        middle_section_normal,
     )
     c3_positions = _construct_section_loop(
         end_pivot,
-        hou.Vector2(w * end_section_ratio.x(), h * end_section_ratio.y()),
-        end_section_rotation,
+        hou.Vector2(h * end_section_ratio.y(), w * end_section_ratio.x()),
+        start_face_along * end_rot_matrix,
+        end_surface_normal,
     )
 
     loops = [
@@ -346,17 +352,18 @@ def _build_extrusion(node: hou.SopNode) -> None:
     for j, point in enumerate(loops[2], start=1):
         set_point_id(point, cheliceraeend(j))
 
-    for i in range(len(loops) - 1):
-        current_loop = loops[i]
-        next_loop = loops[i + 1]
-        for j in range(4):
-            next_j = (j + 1) % 4
-            fill_face(geo, [
-                current_loop[j],
-                current_loop[next_j],
-                next_loop[next_j],
-                next_loop[j],
-            ])
+    # for i in range(len(loops) - 1):
+    #     current_loop = loops[i]
+    #     next_loop = loops[i + 1]
+    #     for j in range(4):
+    #         next_j = (j + 1) % 4
+    #         fill_face(geo, [
+    #             current_loop[j],
+    #             current_loop[next_j],
+    #             next_loop[next_j],
+    #             next_loop[j],
+    #         ])
+    fill_face(geo, loops[-2])
     fill_face(geo, loops[-1])
 
     geo.deletePrims(socket_prims)
@@ -364,38 +371,45 @@ def _build_extrusion(node: hou.SopNode) -> None:
 def _construct_section_loop(
     pivot: hou.Vector3,
     size: hou.Vector2,
-    rotation: hou.Vector2,
+    along: hou.Vector3,
+    normal: hou.Vector3,
 ) -> list[hou.Vector3]:
-    rot_matrix = hou.hmath.buildRotate(rotation.x(), 0.0, rotation.y())
+    """
+
+    :param pivot:
+    :param size:
+    :param along: For the x-axis in size
+    :param normal:
+    :return:
+    """
+    normal = normal.normalized()
+    along = along.normalized()
+    along = (along - normal * along.dot(normal)).normalized()
+    side = normal.cross(along).normalized()
+
     half_w, half_h = size.x() / 2.0, size.y() / 2.0
     corners = (
-        hou.Vector3(-half_w, -half_h, 0.0),
-        hou.Vector3( half_w, -half_h, 0.0),
-        hou.Vector3( half_w,  half_h, 0.0),
-        hou.Vector3(-half_w,  half_h, 0.0),
+        (-half_w, -half_h),
+        (half_w, -half_h),
+        (half_w, half_h),
+        (-half_w, half_h),
     )
-    return [pivot + corner * rot_matrix for corner in corners]
+    return [
+        pivot + along * x + side * y
+        for x, y in corners
+    ]
 
-def _interpolate_middle_section_rotation(
+def _interpolate_middle_section_direction(
     up_pivot: hou.Vector3,
     end_pivot: hou.Vector3,
     middle_pivot: hou.Vector3,
     normal0: hou.Vector3,
     normal1: hou.Vector3,
-) -> hou.Vector2:
+) -> hou.Vector3:
     evaluate = interpolate_conic(up_pivot, end_pivot, middle_pivot, normal0, normal1)
     along_axis = (end_pivot - up_pivot).normalized()
     along = (middle_pivot - up_pivot).dot(along_axis)
     results = evaluate(along)
     assert len(results) > 0, "Failed to evaluate intermediate point on conic"
     _, normal = min(results, key=lambda pair: pair[0].distanceTo(middle_pivot))
-
-    delta02 = middle_pivot - up_pivot
-    conic_normal = along_axis.cross(delta02).normalized()
-    tangent = conic_normal.cross(normal).normalized()
-    if tangent.dot(conic_normal.cross(normal0 + normal1)) < 0:
-        tangent = -tangent
-
-    rec_rz = math.degrees(math.atan2(-tangent.x(), tangent.y())) if (abs(tangent.x()) > 1e-6 or abs(tangent.y()) > 1e-6) else 0.0
-    rec_rx = -math.degrees(math.atan2(math.sqrt(tangent.x()**2 + tangent.y()**2), tangent.z()))
-    return hou.Vector2(rec_rx, rec_rz)
+    return normal
