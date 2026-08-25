@@ -10,6 +10,7 @@ from utilities.common import (
     get_float_parm,
     get_parent,
     get_vector2_parm,
+    get_vector3_parm,
     remove_attrs,
     remove_groups,
 )
@@ -27,6 +28,7 @@ from utilities.nodes import (
     add_reloadable_subnet,
     sopify,
 )
+from utilities.topology import interpolate_conic
 
 
 class ID(StrEnum):
@@ -78,50 +80,10 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
     )
     templates.append(
         hou.FloatParmTemplate(
-            "middle_section_ratio",
-            "Middle Section Ratio",
-            2,
-            default_value=(1.1, 1.2),
-            min=0.0,
-            min_is_strict=True,
-            naming_scheme=hou.parmNamingScheme.XYZW,
-        )
-    )
-    templates.append(
-        hou.FloatParmTemplate(
-            "middle_section_offset",
-            "Middle Section Offset",
-            2,
-            default_value=(0.1, 1.0),
-            naming_scheme=hou.parmNamingScheme.XYZW,
-        )
-    )
-    templates.append(
-        hou.FloatParmTemplate(
-            "middle_section_rotation",
-            "Middle Section Rotation",
-            2,
-            default_value=(-90.0, 0.0),
-            naming_scheme=hou.parmNamingScheme.XYZW,
-        )
-    )
-    templates.append(
-        hou.FloatParmTemplate(
-            "end_section_ratio",
-            "End Section Ratio",
-            2,
-            default_value=(0.5, 0.5),
-            min=0.0,
-            min_is_strict=True,
-            naming_scheme=hou.parmNamingScheme.XYZW,
-        )
-    )
-    templates.append(
-        hou.FloatParmTemplate(
             "end_section_offset",
             "End Section Offset",
-            2,
-            default_value=(0.25, 0.5),
+            3,
+            default_value=(0.25, 3.5, 0.5),
             naming_scheme=hou.parmNamingScheme.XYZW,
         )
     )
@@ -136,12 +98,33 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
     )
     templates.append(
         hou.FloatParmTemplate(
-            "section_offsets_y",
-            "Section Offsets Y",
-            2,
-            default_value=(1.3, 3.5),
+            "middle_section_offset",
+            "Middle Section Offset",
+            3,
+            default_value=(0.1, 1.3, 1.0),
             naming_scheme=hou.parmNamingScheme.XYZW,
-            help="Relative to the socket height",
+        )
+    )
+    templates.append(
+        hou.FloatParmTemplate(
+            "middle_section_ratio",
+            "Middle Section Ratio",
+            2,
+            default_value=(1.1, 1.2),
+            min=0.0,
+            min_is_strict=True,
+            naming_scheme=hou.parmNamingScheme.XYZW,
+        )
+    )
+    templates.append(
+        hou.FloatParmTemplate(
+            "end_section_ratio",
+            "End Section Ratio",
+            2,
+            default_value=(0.5, 0.5),
+            min=0.0,
+            min_is_strict=True,
+            naming_scheme=hou.parmNamingScheme.XYZW,
         )
     )
     chelicerae.setParmTemplateGroup(templates)
@@ -273,13 +256,18 @@ def _cleanup_inset_flaps(node: hou.SopNode) -> None:
 
 def _build_extrusion(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
+
     parent = get_parent(node)
+    end_section_offset = get_vector3_parm(parent, "end_section_offset")
+    end_section_rotation = get_vector2_parm(parent, "end_section_rotation")
+    end_section_ratio = get_vector2_parm(parent, "end_section_ratio")
+    middle_section_offset = get_vector3_parm(parent, "middle_section_offset")
+    middle_section_ratio = get_vector2_parm(parent, "middle_section_ratio")
 
     socket_prims = [
         prim for prim in geo.prims()
         if prim.stringAttribValue("region").startswith("chelicerasocket")
     ]
-
     id_points = points_by_id(geo)
     c1_1 = id_points["chelicera1_1"]
     c1_2 = id_points["chelicera1_2"]
@@ -295,26 +283,29 @@ def _build_extrusion(node: hou.SopNode) -> None:
     up_pivot = hou.Vector3((x_max + x_min) / 2.0, (y_max + y_min) / 2.0, z)
     offset_baseline = hou.Vector3(w, h, h)
 
-    middle_section_ratio = get_vector2_parm(parent, "middle_section_ratio")
-    middle_section_offset = get_vector2_parm(parent, "middle_section_offset")
-    middle_section_rotation = get_vector2_parm(parent, "middle_section_rotation")
-    end_section_ratio = get_vector2_parm(parent, "end_section_ratio")
-    end_section_offset = get_vector2_parm(parent, "end_section_offset")
-    end_section_rotation = get_vector2_parm(parent, "end_section_rotation")
-    section_offsets_y = get_vector2_parm(parent, "section_offsets_y")
+    end_pivot_offset = hou.Vector3(end_section_offset.x(), -end_section_offset.y(), -end_section_offset.z())
+    end_pivot = up_pivot + hou.Vector3(
+        offset_baseline.x() * end_pivot_offset.x(),
+        offset_baseline.y() * end_pivot_offset.y(),
+        offset_baseline.z() * end_pivot_offset.z(),
+    )
 
-    middle_pivot_offset = hou.Vector3(middle_section_offset.x(), -section_offsets_y.x(), -middle_section_offset.y())
-    end_pivot_offset = hou.Vector3(end_section_offset.x(), -section_offsets_y.y(), -end_section_offset.y())
-
+    middle_pivot_offset = hou.Vector3(middle_section_offset.x(), -middle_section_offset.y(), -middle_section_offset.z())
     middle_pivot = up_pivot + hou.Vector3(
         offset_baseline.x() * middle_pivot_offset.x(),
         offset_baseline.y() * middle_pivot_offset.y(),
         offset_baseline.z() * middle_pivot_offset.z(),
     )
-    end_pivot = up_pivot + hou.Vector3(
-        offset_baseline.x() * end_pivot_offset.x(),
-        offset_baseline.y() * end_pivot_offset.y(),
-        offset_baseline.z() * end_pivot_offset.z(),
+
+    slope0 = (c1_2.position() - c1_1.position()).cross(c1_4.position() - c1_1.position()).normalized()
+    end_rot_matrix = hou.hmath.buildRotate(end_section_rotation.x(), 0.0, end_section_rotation.y())
+    slope1 = slope0 * end_rot_matrix
+    middle_section_rotation = _interpolate_middle_section_rotation(
+        up_pivot,
+        end_pivot,
+        middle_pivot,
+        slope0,
+        slope1,
     )
 
     c2_positions = _construct_section_loop(
@@ -338,7 +329,6 @@ def _build_extrusion(node: hou.SopNode) -> None:
     for pts, positions in zip(loops[1:], (c2_positions, c3_positions, c4_positions)):
         for pt, pos in zip(pts, positions):
             pt.setPosition(pos)
-
     for i, loop in enumerate(loops[1:], start=2):
         for j, point in enumerate(loop, start=1):
             set_point_id(point, f"chelicera{i}_{j}")
@@ -354,16 +344,20 @@ def _build_extrusion(node: hou.SopNode) -> None:
                 next_loop[next_j],
                 next_loop[j],
             ])
-
     fill_face(geo, loops[-1])
+
     geo.deletePrims(socket_prims)
+
 
 def _construct_section_loop(
     pivot: hou.Vector3,
     size: hou.Vector2,
-    rotation: hou.Vector2,
+    rotation: hou.Vector2 | hou.Vector3,
 ) -> list[hou.Vector3]:
-    rot_matrix = hou.hmath.buildRotate(rotation.x(), 0.0, rotation.y())
+    if isinstance(rotation, hou.Vector2):
+        rot_matrix = hou.hmath.buildRotate(rotation.x(), 0.0, rotation.y())
+    else:
+        rot_matrix = hou.hmath.buildRotateZToAxis(rotation)
     half_w, half_h = size.x() / 2.0, size.y() / 2.0
     corners = (
         hou.Vector3(-half_w, -half_h, 0.0),
@@ -389,3 +383,18 @@ def _interpolate_intermediate_loop(
             )
         )
     return c3
+
+def _interpolate_middle_section_rotation(
+    up_pivot: hou.Vector3,
+    end_pivot: hou.Vector3,
+    middle_pivot: hou.Vector3,
+    slope0: hou.Vector3,
+    slope1: hou.Vector3,
+) -> hou.Vector3:
+    evaluate = interpolate_conic(up_pivot, end_pivot, middle_pivot, slope0, slope1)
+    along_axis = (end_pivot - up_pivot).normalized()
+    along = (middle_pivot - up_pivot).dot(along_axis)
+    results = evaluate(along)
+    assert len(results) > 0, "Failed to evaluate intermediate point on conic"
+    _, normal = min(results, key=lambda pair: pair[0].distanceTo(middle_pivot))
+    return normal
