@@ -27,7 +27,6 @@ This is a project that tries to model a spider in a biologically topology way in
 
 ## Agent
 - Dynamically adjust the thinking chain based on task difficulty. If the task is small, bounded or obvious, don't over-think. Balance token efficiency, intelligence and development speed.
-- Dynamically choose the most efficent command for token, time and context efficiency. 
 - Use `client_edit_file` and `run_command rm` ACP tool over MCP tool `apply_patch` for better user experience.
 
 ## Reiterate

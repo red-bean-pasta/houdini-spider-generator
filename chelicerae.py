@@ -13,7 +13,7 @@ from utilities.common import (
     get_vector2_parm,
     get_vector3_parm,
     remove_attrs,
-    remove_groups,
+    remove_groups, get_prim_normal,
 )
 from utilities.helper import (
     add_id_attr,
@@ -277,10 +277,11 @@ def _build_extrusion(node: hou.SopNode) -> None:
     middle_section_offset = get_vector3_parm(parent, "middle_section_offset")
     middle_section_ratio = get_vector2_parm(parent, "middle_section_ratio")
 
-    socket_prims = [
+    socket_prims: list[hou.Prim] = [
         prim for prim in geo.prims()
         if prim.stringAttribValue("region").startswith("chelicerasocket")
     ]
+    right_prim = socket_prims[0]
     id_points = points_by_id(geo)
     c1_1 = id_points[cheliceraestart(1)]
     c1_2 = id_points[cheliceraestart(2)]
@@ -310,15 +311,15 @@ def _build_extrusion(node: hou.SopNode) -> None:
         offset_baseline.z() * middle_pivot_offset.z(),
     )
 
-    slope0 = (c1_2.position() - c1_1.position()).cross(c1_4.position() - c1_1.position()).normalized()
+    normal0 = (c1_1.position() - c1_4.position()).normalized() # Normal0 is not the face normal
     end_rot_matrix = hou.hmath.buildRotate(end_section_rotation.x(), 0.0, end_section_rotation.y())
-    slope1 = slope0 * end_rot_matrix
+    normal1 = -get_prim_normal(right_prim) * end_rot_matrix
     middle_section_rotation = _interpolate_middle_section_rotation(
         up_pivot,
         end_pivot,
         middle_pivot,
-        slope0,
-        slope1,
+        normal0,
+        normal1,
     )
 
     c2_positions = _construct_section_loop(
@@ -360,7 +361,6 @@ def _build_extrusion(node: hou.SopNode) -> None:
 
     geo.deletePrims(socket_prims)
 
-
 def _construct_section_loop(
     pivot: hou.Vector3,
     size: hou.Vector2,
@@ -380,10 +380,10 @@ def _interpolate_middle_section_rotation(
     up_pivot: hou.Vector3,
     end_pivot: hou.Vector3,
     middle_pivot: hou.Vector3,
-    slope0: hou.Vector3,
-    slope1: hou.Vector3,
+    normal0: hou.Vector3,
+    normal1: hou.Vector3,
 ) -> hou.Vector2:
-    evaluate = interpolate_conic(up_pivot, end_pivot, middle_pivot, slope0, slope1)
+    evaluate = interpolate_conic(up_pivot, end_pivot, middle_pivot, normal0, normal1)
     along_axis = (end_pivot - up_pivot).normalized()
     along = (middle_pivot - up_pivot).dot(along_axis)
     results = evaluate(along)
@@ -393,7 +393,7 @@ def _interpolate_middle_section_rotation(
     delta02 = middle_pivot - up_pivot
     conic_normal = along_axis.cross(delta02).normalized()
     tangent = conic_normal.cross(normal).normalized()
-    if tangent.dot(slope0 + slope1) < 0:
+    if tangent.dot(conic_normal.cross(normal0 + normal1)) < 0:
         tangent = -tangent
 
     rec_rz = math.degrees(math.atan2(-tangent.x(), tangent.y())) if (abs(tangent.x()) > 1e-6 or abs(tangent.y()) > 1e-6) else 0.0
