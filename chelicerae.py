@@ -311,11 +311,11 @@ def _build_extrusion(node: hou.SopNode) -> None:
         offset_baseline.z() * middle_pivot_offset.z(),
     )
 
-    start_face_along = (c1_4.position() - c1_1.position()).normalized()
+    start_face_along = (c1_1.position() - c1_2.position()).normalized()
     start_face_normal = get_prim_normal(socket_prims[0])
     end_rot_matrix = hou.hmath.buildRotate(end_section_rotation.x(), 0.0, end_section_rotation.y())
     end_surface_normal = start_face_normal * end_rot_matrix
-    conic_normal0 = -start_face_along # Normal0 is not the face normal
+    conic_normal0 = start_face_along
     conic_normal1 = -end_surface_normal
     middle_section_dir = _interpolate_middle_section_direction(
         up_pivot,
@@ -352,21 +352,21 @@ def _build_extrusion(node: hou.SopNode) -> None:
     for j, point in enumerate(loops[2], start=1):
         set_point_id(point, cheliceraeend(j))
 
-    # for i in range(len(loops) - 1):
-    #     current_loop = loops[i]
-    #     next_loop = loops[i + 1]
-    #     for j in range(4):
-    #         next_j = (j + 1) % 4
-    #         fill_face(geo, [
-    #             current_loop[j],
-    #             current_loop[next_j],
-    #             next_loop[next_j],
-    #             next_loop[j],
-    #         ])
-    fill_face(geo, loops[-2])
+    for i in range(len(loops) - 1):
+        current_loop = loops[i]
+        next_loop = loops[i + 1]
+        for j in range(4):
+            next_j = (j + 1) % 4
+            fill_face(geo, [
+                current_loop[j],
+                current_loop[next_j],
+                next_loop[next_j],
+                next_loop[j],
+            ])
     fill_face(geo, loops[-1])
 
     geo.deletePrims(socket_prims)
+
 
 def _construct_section_loop(
     pivot: hou.Vector3,
@@ -374,30 +374,23 @@ def _construct_section_loop(
     along: hou.Vector3,
     normal: hou.Vector3,
 ) -> list[hou.Vector3]:
-    """
-
-    :param pivot:
-    :param size:
-    :param along: For the x-axis in size
-    :param normal:
-    :return:
-    """
     normal = normal.normalized()
     along = along.normalized()
     along = (along - normal * along.dot(normal)).normalized()
     side = normal.cross(along).normalized()
 
-    half_w, half_h = size.x() / 2.0, size.y() / 2.0
+    half_h, half_w = size.x() / 2.0, size.y() / 2.0
     corners = (
-        (-half_w, -half_h),
-        (half_w, -half_h),
-        (half_w, half_h),
-        (-half_w, half_h),
+        ( half_h,  half_w),
+        (-half_h,  half_w),
+        (-half_h, -half_w),
+        ( half_h, -half_w),
     )
     return [
-        pivot + along * x + side * y
-        for x, y in corners
+        pivot + along * ah + side * sw
+        for ah, sw in corners
     ]
+
 
 def _interpolate_middle_section_direction(
     up_pivot: hou.Vector3,
