@@ -1,3 +1,4 @@
+import math
 from enum import StrEnum, auto
 
 import hou
@@ -33,9 +34,21 @@ from utilities.topology import interpolate_conic
 
 class ID(StrEnum):
     CHELICERAEUPPER = auto()
+    CHELICERAESTART = auto()
+    CHELICERAEMIDDLE = auto()
+    CHELICERAEEND = auto()
 
 def cheliceraeupper(*i: int | str) -> str:
     return affix_id(ID.CHELICERAEUPPER, *i)
+
+def cheliceraestart(*i: int | str) -> str:
+    return affix_id(ID.CHELICERAESTART, *i)
+
+def cheliceraemiddle(*i: int | str) -> str:
+    return affix_id(ID.CHELICERAEMIDDLE, *i)
+
+def cheliceraeend(*i: int | str) -> str:
+    return affix_id(ID.CHELICERAEEND, *i)
 
 
 def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
@@ -235,16 +248,16 @@ def _classify_after_inset(node: hou.SopNode) -> None:
     # Right side (affix = 1)
     right_corners = (right1_points[0], right2_points[1], right2_points[2], right1_points[3])
     for subfix, pt in enumerate(right_corners, start=1):
-        pt.setAttribValue("id", f"chelicera1_{subfix}")
-    right1_points[1].setAttribValue("id", "cheliceramiddlelower1")
-    right1_points[2].setAttribValue("id", "cheliceramiddleupper1")
+        set_point_id(pt, cheliceraestart(subfix))
+    set_point_id(right1_points[1], "cheliceramiddlelower1")
+    set_point_id(right1_points[2], "cheliceramiddleupper1")
 
     # Left side (affix = -1)
     left_corners = (left1_points[1], left2_points[0], left2_points[3], left1_points[2])
     for subfix, pt in enumerate(left_corners, start=1):
-        pt.setAttribValue("id", f"chelicera-1_{subfix}")
-    left1_points[0].setAttribValue("id", "cheliceramiddlelower-1")
-    left1_points[3].setAttribValue("id", "cheliceramiddleupper-1")
+        set_point_id(pt, cheliceraestart(-subfix))
+    set_point_id(left1_points[0], "cheliceramiddlelower-1")
+    set_point_id(left1_points[3], "cheliceramiddleupper-1")
 
 
 def _cleanup_inset_flaps(node: hou.SopNode) -> None:
@@ -269,10 +282,10 @@ def _build_extrusion(node: hou.SopNode) -> None:
         if prim.stringAttribValue("region").startswith("chelicerasocket")
     ]
     id_points = points_by_id(geo)
-    c1_1 = id_points["chelicera1_1"]
-    c1_2 = id_points["chelicera1_2"]
-    c1_3 = id_points["chelicera1_3"]
-    c1_4 = id_points["chelicera1_4"]
+    c1_1 = id_points[cheliceraestart(1)]
+    c1_2 = id_points[cheliceraestart(2)]
+    c1_3 = id_points[cheliceraestart(3)]
+    c1_4 = id_points[cheliceraestart(4)]
 
     x_min, x_max = c1_1.position().x(), c1_2.position().x()
     y_min, y_max = c1_1.position().y(), c1_4.position().y()
@@ -313,25 +326,24 @@ def _build_extrusion(node: hou.SopNode) -> None:
         hou.Vector2(w * middle_section_ratio.x(), h * middle_section_ratio.y()),
         middle_section_rotation,
     )
-    c4_positions = _construct_section_loop(
+    c3_positions = _construct_section_loop(
         end_pivot,
         hou.Vector2(w * end_section_ratio.x(), h * end_section_ratio.y()),
         end_section_rotation,
     )
-    c3_positions = _interpolate_intermediate_loop(c2_positions, c4_positions)
 
     loops = [
         [c1_1, c1_2, c1_3, c1_4],
         [geo.createPoint() for _ in range(4)],
         [geo.createPoint() for _ in range(4)],
-        [geo.createPoint() for _ in range(4)],
     ]
-    for pts, positions in zip(loops[1:], (c2_positions, c3_positions, c4_positions)):
+    for pts, positions in zip(loops[1:], (c2_positions, c3_positions)):
         for pt, pos in zip(pts, positions):
             pt.setPosition(pos)
-    for i, loop in enumerate(loops[1:], start=2):
-        for j, point in enumerate(loop, start=1):
-            set_point_id(point, f"chelicera{i}_{j}")
+    for j, point in enumerate(loops[1], start=1):
+        set_point_id(point, cheliceraemiddle(j))
+    for j, point in enumerate(loops[2], start=1):
+        set_point_id(point, cheliceraeend(j))
 
     for i in range(len(loops) - 1):
         current_loop = loops[i]
@@ -352,12 +364,9 @@ def _build_extrusion(node: hou.SopNode) -> None:
 def _construct_section_loop(
     pivot: hou.Vector3,
     size: hou.Vector2,
-    rotation: hou.Vector2 | hou.Vector3,
+    rotation: hou.Vector2,
 ) -> list[hou.Vector3]:
-    if isinstance(rotation, hou.Vector2):
-        rot_matrix = hou.hmath.buildRotate(rotation.x(), 0.0, rotation.y())
-    else:
-        rot_matrix = hou.hmath.buildRotateZToAxis(rotation)
+    rot_matrix = hou.hmath.buildRotate(rotation.x(), 0.0, rotation.y())
     half_w, half_h = size.x() / 2.0, size.y() / 2.0
     corners = (
         hou.Vector3(-half_w, -half_h, 0.0),
@@ -367,34 +376,26 @@ def _construct_section_loop(
     )
     return [pivot + corner * rot_matrix for corner in corners]
 
-def _interpolate_intermediate_loop(
-    c2: list[hou.Vector3],
-    c4: list[hou.Vector3],
-) -> list[hou.Vector3]:
-    c3 = []
-    for j in range(4):
-        x_weight_c2 = 2.0 / 3.0 if j in (0, 3) else 1.0 / 3.0
-        x_weight_c4 = 1.0 - x_weight_c2
-        c3.append(
-            hou.Vector3(
-                c2[j].x() * x_weight_c2 + c4[j].x() * x_weight_c4,
-                c2[j].y() * (1.0 / 3.0) + c4[j].y() * (2.0 / 3.0),
-                c2[j].z() * (1.0 / 3.0) + c4[j].z() * (2.0 / 3.0),
-            )
-        )
-    return c3
-
 def _interpolate_middle_section_rotation(
     up_pivot: hou.Vector3,
     end_pivot: hou.Vector3,
     middle_pivot: hou.Vector3,
     slope0: hou.Vector3,
     slope1: hou.Vector3,
-) -> hou.Vector3:
+) -> hou.Vector2:
     evaluate = interpolate_conic(up_pivot, end_pivot, middle_pivot, slope0, slope1)
     along_axis = (end_pivot - up_pivot).normalized()
     along = (middle_pivot - up_pivot).dot(along_axis)
     results = evaluate(along)
     assert len(results) > 0, "Failed to evaluate intermediate point on conic"
     _, normal = min(results, key=lambda pair: pair[0].distanceTo(middle_pivot))
-    return normal
+
+    delta02 = middle_pivot - up_pivot
+    conic_normal = along_axis.cross(delta02).normalized()
+    tangent = conic_normal.cross(normal).normalized()
+    if tangent.dot(slope0 + slope1) < 0:
+        tangent = -tangent
+
+    rec_rz = math.degrees(math.atan2(-tangent.x(), tangent.y())) if (abs(tangent.x()) > 1e-6 or abs(tangent.y()) > 1e-6) else 0.0
+    rec_rx = -math.degrees(math.atan2(math.sqrt(tangent.x()**2 + tangent.y()**2), tangent.z()))
+    return hou.Vector2(rec_rx, rec_rz)
