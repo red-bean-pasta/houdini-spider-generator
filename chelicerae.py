@@ -35,6 +35,7 @@ from utilities.topology import interpolate_conic
 class ID(StrEnum):
     CHELICERAEUPPER = auto()
     CHELICERAESTART = auto()
+    CHELICERAEUPPERMIDDLE = auto()
     CHELICERAEMIDDLE = auto()
     CHELICERAEEND = auto()
 
@@ -43,6 +44,9 @@ def cheliceraeupper(*i: int | str) -> str:
 
 def cheliceraestart(*i: int | str) -> str:
     return affix_id(ID.CHELICERAESTART, *i)
+
+def cheliceraeuppermiddle(*i: int | str) -> str:
+    return affix_id(ID.CHELICERAEUPPERMIDDLE, *i)
 
 def cheliceraemiddle(*i: int | str) -> str:
     return affix_id(ID.CHELICERAEMIDDLE, *i)
@@ -64,7 +68,8 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
     prepared = sopify(chelicerae, cleanup, _prepare_extrusion)
     end_section = sopify(chelicerae, prepared, _add_end_section)
     middle_section = sopify(chelicerae, end_section, _add_middle_section)
-    connected = sopify(chelicerae, middle_section, _connect_sections)
+    upper_middle_section = sopify(chelicerae, middle_section, _add_upper_middle_section)
+    connected = sopify(chelicerae, upper_middle_section, _connect_sections)
 
     add_output(chelicerae, "OUT_CHELICERAE", connected)
     chelicerae.layoutChildren()
@@ -375,18 +380,97 @@ def _add_middle_section(node: hou.SopNode) -> None:
     fill_face_reversed(geo, c2_pts)
 
 
+def _add_upper_middle_section(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    parent = get_parent(node)
+
+    end_section_offset = get_vector3_parm(parent, "end_section_offset")
+    end_section_rotation = get_vector2_parm(parent, "end_section_rotation")
+    middle_section_offset = get_vector3_parm(parent, "middle_section_offset")
+    middle_section_ratio = get_vector2_parm(parent, "middle_section_ratio")
+
+    start_section = _get_start_section_frame(geo)
+    offset_baseline = start_section.offset_baseline
+
+    end_pivot_offset = hou.Vector3(end_section_offset.x(), -end_section_offset.y(), -end_section_offset.z())
+    end_pivot = start_section.pivot + hou.Vector3(
+        offset_baseline.x() * end_pivot_offset.x(),
+        offset_baseline.y() * end_pivot_offset.y(),
+        offset_baseline.z() * end_pivot_offset.z(),
+    )
+
+    middle_pivot_offset = hou.Vector3(middle_section_offset.x(), -middle_section_offset.y(), -middle_section_offset.z())
+    middle_pivot = start_section.pivot + hou.Vector3(
+        offset_baseline.x() * middle_pivot_offset.x(),
+        offset_baseline.y() * middle_pivot_offset.y(),
+        offset_baseline.z() * middle_pivot_offset.z(),
+    )
+
+    end_rot_matrix = hou.hmath.buildRotate(end_section_rotation.x(), 0.0, end_section_rotation.y())
+    end_surface_normal = start_section.normal * end_rot_matrix
+    conic_normal0 = start_section.along
+    conic_normal1 = -end_surface_normal
+
+    along_axis = (end_pivot - start_section.pivot).normalized()
+    middle_along = (middle_pivot - start_section.pivot).dot(along_axis)
+    upper_middle_along = middle_along / 2.0
+
+    evaluate = interpolate_conic(
+        start_section.pivot,
+        end_pivot,
+        middle_pivot,
+        conic_normal0,
+        conic_normal1,
+    )
+
+    results = evaluate(upper_middle_along)
+    assert len(results) > 0, "Failed to evaluate intermediate point on conic"
+    mid_target = start_section.pivot + (middle_pivot - start_section.pivot) * 0.5
+    upper_middle_pivot, upper_middle_dir = min(results, key=lambda pair: pair[0].distanceTo(mid_target))
+    upper_middle_normal = rotation_to(conic_normal0, upper_middle_dir).rotate(start_section.normal)
+
+    delta01 = end_pivot - start_section.pivot
+    delta02 = middle_pivot - start_section.pivot
+    normal_plane = delta01.cross(delta02).normalized()
+    across_axis = normal_plane.cross(along_axis).normalized()
+    middle_across = delta02.dot(across_axis)
+    upper_middle_across = (upper_middle_pivot - start_section.pivot).dot(across_axis)
+    weight = upper_middle_across / middle_across if middle_across != 0.0 else 0.5
+
+    start_size = hou.Vector2(start_section.height, start_section.width)
+    middle_size = hou.Vector2(start_section.height * middle_section_ratio.y(), start_section.width * middle_section_ratio.x())
+    upper_middle_size = start_size * (1.0 - weight) + middle_size * weight
+
+    c_um_positions = _construct_section_loop(
+        upper_middle_pivot,
+        upper_middle_size,
+        upper_middle_dir,
+        upper_middle_normal,
+    )
+
+    c_um_pts = [geo.createPoint() for _ in range(4)]
+    for pt, pos in zip(c_um_pts, c_um_positions):
+        pt.setPosition(pos)
+    for j, pt in enumerate(c_um_pts, start=1):
+        set_point_id(pt, cheliceraeuppermiddle(j))
+
+    fill_face_reversed(geo, c_um_pts)
+
+
 def _connect_sections(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
 
     middle_prims = [
         prim for prim in geo.prims()
-        if all(pt.stringAttribValue("id").startswith(ID.CHELICERAEMIDDLE) for pt in prim.points())
+        if any(pt.stringAttribValue("id").startswith((ID.CHELICERAEMIDDLE, ID.CHELICERAEUPPERMIDDLE)) for pt in prim.points())
+        and prim.stringAttribValue("region") != "fang"
     ]
     geo.deletePrims(middle_prims, keep_points=True)
 
     id_points = points_by_id(geo)
     loops = [
         [id_points[cheliceraestart(j)] for j in range(1, 5)],
+        [id_points[cheliceraeuppermiddle(j)] for j in range(1, 5)],
         [id_points[cheliceraemiddle(j)] for j in range(1, 5)],
         [id_points[cheliceraeend(j)] for j in range(1, 5)],
     ]
