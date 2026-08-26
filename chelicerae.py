@@ -1,4 +1,4 @@
-import math
+from dataclasses import dataclass
 from enum import StrEnum, auto
 
 import hou
@@ -13,7 +13,7 @@ from utilities.common import (
     get_vector2_parm,
     get_vector3_parm,
     remove_attrs,
-    remove_groups, get_prim_normal, rotation_to,
+    remove_groups, rotation_to, fill_face_reversed,
 )
 from utilities.helper import (
     add_id_attr,
@@ -61,9 +61,12 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
     inset = _inset_flaps(chelicerae, regions)
     classified = sopify(chelicerae, inset, _classify_after_inset)
     cleanup = sopify(chelicerae, classified, _cleanup_inset_flaps)
-    extrusion = sopify(chelicerae, cleanup, _build_extrusion)
+    prepared = sopify(chelicerae, cleanup, _prepare_extrusion)
+    end_section = sopify(chelicerae, prepared, _add_end_section)
+    middle_section = sopify(chelicerae, end_section, _add_middle_section)
+    connected = sopify(chelicerae, middle_section, _connect_sections)
 
-    add_output(chelicerae, "OUT_CHELICERAE", extrusion)
+    add_output(chelicerae, "OUT_CHELICERAE", connected)
     chelicerae.layoutChildren()
     return chelicerae
 
@@ -268,20 +271,152 @@ def _cleanup_inset_flaps(node: hou.SopNode) -> None:
     deduplicate_id_attr(geo, None, add_affix=False)
 
 
-def _build_extrusion(node: hou.SopNode) -> None:
+def _prepare_extrusion(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-
-    parent = get_parent(node)
-    end_section_offset = get_vector3_parm(parent, "end_section_offset")
-    end_section_rotation = get_vector2_parm(parent, "end_section_rotation")
-    end_section_ratio = get_vector2_parm(parent, "end_section_ratio")
-    middle_section_offset = get_vector3_parm(parent, "middle_section_offset")
-    middle_section_ratio = get_vector2_parm(parent, "middle_section_ratio")
-
     socket_prims: list[hou.Prim] = [
         prim for prim in geo.prims()
         if prim.stringAttribValue("region").startswith("chelicerasocket")
-    ]; assert len(socket_prims) == 4
+    ]
+    geo.deletePrims(socket_prims)
+
+
+def _add_end_section(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    parent = get_parent(node)
+
+    end_section_offset = get_vector3_parm(parent, "end_section_offset")
+    end_section_rotation = get_vector2_parm(parent, "end_section_rotation")
+    end_section_ratio = get_vector2_parm(parent, "end_section_ratio")
+
+    start_section = _get_start_section_frame(geo)
+    offset_baseline = start_section.offset_baseline
+
+    end_pivot_offset = hou.Vector3(end_section_offset.x(), -end_section_offset.y(), -end_section_offset.z())
+    end_pivot = start_section.pivot + hou.Vector3(
+        offset_baseline.x() * end_pivot_offset.x(),
+        offset_baseline.y() * end_pivot_offset.y(),
+        offset_baseline.z() * end_pivot_offset.z(),
+    )
+
+    end_rot_matrix = hou.hmath.buildRotate(end_section_rotation.x(), 0.0, end_section_rotation.y())
+    end_surface_normal = start_section.normal * end_rot_matrix
+
+    c3_positions = _construct_section_loop(
+        end_pivot,
+        hou.Vector2(start_section.height * end_section_ratio.y(), start_section.width * end_section_ratio.x()),
+        start_section.along * end_rot_matrix,
+        end_surface_normal,
+    )
+
+    c3_pts = [geo.createPoint() for _ in range(4)]
+    for pt, pos in zip(c3_pts, c3_positions):
+        pt.setPosition(pos)
+    for j, pt in enumerate(c3_pts, start=1):
+        set_point_id(pt, cheliceraeend(j))
+
+    end_prim = fill_face_reversed(geo, c3_pts)
+    add_prim_attr(geo, "region", "")
+    end_prim.setAttribValue("region", "fang")
+
+
+def _add_middle_section(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    parent = get_parent(node)
+
+    end_section_offset = get_vector3_parm(parent, "end_section_offset")
+    end_section_rotation = get_vector2_parm(parent, "end_section_rotation")
+    middle_section_offset = get_vector3_parm(parent, "middle_section_offset")
+    middle_section_ratio = get_vector2_parm(parent, "middle_section_ratio")
+
+    start_section = _get_start_section_frame(geo)
+    offset_baseline = start_section.offset_baseline
+
+    end_pivot_offset = hou.Vector3(end_section_offset.x(), -end_section_offset.y(), -end_section_offset.z())
+    end_pivot = start_section.pivot + hou.Vector3(
+        offset_baseline.x() * end_pivot_offset.x(),
+        offset_baseline.y() * end_pivot_offset.y(),
+        offset_baseline.z() * end_pivot_offset.z(),
+    )
+
+    middle_pivot_offset = hou.Vector3(middle_section_offset.x(), -middle_section_offset.y(), -middle_section_offset.z())
+    middle_pivot = start_section.pivot + hou.Vector3(
+        offset_baseline.x() * middle_pivot_offset.x(),
+        offset_baseline.y() * middle_pivot_offset.y(),
+        offset_baseline.z() * middle_pivot_offset.z(),
+    )
+
+    end_rot_matrix = hou.hmath.buildRotate(end_section_rotation.x(), 0.0, end_section_rotation.y())
+    end_surface_normal = start_section.normal * end_rot_matrix
+    conic_normal0 = start_section.along
+    conic_normal1 = -end_surface_normal
+
+    middle_section_dir = _interpolate_middle_section_direction(
+        start_section.pivot,
+        end_pivot,
+        middle_pivot,
+        conic_normal0,
+        conic_normal1,
+    )
+    middle_section_normal = rotation_to(conic_normal0, middle_section_dir).rotate(start_section.normal)
+
+    c2_positions = _construct_section_loop(
+        middle_pivot,
+        hou.Vector2(start_section.height * middle_section_ratio.y(), start_section.width * middle_section_ratio.x()),
+        middle_section_dir,
+        middle_section_normal,
+    )
+
+    c2_pts = [geo.createPoint() for _ in range(4)]
+    for pt, pos in zip(c2_pts, c2_positions):
+        pt.setPosition(pos)
+    for j, pt in enumerate(c2_pts, start=1):
+        set_point_id(pt, cheliceraemiddle(j))
+
+    fill_face_reversed(geo, c2_pts)
+
+
+def _connect_sections(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+
+    middle_prims = [
+        prim for prim in geo.prims()
+        if all(pt.stringAttribValue("id").startswith(ID.CHELICERAEMIDDLE) for pt in prim.points())
+    ]
+    geo.deletePrims(middle_prims, keep_points=True)
+
+    id_points = points_by_id(geo)
+    loops = [
+        [id_points[cheliceraestart(j)] for j in range(1, 5)],
+        [id_points[cheliceraemiddle(j)] for j in range(1, 5)],
+        [id_points[cheliceraeend(j)] for j in range(1, 5)],
+    ]
+
+    for i in range(len(loops) - 1):
+        current_loop = loops[i]
+        next_loop = loops[i + 1]
+        for j in range(4):
+            next_j = (j + 1) % 4
+            fill_face_reversed(geo, [
+                current_loop[j],
+                current_loop[next_j],
+                next_loop[next_j],
+                next_loop[j],
+            ])
+
+
+@dataclass
+class Section:
+    pivot: hou.Vector3
+    points: tuple[hou.Point, hou.Point, hou.Point, hou.Point]
+    along: hou.Vector3
+    normal: hou.Vector3
+    width: float
+    height: float
+    @property
+    def offset_baseline(self) -> hou.Vector3:
+        return hou.Vector3(self.width, self.height, self.height)
+
+def _get_start_section_frame(geo: hou.Geometry) -> Section:
     id_points = points_by_id(geo)
     c1_1 = id_points[cheliceraestart(1)]
     c1_2 = id_points[cheliceraestart(2)]
@@ -294,79 +429,17 @@ def _build_extrusion(node: hou.SopNode) -> None:
     w = x_max - x_min
     h = y_max - y_min
 
-    up_pivot = hou.Vector3((x_max + x_min) / 2.0, (y_max + y_min) / 2.0, z)
-    offset_baseline = hou.Vector3(w, h, h)
-
-    end_pivot_offset = hou.Vector3(end_section_offset.x(), -end_section_offset.y(), -end_section_offset.z())
-    end_pivot = up_pivot + hou.Vector3(
-        offset_baseline.x() * end_pivot_offset.x(),
-        offset_baseline.y() * end_pivot_offset.y(),
-        offset_baseline.z() * end_pivot_offset.z(),
+    pivot = hou.Vector3((x_max + x_min) / 2.0, (y_max + y_min) / 2.0, z)
+    along = (c1_1.position() - c1_2.position()).normalized()
+    normal = (c1_2.position() - c1_1.position()).cross(c1_4.position() - c1_1.position()).normalized()
+    return Section(
+        pivot,
+        (c1_1, c1_2, c1_3, c1_4),
+        along,
+        normal,
+        w,
+        h
     )
-
-    middle_pivot_offset = hou.Vector3(middle_section_offset.x(), -middle_section_offset.y(), -middle_section_offset.z())
-    middle_pivot = up_pivot + hou.Vector3(
-        offset_baseline.x() * middle_pivot_offset.x(),
-        offset_baseline.y() * middle_pivot_offset.y(),
-        offset_baseline.z() * middle_pivot_offset.z(),
-    )
-
-    start_face_along = (c1_1.position() - c1_2.position()).normalized()
-    start_face_normal = get_prim_normal(socket_prims[0])
-    end_rot_matrix = hou.hmath.buildRotate(end_section_rotation.x(), 0.0, end_section_rotation.y())
-    end_surface_normal = start_face_normal * end_rot_matrix
-    conic_normal0 = start_face_along
-    conic_normal1 = -end_surface_normal
-    middle_section_dir = _interpolate_middle_section_direction(
-        up_pivot,
-        end_pivot,
-        middle_pivot,
-        conic_normal0,
-        conic_normal1,
-    )
-    middle_section_normal = rotation_to(conic_normal0, middle_section_dir).rotate(start_face_normal)
-
-    c2_positions = _construct_section_loop(
-        middle_pivot,
-        hou.Vector2(h * middle_section_ratio.y(), w * middle_section_ratio.x()),
-        middle_section_dir,
-        middle_section_normal,
-    )
-    c3_positions = _construct_section_loop(
-        end_pivot,
-        hou.Vector2(h * end_section_ratio.y(), w * end_section_ratio.x()),
-        start_face_along * end_rot_matrix,
-        end_surface_normal,
-    )
-
-    loops = [
-        [c1_1, c1_2, c1_3, c1_4],
-        [geo.createPoint() for _ in range(4)],
-        [geo.createPoint() for _ in range(4)],
-    ]
-    for pts, positions in zip(loops[1:], (c2_positions, c3_positions)):
-        for pt, pos in zip(pts, positions):
-            pt.setPosition(pos)
-    for j, point in enumerate(loops[1], start=1):
-        set_point_id(point, cheliceraemiddle(j))
-    for j, point in enumerate(loops[2], start=1):
-        set_point_id(point, cheliceraeend(j))
-
-    for i in range(len(loops) - 1):
-        current_loop = loops[i]
-        next_loop = loops[i + 1]
-        for j in range(4):
-            next_j = (j + 1) % 4
-            fill_face(geo, [
-                current_loop[j],
-                current_loop[next_j],
-                next_loop[next_j],
-                next_loop[j],
-            ])
-    fill_face(geo, loops[-1])
-
-    geo.deletePrims(socket_prims)
-
 
 def _construct_section_loop(
     pivot: hou.Vector3,
@@ -390,7 +463,6 @@ def _construct_section_loop(
         pivot + along * ah + side * sw
         for ah, sw in corners
     ]
-
 
 def _interpolate_middle_section_direction(
     up_pivot: hou.Vector3,
