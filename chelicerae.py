@@ -340,15 +340,15 @@ def _add_end_section(node: hou.SopNode) -> None:
 
 
 def _add_middle_section(node: hou.SopNode) -> None:
-    _add_intermediate_section(node, "upper", 1.0, cheliceraemiddle)
+    _add_intermediate_section(node, 0.5, cheliceraemiddle)
 
 
 def _add_upper_middle_section(node: hou.SopNode) -> None:
-    _add_intermediate_section(node, "upper", 0.5, cheliceraeuppermiddle)
+    _add_intermediate_section(node, 0.25, cheliceraeuppermiddle)
 
 
 def _add_lower_middle_section(node: hou.SopNode) -> None:
-    _add_intermediate_section(node, "lower", 0.5, cheliceraelowermiddle)
+    _add_intermediate_section(node, 0.75, cheliceraelowermiddle)
 
 
 def _connect_sections(node: hou.SopNode) -> None:
@@ -459,7 +459,6 @@ def _construct_section_loop(
 
 def _add_intermediate_section(
     node: hou.SopNode,
-    segment: str,
     factor: float,
     id_factory: Callable[[int], str],
 ) -> None:
@@ -506,10 +505,13 @@ def _add_intermediate_section(
     chord_length = (end_pivot - start_section.pivot).length()
     middle_t = (middle_pivot - start_section.pivot).dot(along_axis) / chord_length
 
-    if segment == "upper":
-        t = middle_t * factor
-    else:
-        t = middle_t + (1.0 - middle_t) * factor
+    f_upper = min(factor * 2.0, 1.0)
+    f_lower = max(factor * 2.0 - 1.0, 0.0)
+    w_start = 1.0 - f_upper
+    w_mid = f_upper - f_lower
+    w_end = f_lower
+
+    t = middle_t * w_mid + w_end
 
     pivot, direction = evaluate(t)
     normal = rotation_to(normal0, direction).rotate(start_section.normal)
@@ -518,10 +520,7 @@ def _add_intermediate_section(
     middle_size = hou.Vector2(start_section.height * middle_section_ratio.y(), start_section.width * middle_section_ratio.x())
     end_size = hou.Vector2(start_section.height * end_section_ratio.y(), start_section.width * end_section_ratio.x())
 
-    if segment == "upper":
-        size = start_size * (1.0 - factor) + middle_size * factor
-    else:
-        size = middle_size * (1.0 - factor) + end_size * factor
+    size = start_size * w_start + middle_size * w_mid + end_size * w_end
 
     positions = _construct_section_loop(
         pivot,
