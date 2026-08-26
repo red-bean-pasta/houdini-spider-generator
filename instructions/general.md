@@ -27,10 +27,8 @@ This is a project that tries to model a spider in a biologically topology way in
 
 ## Agent
 - Dynamically adjust the thinking chain based on task difficulty. If the task is small, bounded or obvious, don't over-think. Balance token efficiency, intelligence and development speed.
-- Use `client_edit_file` and `run_command rm` ACP tool over MCP tool `apply_patch` for better user experience.
 
 ## Reiterate
 - No newline abusing
 - Choose between identifier, position or other pattern based construction based on the task's true nature.
 - DO NOT REVERT USER CHANGES unless requested, broken, problematic or buggy, or if there's a better way. DO NOT MAKE TOO MUCH STRUCTURL CHANGE unless user requested or approved.
-- Do not use `apply_patch` unless `client_edit_file` and `run_command` fail due to e.g., project boundary.
