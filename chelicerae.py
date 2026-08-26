@@ -30,7 +30,7 @@ from utilities.nodes import (
     add_reloadable_subnet,
     sopify,
 )
-from utilities.topology import interpolate_conic
+from utilities.topology import interpolate_elliptical
 
 
 class ID(StrEnum):
@@ -469,51 +469,37 @@ def _add_intermediate_section(
 
     end_rot_matrix = hou.hmath.buildRotate(end_section_rotation.x(), 0.0, end_section_rotation.y())
     end_surface_normal = start_section.normal * end_rot_matrix
-    conic_normal0 = start_section.along
-    conic_normal1 = -end_surface_normal
+    normal0 = start_section.along
+    normal2 = -end_surface_normal
 
-    along_axis = (end_pivot - start_section.pivot).normalized()
-    end_along = (end_pivot - start_section.pivot).dot(along_axis)
-    middle_along = (middle_pivot - start_section.pivot).dot(along_axis)
-
-    delta01 = end_pivot - start_section.pivot
-    delta02 = middle_pivot - start_section.pivot
-    normal_plane = delta01.cross(delta02).normalized()
-    across_axis = normal_plane.cross(along_axis).normalized()
-    middle_across = delta02.dot(across_axis)
-
-    if segment == "upper":
-        target_along = middle_along * factor
-        mid_target = start_section.pivot + (middle_pivot - start_section.pivot) * factor
-    else:
-        target_along = middle_along + (end_along - middle_along) * factor
-        mid_target = middle_pivot + (end_pivot - middle_pivot) * factor
-
-    evaluate = interpolate_conic(
+    evaluate = interpolate_elliptical(
         start_section.pivot,
-        end_pivot,
         middle_pivot,
-        conic_normal0,
-        conic_normal1,
+        end_pivot,
+        normal0,
+        normal2,
     )
 
-    results = evaluate(target_along)
-    assert len(results) > 0, "Failed to evaluate intermediate point on conic"
-    pivot, direction = min(results, key=lambda pair: pair[0].distanceTo(mid_target))
-    normal = rotation_to(conic_normal0, direction).rotate(start_section.normal)
+    along_axis = (end_pivot - start_section.pivot).normalized()
+    chord_length = (end_pivot - start_section.pivot).length()
+    middle_t = (middle_pivot - start_section.pivot).dot(along_axis) / chord_length
 
-    target_across = (pivot - start_section.pivot).dot(across_axis)
+    if segment == "upper":
+        t = middle_t * factor
+    else:
+        t = middle_t + (1.0 - middle_t) * factor
+
+    pivot, direction = evaluate(t)
+    normal = rotation_to(normal0, direction).rotate(start_section.normal)
 
     start_size = hou.Vector2(start_section.height, start_section.width)
     middle_size = hou.Vector2(start_section.height * middle_section_ratio.y(), start_section.width * middle_section_ratio.x())
     end_size = hou.Vector2(start_section.height * end_section_ratio.y(), start_section.width * end_section_ratio.x())
 
     if segment == "upper":
-        weight = target_across / middle_across if middle_across != 0.0 else factor
-        size = start_size * (1.0 - weight) + middle_size * weight
+        size = start_size * (1.0 - factor) + middle_size * factor
     else:
-        weight = 1.0 - (target_across / middle_across) if middle_across != 0.0 else factor
-        size = middle_size * (1.0 - weight) + end_size * weight
+        size = middle_size * (1.0 - factor) + end_size * factor
 
     positions = _construct_section_loop(
         pivot,
