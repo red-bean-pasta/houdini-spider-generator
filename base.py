@@ -2,6 +2,7 @@ import hou
 
 import base_sops
 from sternum import build as build_sternum
+from utilities.common import add_float_param
 from utilities.nodes import (
     add_fuse,
     add_merge,
@@ -17,7 +18,7 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     _add_parameters(base)
 
     sternum = build_sternum(base)
-    propagate_parameters(base, sternum, prefix="sternum_")
+    propagate_parameters(base, sternum)
 
     rim = sopify(base, sternum, base_sops.extract_sternum_rim)
     flaps = sopify(base, rim, base_sops.build_coxa_flaps)
@@ -44,38 +45,25 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     return base
 
 
-def _add_parameters(base: hou.SopNode) -> hou.SopNode:
-    templates = base.parmTemplateGroup()
-    templates.append(
-        hou.FloatParmTemplate(
-            "coxa_width_ratio",
-            "Coxa Width Ratio",
-            2,
-            default_value=(1.0, 1.2),
-            min=0.0,
-            min_is_strict=True,
-            naming_scheme=hou.parmNamingScheme.XYZW,
-        )
+def _add_parameters(base: hou.SopNode) -> None:
+    add_float_param(
+        base,
+        "coxa_width_ratio",
+        2,
+        (1.0, 1.2),
+        (0.0, None),
     )
-    templates.append(
-        hou.FloatParmTemplate(
-            "coxa_depth_ratio",
-            "Coxa Depth Ratio",
-            1,
-            default_value=(0.35,),
-            min=0.0,
-            min_is_strict=True,
-        )
+    add_float_param(
+        base,
+        "coxa_depth_ratio",
+        1,
+        0.35,
+        (0.0, None),
     )
-    templates.append(
-        hou.FloatParmTemplate(
-            "membrane_ratio",
-            "Membrane Ratio",
-            1,
-            default_value=(0.035,),
-            min=0.0,
-            min_is_strict=True,
-        )
+    add_float_param(
+        base,
+        "membrane_ratio",
+        1,
+        0.035,
+        (0.0, None),
     )
-    base.setParmTemplateGroup(templates)
-    return base

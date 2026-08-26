@@ -1,6 +1,7 @@
 import hou
 
 import sternum_sops
+from utilities.common import add_float_param
 from utilities.nodes import (
     add_fuse,
     add_merge,
@@ -13,8 +14,8 @@ from utilities.nodes import (
 
 def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     sternum = add_reloadable_subnet(cephalothorax, "sternum")
-    _ = _add_parameters(sternum)
-    _ = _add_controls(sternum)
+    _add_parameters(sternum)
+    _add_controls(sternum)
 
     half = sopify(sternum, None, sternum_sops.left_half)
     midpoints = sopify(sternum, half, sternum_sops.add_midpoints)
@@ -36,68 +37,43 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     return sternum
 
 
-def _add_parameters(sternum: hou.SopNode) -> hou.SopNode:
-    templates = sternum.parmTemplateGroup()
-    templates.append(
-        hou.FloatParmTemplate(
-            "width_length_ratio",
-            "Width Length Ratio",
-            3,
-            default_value=(1.0, 2.0, 1.825),
-            min=0.0,
-            min_is_strict=True,
-            naming_scheme=hou.parmNamingScheme.XYZW,
-        )
+def _add_parameters(sternum: hou.SopNode) -> None:
+    add_float_param(
+        sternum,
+        "width_length_ratio",
+        3,
+        (1.0, 2.0, 1.825),
+        (0.0, None),
     )
-    templates.append(
-        hou.FloatParmTemplate(
-            "top_width_ratio",
-            "Top Width Ratio",
-            1,
-            default_value=(0.5,),
-            min=0.0,
-            max=1.0,
-            min_is_strict=True,
-            max_is_strict=True,
-        )
+    add_float_param(
+        sternum,
+        "top_width_ratio",
+        1,
+        0.5,
+        (0.0, 1.0),
     )
-    templates.append(
-        hou.FloatParmTemplate(
-            "width_depth_ratio",
-            "Width Depth Ratio",
-            1,
-            default_value=(0.5,),
-            min=0.0,
-            min_is_strict=True,
-        )
+    add_float_param(
+        sternum,
+        "width_depth_ratio",
+        1,
+        0.5,
+        (0.0, None),
     )
-    sternum.setParmTemplateGroup(templates)
-    return sternum
 
 
 def _add_controls(parent: hou.SopNode) -> hou.SopNode:
     control = parent.createNode("null", "CONTROL")
-    templates = control.parmTemplateGroup()
-    templates.append(
-        hou.FloatParmTemplate(
-            "half_width",
-            "Half Width",
-            1,
-            default_value=(100.0,)
-        )
+    add_float_param(
+        control,
+        "half_width",
+        1,
+        100.0,
     )
-    templates.append(
-        hou.FloatParmTemplate(
-            "leg_angle",
-            "Leg Angle",
-            1,
-            default_value=(165.0,),
-            min=0.0,
-            max=180.0,
-            min_is_strict=True,
-            max_is_strict=True,
-        )
+    add_float_param(
+        control,
+        "leg_angle",
+        1,
+        165.0,
+        (0.0, 180.0),
     )
-    control.setParmTemplateGroup(templates)
-
     return control

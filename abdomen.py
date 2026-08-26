@@ -6,11 +6,13 @@ import hou
 import base_sops
 import sternum_sops
 from utilities.common import (
+    add_float_param,
+    add_global_attr,
     add_prim_attr,
     fill_face,
     get_float_parm,
     get_parent,
-    remove_attrs, add_global_attr,
+    remove_attrs,
 )
 from utilities.helper import (
     add_id_attr,
@@ -83,48 +85,32 @@ def build(spider: hou.OpNode, cephalothorax: hou.SopNode) -> hou.SopNode:
     return abdomen
 
 
-def _add_parameters(abdomen: hou.SopNode) -> hou.SopNode:
-    templates = abdomen.parmTemplateGroup()
-    templates.append(
-        hou.FloatParmTemplate(
-            "size_ratio",
-            "Size Ratio",
-            3,
-            default_value=(1.2, 1.0, 1.2),
-            min=0.0,
-            min_is_strict=True,
-            naming_scheme=hou.parmNamingScheme.XYZW,
-        )
+def _add_parameters(abdomen: hou.SopNode) -> None:
+    add_float_param(
+        abdomen,
+        "size_ratio",
+        3,
+        (1.2, 1.0, 1.2),
+        (0.0, None),
     )
-    templates.append(
-        hou.FloatParmTemplate(
-            "plateau_duration",
-            "Plateau Duration",
-            2,
-            default_value=(0.1, 0.5),
-            min=0.0,
-            min_is_strict=True,
-            naming_scheme=hou.parmNamingScheme.XYZW,
-        )
+    add_float_param(
+        abdomen,
+        "plateau_duration",
+        2,
+        (0.1, 0.5),
+        (0.0, None),
     )
-    abdomen.setParmTemplateGroup(templates)
-    return abdomen
 
 
 def _add_controls(parent: hou.SopNode) -> hou.SopNode:
     control = parent.createNode("null", "CONTROL")
-    templates = control.parmTemplateGroup()
-    templates.append(
-        hou.FloatParmTemplate(
-            "end_ratio",
-            "End Ratio",
-            1,
-            default_value=(0.2,),
-            min=0.0,
-            min_is_strict=True,
-        )
+    add_float_param(
+        control,
+        "end_ratio",
+        1,
+        0.2,
+        (0.0, None),
     )
-    control.setParmTemplateGroup(templates)
     return control
 
 

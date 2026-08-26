@@ -7,6 +7,7 @@ import base_sops
 import sternum_sops
 from chelicerae import cheliceraeupper
 from utilities.common import (
+    add_float_param,
     add_prim_attr,
     fill_face,
     get_float_parm,
@@ -80,38 +81,27 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
 
 
 def _add_parameters(head: hou.SopNode) -> None:
-    templates = head.parmTemplateGroup()
-    templates.append(
-        hou.FloatParmTemplate(
-            "height_ratio",
-            "Height Ratio",
-            1,
-            default_value=(0.375,),
-            min=0.0,
-            min_is_strict=True,
-        )
+    add_float_param(
+        head,
+        "height_ratio",
+        1,
+        0.375,
+        (0.0, None),
     )
-    templates.append(
-        hou.FloatParmTemplate(
-            "flat_ratio",
-            "Flat Ratio",
-            1,
-            default_value=(0.4,),
-            min=0.0,
-            min_is_strict=True,
-        )
+    add_float_param(
+        head,
+        "flat_ratio",
+        1,
+        0.4,
+        (0.0, None),
     )
-    templates.append(
-        hou.FloatParmTemplate(
-            "membrane_ratio",
-            "Membrane Ratio",
-            1,
-            default_value=(0.035,),
-            min=0.0,
-            min_is_strict=True,
-        )
+    add_float_param(
+        head,
+        "membrane_ratio",
+        1,
+        0.035,
+        (0.0, None),
     )
-    head.setParmTemplateGroup(templates)
 
 
 def _add_points(
