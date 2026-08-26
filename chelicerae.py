@@ -14,7 +14,7 @@ from utilities.common import (
     get_vector2_parm,
     get_vector3_parm,
     remove_attrs,
-    remove_groups, rotation_to, fill_face_reversed,
+    remove_groups, rotation_to, fill_face_reversed, add_heading, add_float_param,
 )
 from utilities.helper import (
     add_id_attr,
@@ -22,10 +22,14 @@ from utilities.helper import (
     deduplicate_id_attr,
     points_by_id,
     set_point_id,
+    rename_left_ids,
     set_points_id,
 )
 from utilities.identifying import attribute_after_inset
 from utilities.nodes import (
+    add_mirror,
+    add_merge,
+    add_fuse,
     add_output,
     add_reloadable_subnet,
     sopify,
@@ -76,85 +80,90 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
     upper_middle_section = sopify(chelicerae, middle_section, _add_upper_middle_section)
     lower_middle_section = sopify(chelicerae, upper_middle_section, _add_lower_middle_section)
     connected = sopify(chelicerae, lower_middle_section, _connect_sections)
+    extrusion = sopify(chelicerae, connected, _extract_extrusion)
+    mirrored = add_mirror(chelicerae, "mirror_left_extrusion", extrusion, (1, 0, 0), True, False)
+    renamed = sopify(chelicerae, mirrored, _rename_left_ids)
+    merged = add_merge(chelicerae, "merge_base_and_extrusion", prepared, renamed)
+    fused = add_fuse(chelicerae, "fuse_chelicerae", merged)
 
-    add_output(chelicerae, "OUT_CHELICERAE", connected)
+    add_output(chelicerae, "OUT_CHELICERAE", fused)
     chelicerae.layoutChildren()
     return chelicerae
 
 
 def _add_parameters(chelicerae: hou.SopNode) -> None:
-    templates = chelicerae.parmTemplateGroup()
-    templates.append(
-        hou.FloatParmTemplate(
-            "socket_height_ratio",
-            "Socket Height Ratio",
-            1,
-            default_value=(0.35,),
-            min=0.0,
-            min_is_strict=True,
-            help="Relative to the chelicerae region width",
-        )
+    add_float_param(
+        chelicerae,
+        "membrane_ratio",
+        1,
+        0.035,
+        (0.0, None),
     )
-    templates.append(
-        hou.FloatParmTemplate(
-            "membrane_ratio",
-            "Membrane Ratio",
-            1,
-            default_value=(0.035,),
-            min=0.0,
-            min_is_strict=True,
-        )
+    add_heading(
+        chelicerae,
+        "Start Section",
     )
-    templates.append(
-        hou.FloatParmTemplate(
-            "end_section_offset",
-            "End Section Offset",
-            3,
-            default_value=(0.25, 3.5, 0.5),
-            naming_scheme=hou.parmNamingScheme.XYZW,
-        )
+    add_float_param(
+        chelicerae,
+        "start_section_height_ratio",
+        1,
+        0.35,
+        (0.0, None),
+        label="Height Ratio"
     )
-    templates.append(
-        hou.FloatParmTemplate(
-            "end_section_rotation",
-            "End Section Rotation",
-            2,
-            default_value=(-90.0, 0.0),
-            naming_scheme=hou.parmNamingScheme.XYZW,
-        )
+    add_heading(
+        chelicerae,
+        "End Section",
     )
-    templates.append(
-        hou.FloatParmTemplate(
-            "middle_section_offset",
-            "Middle Section Offset",
-            3,
-            default_value=(0.1, 1.3, 1.0),
-            naming_scheme=hou.parmNamingScheme.XYZW,
-        )
+    add_float_param(
+        chelicerae,
+        "end_section_ratio",
+        2,
+        (0.5, 0.5),
+        (0.0, None),
+        label="Ratio"
     )
-    templates.append(
-        hou.FloatParmTemplate(
-            "middle_section_ratio",
-            "Middle Section Ratio",
-            2,
-            default_value=(1.1, 1.2),
-            min=0.0,
-            min_is_strict=True,
-            naming_scheme=hou.parmNamingScheme.XYZW,
-        )
+    add_float_param(
+        chelicerae,
+        "end_section_offset",
+        3,
+        (0.25, 3.5, 0.5),
+        label="Offset"
     )
-    templates.append(
-        hou.FloatParmTemplate(
-            "end_section_ratio",
-            "End Section Ratio",
-            2,
-            default_value=(0.5, 0.5),
-            min=0.0,
-            min_is_strict=True,
-            naming_scheme=hou.parmNamingScheme.XYZW,
-        )
+    add_float_param(
+        chelicerae,
+        "end_section_rotation",
+        2,
+        (-90.0, 0.0),
+        label="Rotation"
     )
-    chelicerae.setParmTemplateGroup(templates)
+    add_heading(
+        chelicerae,
+        "Middle Section",
+    )
+    add_float_param(
+        chelicerae,
+        "middle_section_ratio",
+        2,
+        (1.1, 1.2),
+        (0.0, None),
+        label="Ratio",
+    )
+    add_float_param(
+        chelicerae,
+        "middle_section_offset",
+        2,
+        (0.1, 1.0),
+        label="Offset",
+    )
+    add_float_param(
+        chelicerae,
+        "middle_section_height_ratio",
+        1,
+        0.5,
+        (0.0, 1.0),
+        label="Height Ratio",
+    )
 
 
 def _build_geometry(node: hou.SopNode) -> None:
@@ -180,7 +189,7 @@ def _build_geometry(node: hou.SopNode) -> None:
         base_points.append(point)
     set_points_id(base_points, list(base_ids))
 
-    height_ratio = get_float_parm(get_parent(node), "socket_height_ratio")
+    height_ratio = get_float_parm(get_parent(node), "start_section_height_ratio")
     height = base_positions[-1].distanceTo(base_positions[2]) * height_ratio
     height_offset = hou.Vector3(0.0, height, 0.0)
 
@@ -374,6 +383,19 @@ def _connect_sections(node: hou.SopNode) -> None:
             ])
 
 
+def _extract_extrusion(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    membrane_prims = [
+        prim for prim in geo.prims()
+        if prim.stringAttribValue("region").startswith("cheliceramembrane")
+    ]
+    geo.deletePrims(membrane_prims)
+
+
+def _rename_left_ids(node: hou.SopNode) -> None:
+    rename_left_ids(node.geometry())
+
+
 @dataclass
 class Section:
     pivot: hou.Vector3
@@ -447,7 +469,8 @@ def _add_intermediate_section(
     end_section_offset = get_vector3_parm(parent, "end_section_offset")
     end_section_rotation = get_vector2_parm(parent, "end_section_rotation")
     end_section_ratio = get_vector2_parm(parent, "end_section_ratio")
-    middle_section_offset = get_vector3_parm(parent, "middle_section_offset")
+    middle_section_offset = get_vector2_parm(parent, "middle_section_offset")
+    middle_section_height_ratio = get_float_parm(parent, "middle_section_height_ratio")
     middle_section_ratio = get_vector2_parm(parent, "middle_section_ratio")
 
     start_section = _get_start_section_frame(geo)
@@ -460,11 +483,10 @@ def _add_intermediate_section(
         offset_baseline.z() * end_pivot_offset.z(),
     )
 
-    middle_pivot_offset = hou.Vector3(middle_section_offset.x(), -middle_section_offset.y(), -middle_section_offset.z())
-    middle_pivot = start_section.pivot + hou.Vector3(
-        offset_baseline.x() * middle_pivot_offset.x(),
-        offset_baseline.y() * middle_pivot_offset.y(),
-        offset_baseline.z() * middle_pivot_offset.z(),
+    middle_pivot = hou.Vector3(
+        start_section.pivot.x() + offset_baseline.x() * middle_section_offset.x(),
+        start_section.pivot.y() + (end_pivot.y() - start_section.pivot.y()) * middle_section_height_ratio,
+        start_section.pivot.z() - offset_baseline.z() * middle_section_offset.y(),
     )
 
     end_rot_matrix = hou.hmath.buildRotate(end_section_rotation.x(), 0.0, end_section_rotation.y())
