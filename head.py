@@ -233,7 +233,6 @@ def _fill_back_loop_faces(node: hou.SopNode) -> None:
             headfront(0),
             headfront(1),
             cheliceraeupper(2),
-            cheliceraeupper(1),
         ),
         (
             cheliceraeupper(2),
