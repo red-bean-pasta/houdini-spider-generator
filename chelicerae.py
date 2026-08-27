@@ -44,6 +44,7 @@ class ID(StrEnum):
     CHELICERAEMIDDLE = auto()
     CHELICERAELOWERMIDDLE = auto()
     CHELICERAEEND = auto()
+    CHELICERAERETO = auto()
 
 def cheliceraeupper(*i: int | str) -> str:
     return affix_id(ID.CHELICERAEUPPER, *i)
@@ -62,6 +63,9 @@ def cheliceraelowermiddle(*i: int | str) -> str:
 
 def cheliceraeend(*i: int | str) -> str:
     return affix_id(ID.CHELICERAEEND, *i)
+
+def cheliceraereto(*i: int | str) -> str:
+    return affix_id(ID.CHELICERAERETO, *i)
 
 
 def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
@@ -85,8 +89,12 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
     renamed = sopify(chelicerae, mirrored, _rename_left_ids)
     merged = add_merge(chelicerae, "merge_base_and_extrusion", prepared, renamed)
     fused = add_fuse(chelicerae, "fuse_chelicerae", merged)
+    remove_retopology_faces = sopify(chelicerae, fused, _remove_retopology_faces)
+    add_retopology_points = sopify(chelicerae, remove_retopology_faces, _add_retopology_points)
+    fill_retopology_faces = sopify(chelicerae, add_retopology_points, _fill_retopology_faces)
+    retopology_upper_membrane = sopify(chelicerae, fill_retopology_faces, _retopology_upper_membrane)
 
-    add_output(chelicerae, "OUT_CHELICERAE", fused)
+    add_output(chelicerae, "OUT_CHELICERAE", retopology_upper_membrane)
     chelicerae.layoutChildren()
     return chelicerae
 
@@ -394,6 +402,125 @@ def _extract_extrusion(node: hou.SopNode) -> None:
 
 def _rename_left_ids(node: hou.SopNode) -> None:
     rename_left_ids(node.geometry())
+
+
+def _remove_retopology_faces(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    target_face_points = [
+        {cheliceraeuppermiddle(4), cheliceraeuppermiddle(1), cheliceraestart(1), cheliceraestart(4)},
+        {cheliceraeuppermiddle(1), cheliceraeuppermiddle(2), cheliceraestart(2), cheliceraestart(1)},
+        {cheliceraeupper(0), base_sops.basesternum(0), cheliceraestart(1), cheliceraestart(2)},
+        {base_sops.basesternum(0), cheliceraeupper(0), cheliceraestart(-2), cheliceraestart(-1)},
+        {cheliceraeuppermiddle(-1), cheliceraestart(-1), cheliceraestart(-2), cheliceraeuppermiddle(-2)},
+        {cheliceraeuppermiddle(-4), cheliceraestart(-4), cheliceraestart(-1), cheliceraeuppermiddle(-1)},
+    ]
+    to_delete = [
+        prim for prim in geo.prims()
+        if {pt.stringAttribValue("id") for pt in prim.points()} in target_face_points
+    ]
+    assert len(to_delete) == 6, f"Expected 6 retopology faces to delete, found {len(to_delete)}"
+    geo.deletePrims(to_delete, keep_points=True)
+
+
+def _add_retopology_points(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    id_points = points_by_id(geo)
+
+    p_r1 = geo.createPoint()
+    p_r1.setPosition((id_points[cheliceraestart(1)].position() + id_points[cheliceraeuppermiddle(1)].position()) * 0.5)
+    set_point_id(p_r1, cheliceraereto(1))
+
+    p_l1 = geo.createPoint()
+    p_l1.setPosition((id_points[cheliceraestart(-1)].position() + id_points[cheliceraeuppermiddle(-1)].position()) * 0.5)
+    set_point_id(p_l1, cheliceraereto(-1))
+
+    if "cheliceramiddlelower1" not in id_points:
+        p_r4 = geo.createPoint()
+        p_r4.setPosition((id_points[cheliceraestart(1)].position() + id_points[cheliceraestart(4)].position()) * 0.5)
+        set_point_id(p_r4, "cheliceramiddlelower1")
+
+    if "cheliceramiddlelower-1" not in id_points:
+        p_l4 = geo.createPoint()
+        p_l4.setPosition((id_points[cheliceraestart(-1)].position() + id_points[cheliceraestart(-4)].position()) * 0.5)
+        set_point_id(p_l4, "cheliceramiddlelower-1")
+
+    p_mid0 = geo.createPoint()
+    p_mid0.setPosition((id_points[cheliceraeupper(0)].position() + id_points[base_sops.basesternum(0)].position()) * 0.5)
+    set_point_id(p_mid0, cheliceraereto(0))
+
+    p_r2 = geo.createPoint()
+    p_r2.setPosition((id_points[cheliceraestart(1)].position() + id_points[cheliceraestart(2)].position()) * 0.5)
+    set_point_id(p_r2, cheliceraereto(2))
+
+    p_l2 = geo.createPoint()
+    p_l2.setPosition((id_points[cheliceraestart(-1)].position() + id_points[cheliceraestart(-2)].position()) * 0.5)
+    set_point_id(p_l2, cheliceraereto(-2))
+
+    f_back_r = geo.createPoint()
+    f_back_r.setPosition((p_r1.position() + id_points[cheliceraeuppermiddle(4)].position() + id_points["cheliceramiddlelower1"].position() + id_points[cheliceraestart(4)].position()) * 0.25)
+    set_point_id(f_back_r, "cheliceraeretofloat_back1")
+
+    f_side_r = geo.createPoint()
+    f_side_r.setPosition((p_r1.position() + id_points[cheliceraeuppermiddle(2)].position() + p_r2.position() + id_points[cheliceraestart(2)].position()) * 0.25)
+    set_point_id(f_side_r, "cheliceraeretofloat_side1")
+
+    f_back_l = geo.createPoint()
+    f_back_l.setPosition((p_l1.position() + id_points[cheliceraeuppermiddle(-4)].position() + id_points["cheliceramiddlelower-1"].position() + id_points[cheliceraestart(-4)].position()) * 0.25)
+    set_point_id(f_back_l, "cheliceraeretofloat_back-1")
+
+    f_side_l = geo.createPoint()
+    f_side_l.setPosition((p_l1.position() + id_points[cheliceraeuppermiddle(-2)].position() + p_l2.position() + id_points[cheliceraestart(-2)].position()) * 0.25)
+    set_point_id(f_side_l, "cheliceraeretofloat_side-1")
+
+
+def _fill_retopology_faces(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    id_points = points_by_id(geo)
+
+    quad_ids = [
+        [base_sops.basesternum(0), cheliceraestart(1), cheliceraereto(2), cheliceraereto(0)],
+        [cheliceraereto(0), cheliceraereto(2), cheliceraestart(2), cheliceraeupper(0)],
+        [base_sops.basesternum(0), cheliceraereto(0), cheliceraereto(-2), cheliceraestart(-1)],
+        [cheliceraereto(0), cheliceraeupper(0), cheliceraestart(-2), cheliceraereto(-2)],
+
+        [cheliceraeuppermiddle(1), cheliceraereto(1), "cheliceraeretofloat_back1", cheliceraeuppermiddle(4)],
+        [cheliceraereto(1), cheliceraestart(1), "cheliceramiddlelower1", "cheliceraeretofloat_back1"],
+        ["cheliceraeretofloat_back1", "cheliceramiddlelower1", cheliceraestart(4), cheliceraeuppermiddle(4)],
+
+        [cheliceraeuppermiddle(1), cheliceraeuppermiddle(2), "cheliceraeretofloat_side1", cheliceraereto(1)],
+        [cheliceraereto(1), "cheliceraeretofloat_side1", cheliceraereto(2), cheliceraestart(1)],
+        ["cheliceraeretofloat_side1", cheliceraeuppermiddle(2), cheliceraestart(2), cheliceraereto(2)],
+
+        [cheliceraeuppermiddle(-1), cheliceraeuppermiddle(-4), "cheliceraeretofloat_back-1", cheliceraereto(-1)],
+        [cheliceraereto(-1), "cheliceraeretofloat_back-1", "cheliceramiddlelower-1", cheliceraestart(-1)],
+        ["cheliceraeretofloat_back-1", cheliceraeuppermiddle(-4), cheliceraestart(-4), "cheliceramiddlelower-1"],
+
+        [cheliceraeuppermiddle(-1), cheliceraereto(-1), "cheliceraeretofloat_side-1", cheliceraeuppermiddle(-2)],
+        [cheliceraereto(-1), cheliceraestart(-1), cheliceraereto(-2), "cheliceraeretofloat_side-1"],
+        ["cheliceraeretofloat_side-1", cheliceraereto(-2), cheliceraestart(-2), cheliceraeuppermiddle(-2)],
+    ]
+    for q in quad_ids:
+        fill_face(geo, [id_points[pid] for pid in q])
+
+
+def _retopology_upper_membrane(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    id_points = points_by_id(geo)
+
+    target_pt_ids = [
+        cheliceraeupper(1),
+        "cheliceramiddleupper1",
+        cheliceraeupper(-1),
+        "cheliceramiddleupper-1",
+    ]
+    to_del_pts = [id_points[name] for name in target_pt_ids if name in id_points]
+    to_del_prims = [p for p in geo.prims() if any(pt in to_del_pts for pt in p.points())]
+    geo.deletePrims(to_del_prims, keep_points=True)
+    geo.deletePoints(to_del_pts)
+
+    id_points = points_by_id(geo)
+    fill_face_reversed(geo, [id_points[cheliceraeupper(0)], id_points[cheliceraeupper(2)], id_points[cheliceraestart(3)], id_points[cheliceraestart(2)]])
+    fill_face_reversed(geo, [id_points[cheliceraeupper(0)], id_points[cheliceraestart(-2)], id_points[cheliceraestart(-3)], id_points[cheliceraeupper(-2)]])
 
 
 @dataclass
