@@ -119,7 +119,7 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
         chelicerae,
         "end_section_ratio",
         2,
-        (0.5, 0.5),
+        (0.25, 0.25),
         (0.0, None),
         label="Ratio"
     )
@@ -145,7 +145,7 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
         chelicerae,
         "middle_section_ratio",
         2,
-        (1.1, 1.2),
+        (1.0, 1.2),
         (0.0, None),
         label="Ratio",
     )
