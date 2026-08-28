@@ -34,6 +34,14 @@ class ID(StrEnum):
     BASEMAXILLA = auto()
     BASEEND = auto()
 
+class Region(StrEnum):
+    COXASOCKET = auto()
+    COXAMEMBRANE = auto()
+    LABIUMSOCKET = auto()
+    LABIUMMEMBRANE = auto()
+    MAXILLASOCKET = auto()
+    MAXILLAMEMBRANE = auto()
+
 def basesternum(*i: int | str) -> str:
     return affix_id(ID.BASESTERNUM, *i)
 def basesternummiddle(*i: int | str) -> str:
@@ -391,13 +399,13 @@ def _identify_side_inset_split(node: hou.SopNode) -> None:
     )
 
 def _classify_side(node: hou.SopNode) -> None:
-    _classify_membrane_and_socket(node, "coxasocket", "coxamembrane", 2)
+    _classify_membrane_and_socket(node, Region.COXASOCKET, Region.COXAMEMBRANE, 2)
 
 def _classify_front(node: hou.SopNode) -> None:
-    _classify_membrane_and_socket(node, "labiumsocket", "labiummembrane", 2)
+    _classify_membrane_and_socket(node, Region.LABIUMSOCKET, Region.LABIUMMEMBRANE, 2)
 
 def _classify_maxilla(node: hou.SopNode) -> None:
-    _classify_membrane_and_socket(node, "maxillasocket", "maxillamembrane")
+    _classify_membrane_and_socket(node, Region.MAXILLASOCKET, Region.MAXILLAMEMBRANE)
 
 def _classify_membrane_and_socket(
         node: hou.SopNode,
