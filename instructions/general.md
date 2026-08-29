@@ -34,3 +34,4 @@ This is a project that tries to model a spider in a biologically topology way in
 - No newline abusing
 - Choose between identifier, position or other pattern based construction based on the task's true nature.
 - DO NOT REVERT USER CHANGES unless requested, broken, problematic or buggy, or if there's a better way. DO NOT MAKE TOO MUCH STRUCTURL CHANGE unless user requested or approved.
+- DO NOT USE MCP or python script to edit files. Such operations will immediately be rejected. DO NOT EVEN TRY.

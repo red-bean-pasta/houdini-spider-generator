@@ -460,7 +460,7 @@ def _calc_membrane_spec(
     max_yaw = abs(max_yaw)
     assert min_flex > 0
     assert max_yaw <= 90
-    distance = latter_segment_size[0] * math.sin(math.radians(max_yaw))
+    distance = latter_segment_size[0] / 2 * math.sin(math.radians(max_yaw))
     distance = max(distance, minimum_return[0])
 
     if min_flex >= 180:
