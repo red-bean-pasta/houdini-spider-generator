@@ -5,6 +5,7 @@ import base_sops
 import head
 from abdomen import build as build_abdomen
 from cephalothorax import build as build_cephalothorax
+from leg import build as build_legs
 from pedicel import build as build_pedicel
 from utilities.helper import points_by_id
 from utilities.nodes import (
@@ -24,12 +25,15 @@ def build() -> hou.SopNode:
 
     opened_cepha = sopify(spider, moved_cepha, _open_cepha_pedicel)
     opened_cepha.setInput(1, abdomen_node)
-
     merged_c_a = add_merge(spider, "merge_cephalothorax_and_abdomen", opened_cepha, abdomen_node)
-    pedicel = build_pedicel(spider, merged_c_a)
 
+    pedicel = build_pedicel(spider, merged_c_a)
     merged_ca_p = add_merge(spider, "merge_main_and_pedicel", merged_c_a, pedicel)
-    fused = add_fuse(spider, "fuse_main_and_pedicel", merged_ca_p)
+
+    legs = build_legs(spider, merged_ca_p)
+    merged_all = add_merge(spider, "merge_main_and_legs", merged_ca_p, legs)
+    fused = add_fuse(spider, "fuse_main_and_legs", merged_all)
+
     fused.setDisplayFlag(True)
     fused.setRenderFlag(True)
     spider.layoutChildren()
