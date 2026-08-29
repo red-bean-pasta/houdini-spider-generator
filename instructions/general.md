@@ -27,6 +27,8 @@ This is a project that tries to model a spider in a biologically topology way in
 
 ## Agent
 - Dynamically adjust the thinking chain based on task difficulty. If the task is small, bounded or obvious, don't over-think. Balance token efficiency, intelligence and development speed.
+- For file updating and editing, use ACP tools like `client_edit_file` and `run_command`. DO NOT USE MCP tool like `apply_patch` or `pycharm_execute_terminal_command`, or python `file.write`
+
 
 ## Reiterate
 - No newline abusing
