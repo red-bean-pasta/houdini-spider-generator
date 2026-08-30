@@ -1,3 +1,8 @@
+---
+apply: by model decision
+instructions: when debugging
+---
+
 1. read `instructions/general.md`
 2. address any user provided bug
 3. inspect and solve any further problem in the `test.hip` (or other user specified file), with user specifying the target subnet. You can use commands similar to:
