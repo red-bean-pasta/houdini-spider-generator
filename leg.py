@@ -392,7 +392,7 @@ def _append_segment(
     latter_size = (latter_width, latter_height)
     latter_length = former_length * length_ratio
 
-    offset, wedge_angle = _calc_segment_offset(
+    offset, wedge_angle = _calc_segment_offset_and_wedge(
         max_yaw,
         min_flex,
         spine_ratio,
@@ -430,18 +430,18 @@ def _append_segment(
 
     return former_positions_list, latter_segment
 
-def _calc_segment_offset(
+def _calc_segment_offset_and_wedge(
         max_yaw: float,
         min_flex: float,
         spine_ratio: float,
         segment_size: tuple[tuple[float, float], tuple[float, float]],
         minimum_membrane: tuple[float, float],
 ) -> tuple[hou.Vector2, float]:
-    former_size, latter_size = segment_size
+    (former_width, former_height), (latter_width, latter_height) = segment_size
 
-    offset_x, wedge_angle = _calc_membrane_spec(max_yaw, min_flex, latter_size, minimum_membrane)
+    offset_x, wedge_angle = _calc_membrane_spec(max_yaw, min_flex, segment_size, minimum_membrane)
 
-    offset_y = (former_size[1] - latter_size[1]) * spine_ratio
+    offset_y = (former_height - latter_height) * spine_ratio
     if offset_y > 0:
         offset_y *= -1
 
@@ -452,43 +452,145 @@ def _calc_segment_offset(
 
 
 def _calc_membrane_spec(
-        max_yaw: float,
-        min_flex: float,
-        latter_segment_size: tuple[float, float],
-        minimum_return: tuple[float, float],
+        max_yaw_deg: float,
+        min_flex_deg: float,
+        segment_sections: tuple[tuple[float, float], tuple[float, float]],
+        min_return: tuple[float, float],
+        max_wedge_deg: float = 45,
+        max_distance_ratio: float = 1.0,
 ) -> tuple[float, float]:
-    max_yaw = abs(max_yaw)
-    assert min_flex > 0
-    assert max_yaw <= 90
-    distance = latter_segment_size[0] / 2 * math.sin(math.radians(max_yaw))
-    distance = max(distance, minimum_return[0])
+    """
 
-    if min_flex >= 180:
-        angle = minimum_return[1]
-    else:
-        angle = _solve_membrane_angle(min_flex, distance, latter_segment_size[1])
-        angle = max(angle, minimum_return[1])
+    :param max_yaw_deg:
+    :param min_flex_deg:
+    :param segment_sections:
+    :param min_return:
+    :param max_wedge_deg:
+    :param max_distance_ratio:
+    :return:
+    """
+    max_yaw_deg = abs(max_yaw_deg)
+    assert min_flex_deg > 0
+    assert max_yaw_deg <= 90
+
+    min_distance, min_angle = min_return
+    assert min_distance > 0 and 0 < min_angle < 45
+
+    (former_width, former_height), (latter_width, latter_height) = segment_sections
+    distance = latter_width / 2 * math.sin(math.radians(max_yaw_deg))
+    distance = max(distance, min_distance)
+
+    if min_flex_deg >= 180:
+        angle = min_angle
+        return distance, angle
+
+    min_height = min(former_height, latter_height)
+    angle = _solve_membrane_wedge_deg(
+        min_flex_deg,
+        distance,
+        min_height
+    )
+    angle = max(angle, min_return[1])
+    if angle > max_wedge_deg:
+        angle = max_wedge_deg
+        distance = _solve_membrane_thickness_deg(
+            180 - 2 * max_wedge_deg - min_flex_deg,
+            min_height,
+            max_wedge_deg,
+        )
+        distance = min(distance, latter_width * max_distance_ratio)
+        distance = max(distance, min_distance)
 
     return distance, angle
 
-def _solve_membrane_angle(
-        total: float,
-        distance: float,
-        height: float,
+
+def _solve_membrane_wedge_deg(
+        min_flex: float,
+        membrane_thickness: float,
+        min_height: float,
+        tolerance: float = 1e-5,
+        iterations: int = 50,
 ) -> float:
-    k = distance / height
+    wedge_rad = _solve_membrane_wedge_rad(
+        math.radians(min_flex),
+        membrane_thickness,
+        min_height,
+        tolerance,
+        iterations,
+    )
+    return math.degrees(wedge_rad)
 
-    # Special case: z = 90°
-    if math.isclose(total, 90.0):
-        disc = k * k + 4
-        t1 = (-k + math.sqrt(disc)) / 2
-        t2 = (-k - math.sqrt(disc)) / 2
-    else:
-        T = math.tan(math.radians(total))
-        disc = 4 + (k * k + 4) * T * T
-        t1 = (-(2 + k * T) + math.sqrt(disc)) / (2 * T)
-        t2 = (-(2 + k * T) - math.sqrt(disc)) / (2 * T)
+def _solve_membrane_wedge_rad(
+        min_flex: float,
+        membrane_thickness: float,
+        min_height: float,
+        tolerance: float = 1e-5,
+        iterations: int = 50,
+) -> float:
+    return math.pi / 2 - _solve_membrane_wedge_remain_rad(
+        min_flex,
+        membrane_thickness,
+        min_height,
+        tolerance,
+        iterations
+    )
 
-    x1 = math.degrees(math.atan(t1))
-    x2 = math.degrees(math.atan(t2))
-    return next(x for x in (x1, x1 + 180, x2, x2 + 180) if 0 < x < total)
+def _solve_membrane_wedge_remain_rad(
+        min_flex: float,
+        membrane_thickness: float,
+        min_height: float,
+        tolerance: float = 1e-5,
+        iterations: int = 50,
+) -> float:
+    """
+        :solve:
+            u: pi / 2 - wedge_angle
+            w: max rotate angle introduced by membrane thickness
+            2u - w = min_flex
+            tan(w) = d / (h / sin(u))
+        :return: in radians
+        """
+    assert min_height > 0 and membrane_thickness > 0
+
+    k = membrane_thickness / min_height
+
+    u = min_flex * 0.5
+    for _ in range(iterations):
+        w = 2.0 * u - min_flex
+        cos_w = math.cos(w)
+        assert abs(cos_w) >= tolerance, "Solver reached tan(w) singularity"
+
+        f = math.tan(w) - k * math.sin(u)  # f(u) = tan(2u-a) - k*sin(u)
+        if abs(f) < tolerance:
+            return u
+        # derivative: d/du tan(2u-a) = 2 / cos²(2u-a)
+        df = 2.0 / (cos_w * cos_w) - k * math.cos(u)
+        assert abs(df) >= tolerance, "Derivative too small"
+        u -= f / df
+
+    return u
+
+def _solve_membrane_thickness_deg(
+        needed_angle: float,
+        min_height: float,
+        wedge_angle: float,
+) -> float:
+    return _solve_membrane_thickness_rad(
+        math.radians(needed_angle),
+        min_height,
+        math.radians(wedge_angle),
+    )
+
+def _solve_membrane_thickness_rad(
+        needed_angle: float,
+        min_height: float,
+        wedge_angle: float,
+) -> float:
+    """
+    :param needed_angle: in radians
+    :param min_height:
+    :param wedge_angle: in radians
+    :return:
+    """
+    # d / tan(needed_angle) = l = min_height / cos(wedge_angle)
+    return min_height / math.cos(wedge_angle) * math.tan(needed_angle)
