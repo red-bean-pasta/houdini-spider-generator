@@ -1,10 +1,12 @@
 import math
+from enum import StrEnum, auto
 
 import hou
 
 import base_sops
 from utilities.common import (
     add_float_param,
+    add_prim_attr,
     fill_face,
     get_float_parm,
     get_parm,
@@ -22,6 +24,11 @@ from utilities.nodes import (
     add_reloadable_subnet,
     sopify,
 )
+
+
+class Region(StrEnum):
+    LEGSEGMENT = auto()
+    LEGMEMBRANE = auto()
 
 
 def build(
@@ -231,6 +238,7 @@ def _build_leg(
 ) -> list[hou.Point]:
     assert 0 <= index <= 3
     geo = node.geometry()
+    add_prim_attr(geo, "region", "")
     parent = get_parent(node)
 
     segment_height_ratio = get_float_parm(parent, "segment_height_ratio")
@@ -283,14 +291,87 @@ def _build_leg(
         end_loop = [seg_pts[4], seg_pts[5], seg_pts[7], seg_pts[6]]
         for j in range(4):
             next_j = (j + 1) % 4
-            fill_face(geo, [
+            prim = fill_face(geo, [
                 start_loop[j],
                 start_loop[next_j],
                 end_loop[next_j],
                 end_loop[j],
             ])
+            prim.setAttribValue("region", Region.LEGSEGMENT)
 
+    all_points = _fill_mebranes(all_points)
     return all_points
+
+def _fill_mebranes(
+        seg_pts: list[hou.Point],
+) -> list[hou.Point]:
+    if not seg_pts:
+        return []
+
+    geo = seg_pts[0].geometry()
+    add_prim_attr(geo, "region", "")
+    gap_pts = seg_pts[4:-4]
+    assert len(gap_pts) % 8 == 0, f"Expected gap_pts length to be a multiple of 8, got {len(gap_pts)}"
+
+    membrane_points: list[hou.Point] = []
+    num_gaps = len(gap_pts) // 8
+    for i in range(num_gaps):
+        fu1, fu2, fb1, fb2, lu1, lu2, lb1, lb2 = gap_pts[i * 8:(i + 1) * 8]
+
+        pos_fu1 = fu1.position()
+        pos_fu2 = fu2.position()
+        pos_fb1 = fb1.position()
+        pos_fb2 = fb2.position()
+        pos_lu1 = lu1.position()
+        pos_lu2 = lu2.position()
+        pos_lb1 = lb1.position()
+        pos_lb2 = lb2.position()
+
+        lf = pos_fu1.distanceTo(pos_fb1)
+        ll = pos_lu1.distanceTo(pos_lb1)
+        membrane_length = (lf + ll) * 0.5
+
+        pos_mu1 = (pos_fu1 + pos_lu1) * 0.5
+        pos_mu2 = (pos_fu2 + pos_lu2) * 0.5
+        pos_mb1 = (pos_fb1 + pos_lb1) * 0.5
+        pos_mb2 = (pos_fb2 + pos_lb2) * 0.5
+        pos_mb1[1] = (pos_mb1.y() + (pos_mu1.y() - membrane_length)) * 0.5
+        pos_mb2[1] = (pos_mb2.y() + (pos_mu2.y() - membrane_length)) * 0.5
+
+        mu1 = geo.createPoint()
+        mu2 = geo.createPoint()
+        mb1 = geo.createPoint()
+        mb2 = geo.createPoint()
+
+        mu1.setPosition(pos_mu1)
+        mu2.setPosition(pos_mu2)
+        mb1.setPosition(pos_mb1)
+        mb2.setPosition(pos_mb2)
+
+        membrane_points.extend([mu1, mu2, mb1, mb2])
+
+        former_loop = [fu1, fu2, fb2, fb1]
+        mid_loop = [mu1, mu2, mb2, mb1]
+        latter_loop = [lu1, lu2, lb2, lb1]
+
+        for j in range(4):
+            next_j = (j + 1) % 4
+            prim1 = fill_face(geo, [
+                former_loop[j],
+                former_loop[next_j],
+                mid_loop[next_j],
+                mid_loop[j],
+            ])
+            prim1.setAttribValue("region", Region.LEGMEMBRANE)
+            prim2 = fill_face(geo, [
+                mid_loop[j],
+                mid_loop[next_j],
+                latter_loop[next_j],
+                latter_loop[j],
+            ])
+            prim2.setAttribValue("region", Region.LEGMEMBRANE)
+
+    return seg_pts + membrane_points
 
 def _get_front_coxa_socket_size(node: hou.SopNode) -> tuple[float, float]:
     geo = node.geometry()
@@ -494,7 +575,7 @@ def _calc_membrane_spec(
             min_height,
             max_wedge_deg,
         )
-        max_distance = latter_width * max_distance_ratio
+        max_distance = max(former_width, latter_width) * max_distance_ratio
         if distance > max_distance:
             max_membrane_angle = math.degrees(
                 math.atan(max_distance * math.cos(math.radians(max_wedge_deg)) / min_height)
