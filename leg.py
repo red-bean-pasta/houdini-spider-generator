@@ -13,6 +13,7 @@ from utilities.common import (
     rotation_to,
     add_heading,
     remove_attrs,
+    MessagedResult,
 )
 from utilities.nodes import (
     add_fuse,
@@ -66,7 +67,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
         legs,
         "segment_section_shrink_ratio",
         1,
-        0.85,
+        0.875,
         (0.0, None),
     )
     add_float_param(
@@ -102,7 +103,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
         legs,
         "front_coxa_size_ratio",
         2,
-        (0.75, 1.1),
+        (0.75, 0.7),
         (0.0, None),
         help="Width and length relative to the base sockets' size.",
     )
@@ -110,7 +111,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
         legs,
         "front_segment_length_ratios",
         6,
-        (0.5, 3, 3, 2.5, 2.5, 1),
+        (0.8, 3.75, 3, 2.5, 2.25, 1.5),
         (0.0, None),
         hou.parmNamingScheme.Base1,
         help="Ratio relative to coxa length.",
@@ -260,7 +261,7 @@ def _build_leg(
     coxa_height = coxa_width * segment_height_ratio
     coxa_size = (coxa_width, coxa_height, coxa_length)
 
-    segments = _get_leg_points(
+    segments, messages = _get_leg_points(
         coxa_size,
         shrink_ratio,
         list(length_ratios),
@@ -268,6 +269,8 @@ def _build_leg(
         segment_specs,
         minimum_membrane,
     )
+    for msg in messages:
+        node.addWarning(msg)
 
     all_points: list[hou.Point] = []
     for seg in segments:
@@ -313,7 +316,7 @@ def _get_leg_points(
         spine_ratio: float,
         segment_specs: tuple[tuple[float, float], ...],
         minimum_membrane: tuple[float, float],
-) -> list[list[hou.Vector3]]:
+) -> MessagedResult[list[list[hou.Vector3]]]:
     assert len(segment_specs) == len(length_ratios) == 6  # TROCHANTER, FEMUR, PATELLA, TIBIA, METATARSUS, TARSUS
 
     coxa_width, coxa_height, coxa_length = coxa_size
@@ -333,6 +336,7 @@ def _get_leg_points(
         hou.Vector3(-half_w, btm_y, end_z),
     ]
 
+    messages: list[str] = []
     segments: list[list[hou.Vector3]] = [coxa]
     for i, (max_yaw, min_flex) in enumerate(segment_specs):
         length_ratio_to_former = (
@@ -340,7 +344,7 @@ def _get_leg_points(
             if i > 0 else
             length_ratios[0] / 1.0
         )
-        former_wedged, latter = _append_segment(
+        (former_wedged, latter), seg_messages = _append_segment(
             segments[-1],
             section_shrink_ratio,
             length_ratio_to_former,
@@ -349,11 +353,12 @@ def _get_leg_points(
             min_flex,
             minimum_membrane,
         )
+        messages.extend(seg_messages)
         segments[-1] = former_wedged
         segments.append(latter)
 
     assert len(segments) == 7
-    return segments
+    return MessagedResult(segments, messages)
 
 
 def _append_segment(
@@ -364,10 +369,7 @@ def _append_segment(
         max_yaw: float,
         min_flex: float,
         minimum_membrane: tuple[float, float],
-) -> tuple[
-    list[hou.Vector3],
-    list[hou.Vector3]
-]:
+) -> MessagedResult[tuple[list[hou.Vector3], list[hou.Vector3]]]:
     assert len(former_positions) == 8, f"Expected 8 positions for former segment, got {len(former_positions)}"
 
     # former_positions are ordered:
@@ -392,7 +394,7 @@ def _append_segment(
     latter_size = (latter_width, latter_height)
     latter_length = former_length * length_ratio
 
-    offset, wedge_angle = _calc_segment_offset_and_wedge(
+    (offset, wedge_angle), messages = _calc_segment_offset_and_wedge(
         max_yaw,
         min_flex,
         spine_ratio,
@@ -428,7 +430,8 @@ def _append_segment(
     former_positions_list[6] = hou.Vector3(end_btm1.x(), end_btm1.y(), new_end_btm1_z)
     former_positions_list[7] = hou.Vector3(end_btmn1.x(), end_btmn1.y(), new_end_btmn1_z)
 
-    return former_positions_list, latter_segment
+    return MessagedResult((former_positions_list, latter_segment), messages)
+
 
 def _calc_segment_offset_and_wedge(
         max_yaw: float,
@@ -436,10 +439,10 @@ def _calc_segment_offset_and_wedge(
         spine_ratio: float,
         segment_size: tuple[tuple[float, float], tuple[float, float]],
         minimum_membrane: tuple[float, float],
-) -> tuple[hou.Vector2, float]:
+) -> MessagedResult[tuple[hou.Vector2, float]]:
     (former_width, former_height), (latter_width, latter_height) = segment_size
 
-    offset_x, wedge_angle = _calc_membrane_spec(max_yaw, min_flex, segment_size, minimum_membrane)
+    (offset_x, wedge_angle), messages = _calc_membrane_spec(max_yaw, min_flex, segment_size, minimum_membrane)
 
     offset_y = (former_height - latter_height) * spine_ratio
     if offset_y > 0:
@@ -447,8 +450,9 @@ def _calc_segment_offset_and_wedge(
 
     wedged_x = abs(offset_y) * math.tan(math.radians(wedge_angle))
     offset_x -= wedged_x
+    offset_x = max(offset_x, minimum_membrane[0])
 
-    return hou.Vector2(offset_x, offset_y), wedge_angle
+    return MessagedResult((hou.Vector2(offset_x, offset_y), wedge_angle), messages)
 
 
 def _calc_membrane_spec(
@@ -458,17 +462,7 @@ def _calc_membrane_spec(
         min_return: tuple[float, float],
         max_wedge_deg: float = 45,
         max_distance_ratio: float = 1.0,
-) -> tuple[float, float]:
-    """
-
-    :param max_yaw_deg:
-    :param min_flex_deg:
-    :param segment_sections:
-    :param min_return:
-    :param max_wedge_deg:
-    :param max_distance_ratio:
-    :return:
-    """
+) -> MessagedResult[tuple[float, float]]:
     max_yaw_deg = abs(max_yaw_deg)
     assert min_flex_deg > 0
     assert max_yaw_deg <= 90
@@ -476,20 +470,22 @@ def _calc_membrane_spec(
     min_distance, min_angle = min_return
     assert min_distance > 0 and 0 < min_angle < 45
 
+    messages: list[str] = []
     (former_width, former_height), (latter_width, latter_height) = segment_sections
     distance = latter_width / 2 * math.sin(math.radians(max_yaw_deg))
     distance = max(distance, min_distance)
 
     if min_flex_deg >= 180:
         angle = min_angle
-        return distance, angle
+        return MessagedResult((distance, angle), messages)
 
     min_height = min(former_height, latter_height)
-    angle = _solve_membrane_wedge_deg(
+    angle, wedge_messages = _solve_membrane_wedge_deg(
         min_flex_deg,
         distance,
-        min_height
+        min_height,
     )
+    messages.extend(wedge_messages)
     angle = max(angle, min_return[1])
     if angle > max_wedge_deg:
         angle = max_wedge_deg
@@ -498,10 +494,22 @@ def _calc_membrane_spec(
             min_height,
             max_wedge_deg,
         )
-        distance = min(distance, latter_width * max_distance_ratio)
+        max_distance = latter_width * max_distance_ratio
+        if distance > max_distance:
+            max_membrane_angle = math.degrees(
+                math.atan(max_distance * math.cos(math.radians(max_wedge_deg)) / min_height)
+            )
+            min_flex_ceiling = 180 - 2 * max_wedge_deg - max_membrane_angle
+            messages.append(
+                f"Membrane distance ({distance:.4f}) exceeded max_distance_ratio limit "
+                f"({max_distance:.4f}). Max angle ceiling reached with max_wedge_deg={max_wedge_deg}° "
+                f"and max_distance_ratio={max_distance_ratio}, limiting min flex angle ceiling to {min_flex_ceiling:.2f}° "
+                f"(requested {min_flex_deg:.2f}°)."
+            )
+            distance = max_distance
         distance = max(distance, min_distance)
 
-    return distance, angle
+    return MessagedResult((distance, angle), messages)
 
 
 def _solve_membrane_wedge_deg(
@@ -510,15 +518,16 @@ def _solve_membrane_wedge_deg(
         min_height: float,
         tolerance: float = 1e-5,
         iterations: int = 50,
-) -> float:
-    wedge_rad = _solve_membrane_wedge_rad(
+) -> MessagedResult[float]:
+    wedge_rad, messages = _solve_membrane_wedge_rad(
         math.radians(min_flex),
         membrane_thickness,
         min_height,
         tolerance,
         iterations,
     )
-    return math.degrees(wedge_rad)
+    return MessagedResult(math.degrees(wedge_rad), messages)
+
 
 def _solve_membrane_wedge_rad(
         min_flex: float,
@@ -526,14 +535,16 @@ def _solve_membrane_wedge_rad(
         min_height: float,
         tolerance: float = 1e-5,
         iterations: int = 50,
-) -> float:
-    return math.pi / 2 - _solve_membrane_wedge_remain_rad(
+) -> MessagedResult[float]:
+    remain_rad, messages = _solve_membrane_wedge_remain_rad(
         min_flex,
         membrane_thickness,
         min_height,
         tolerance,
-        iterations
+        iterations,
     )
+    return MessagedResult(math.pi / 2 - remain_rad, messages)
+
 
 def _solve_membrane_wedge_remain_rad(
         min_flex: float,
@@ -541,7 +552,7 @@ def _solve_membrane_wedge_remain_rad(
         min_height: float,
         tolerance: float = 1e-5,
         iterations: int = 50,
-) -> float:
+) -> MessagedResult[float]:
     """
         :solve:
             u: pi / 2 - wedge_angle
@@ -555,20 +566,26 @@ def _solve_membrane_wedge_remain_rad(
     k = membrane_thickness / min_height
 
     u = min_flex * 0.5
+    f = 0.0
     for _ in range(iterations):
         w = 2.0 * u - min_flex
         cos_w = math.cos(w)
         assert abs(cos_w) >= tolerance, "Solver reached tan(w) singularity"
 
-        f = math.tan(w) - k * math.sin(u)  # f(u) = tan(2u-a) - k*sin(u)
+        f = math.tan(w) - k * math.sin(u)
         if abs(f) < tolerance:
-            return u
-        # derivative: d/du tan(2u-a) = 2 / cos²(2u-a)
+            return MessagedResult(u)
         df = 2.0 / (cos_w * cos_w) - k * math.cos(u)
         assert abs(df) >= tolerance, "Derivative too small"
         u -= f / df
 
-    return u
+    msg = (
+        f"Membrane wedge solver exhausted {iterations} iterations without converging to tolerance {tolerance:.2e} "
+        f"(final residual: {abs(f):.4e}, min_flex: {math.degrees(min_flex):.2f}°, "
+        f"membrane_thickness: {membrane_thickness:.4f}, min_height: {min_height:.4f})."
+    )
+    return MessagedResult(u, [msg])
+
 
 def _solve_membrane_thickness_deg(
         needed_angle: float,
