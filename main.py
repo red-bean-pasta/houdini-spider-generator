@@ -94,7 +94,3 @@ def _get_root() -> hou.SopNode:
     obj = hou.node("/obj")
     assert obj is not None
     return obj
-
-
-if __name__ == "__main__":
-    build()
