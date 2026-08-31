@@ -1,5 +1,6 @@
 import hou
 
+import base_sops
 from base import build as build_base
 from chelicerae import build as build_chelicerae
 from head import build as build_head
@@ -37,7 +38,9 @@ def build(spider: hou.OpNode) -> hou.SopNode:
     b_h_fuse = add_fuse(cephalothorax, "fuse_base_and_head", b_h_merge)
 
     recalculate = add_outside_recalculation(cephalothorax, "recalculate_normals", b_h_fuse)
-    _ = add_output(cephalothorax, "OUT_CEPHALOTHORAX", recalculate)
+    positioned = _position_cephalothorax(cephalothorax, recalculate)
+
+    _ = add_output(cephalothorax, "OUT_CEPHALOTHORAX", positioned)
 
     cephalothorax.layoutChildren()
     return cephalothorax
@@ -51,3 +54,13 @@ def _add_parameters(cephalothorax: hou.SopNode) -> None:
         0.035,
         (0.0, None),
     )
+
+
+def _position_cephalothorax(parent: hou.SopNode, source: hou.SopNode) -> hou.SopNode:
+    position = parent.createNode("xform", "position_cephalothorax")
+    position.setInput(0, source)
+    pattern = f'pointpattern(0, "@id={base_sops.baseend(0)}")'
+    position.parm("tx").setExpression(f'0 - point(0, {pattern}, "P", 0)')
+    position.parm("ty").setExpression(f'0 - point(0, {pattern}, "P", 1)')
+    position.parm("tz").setExpression(f'0 - point(0, {pattern}, "P", 2)')
+    return position

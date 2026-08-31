@@ -192,9 +192,9 @@ def build_sternum_faces(node: hou.SopNode) -> None:
         key=sort_by_z,
     )
     for index in range(len(center) - 2):
-        fill_face(geo, [center[index], right[index], right[index + 1], center[index + 1]])
-        fill_face(geo, [center[index], center[index + 1], left[index + 1], left[index]])
-    fill_face(geo, [center[-2], right[-1], center[-1], left[-1]])
+        fill_face(geo, [center[index], right[index], right[index + 1], center[index + 1]], True)
+        fill_face(geo, [center[index], center[index + 1], left[index + 1], left[index]], True)
+    fill_face(geo, [center[-2], right[-1], center[-1], left[-1]], True)
 
 
 def add_prim_regions(node: hou.SopNode) -> None:

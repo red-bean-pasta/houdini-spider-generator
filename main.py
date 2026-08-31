@@ -3,6 +3,7 @@ import hou
 import abdomen
 import base_sops
 import head
+import sternum_sops
 from abdomen import build as build_abdomen
 from cephalothorax import build as build_cephalothorax
 from leg import build as build_legs
@@ -17,16 +18,23 @@ from utilities.nodes import (
 )
 
 
+def cephapedicelupper() -> str:
+    return "cephapedicelupper"
+def cephapedicellower() -> str:
+    return sternum_sops.sternumrim(5)
+def cephapedicelright() -> str:
+    return "cephapedicelright"
+def cephapedicelleft() -> str:
+    return "cephapedicelleft"
+
+
 def build() -> hou.SopNode:
     spider = _add_spider()
 
     cephalothorax = build_cephalothorax(spider)
-    moved_cepha = sopify(spider, cephalothorax, _position_cephalothorax)
+    opened_cepha = sopify(spider, cephalothorax, _open_cepha_pedicel)
 
-    abdomen_node = build_abdomen(spider, cephalothorax)
-
-    opened_cepha = sopify(spider, moved_cepha, _open_cepha_pedicel)
-    opened_cepha.setInput(1, abdomen_node)
+    abdomen_node = build_abdomen(spider, opened_cepha)
 
     opened_abdomen = sopify(spider, abdomen_node, _open_abdomen_pedicel)
     merged_c_a = add_merge(spider, "merge_cephalothorax_and_abdomen", opened_cepha, opened_abdomen)
@@ -61,40 +69,57 @@ def _add_spider() -> hou.SopNode:
     return spider
 
 
-def _position_cephalothorax(cephalothorax: hou.SopNode) -> None:
-    geo: hou.Geometry = cephalothorax.geometry()
-    points = points_by_id(geo)
-    end = points[base_sops.baseend(0)].position()
-    offset = hou.Vector3() - end
-    for point in geo.points():
-        point.setPosition(point.position() + offset)
-
-
 def _open_cepha_pedicel(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
 
-    abdomen_input = node.inputs()[1]; assert abdomen_input is not None, "Expected abdomen connected as input 1"
-    ab_points = points_by_id(abdomen_input.geometry())
-    v1 = ab_points.get(abdomen.abdomenverticalrim(1)); assert v1 is not None, "Expected abdomenverticalrim1 point in abdomen"
-    new_y = v1.position().y()
-
-    cepha_points = points_by_id(geo)
-    baseend0 = cepha_points.get(base_sops.baseend(0)); assert baseend0 is not None, "Expected baseend0 point in cephalothorax"
-    headback0 = cepha_points.get(head.headback(0)); assert headback0 is not None, "Expected headback0 point in cephalothorax"
-
-    p_end = baseend0.position()
-    p_head = headback0.position()
-    dy = p_head.y() - p_end.y(); assert abs(dy) > 1e-6, "Expected non-zero y delta between baseend0 and headback0"
-    t = (new_y - p_end.y()) / dy
-    new_end = p_end + t * (p_head - p_end)
+    points = points_by_id(geo)
+    baseend0 = points.get(base_sops.baseend(0))
+    assert baseend0 is not None, "Expected baseend0 point in cephalothorax"
+    headback0 = points.get(head.headback(0))
+    assert headback0 is not None, "Expected headback0 point in cephalothorax"
+    sternumrim5 = points.get(sternum_sops.sternumrim(5))
+    assert sternumrim5 is not None, "Expected sternumrim5 point in cephalothorax"
 
     membrane_prims = [
         prim for prim in geo.prims()
         if prim.stringAttribValue("region") == "basepedicelmembrane"
     ]
-    geo.deletePrims(membrane_prims, keep_points=True)
+    assert len(membrane_prims) == 1, f"Expected 1 basepedicelmembrane prim, got {len(membrane_prims)}"
+    mem_prim = membrane_prims[0]
 
-    baseend0.setPosition(new_end)
+    p_point = None
+    for pt in mem_prim.points():
+        pt_id = pt.stringAttribValue("id")
+        if pt_id == sternum_sops.sternumrim(5):
+            continue
+        if abs(pt.position().x()) < 1e-4:
+            p_point = pt
+            pt.setAttribValue("id", cephapedicelupper())
+        elif pt.position().x() > 0:
+            pt.setAttribValue("id", cephapedicelright())
+        else:
+            pt.setAttribValue("id", cephapedicelleft())
+
+    assert p_point is not None, "Expected upper p point in basepedicelmembrane"
+
+    p_end = baseend0.position()
+    p_head = headback0.position()
+    p_p = p_point.position()
+
+    d = (p_end - p_p).length()
+    line_vec = p_head - p_end
+    line_dir = line_vec.normalized()
+
+    target_height = p_end.y() - sternumrim5.position().y()
+    dy = p_head.y() - p_end.y()
+    assert abs(dy) > 1e-6, "Expected non-zero y delta between baseend0 and headback0"
+    t = target_height / dy
+    new_end = p_end + t * line_vec
+
+    p_point.setPosition(new_end)
+    baseend0.setPosition(new_end + line_dir * d)
+
+    geo.deletePrims(membrane_prims, keep_points=True)
 
 
 def _open_abdomen_pedicel(node: hou.SopNode) -> None:
@@ -102,7 +127,10 @@ def _open_abdomen_pedicel(node: hou.SopNode) -> None:
     points = points_by_id(geo)
     origin_point = points.get(abdomen.abdomenorigin())
     assert origin_point is not None, "Expected abdomenorigin point in abdomen"
-    geo.deletePrims(origin_point.prims(), keep_points=True)
+    prims = list(origin_point.prims())
+    geo.deletePrims(prims, keep_points=True)
+    if origin_point in geo.points():
+        geo.deletePoints([origin_point])
 
 
 def _remove_coxa_sockets(node: hou.SopNode) -> None:

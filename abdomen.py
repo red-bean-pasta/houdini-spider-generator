@@ -3,8 +3,7 @@ from enum import StrEnum, auto
 
 import hou
 
-import base_sops
-import sternum_sops
+import main
 from utilities.common import (
     add_float_param,
     add_global_attr,
@@ -125,21 +124,21 @@ def _prepare_cephalothorax_info(node: hou.SopNode) -> None:
     y_min = bbox.minvec().y()
 
     points = points_by_id(geo)
-    baseend0 = points.get(base_sops.baseend(0))
-    assert baseend0 is not None, f"Expected {base_sops.baseend(0)!r} in cephalothorax"
-    basesternum5_1 = points.get(base_sops.basesternum(5, 1))
-    assert basesternum5_1 is not None, f"Expected {base_sops.basesternum(5, 1)!r} in cephalothorax"
-    sternumrim5 = points.get(sternum_sops.sternumrim(5))
-    assert sternumrim5 is not None, f"Expected {sternum_sops.sternumrim(5)!r} in cephalothorax"
+    upper = points.get(main.cephapedicelupper())
+    assert upper is not None, f"Expected {main.cephapedicelupper()!r} in cephalothorax"
+    right = points.get(main.cephapedicelright())
+    assert right is not None, f"Expected {main.cephapedicelright()!r} in cephalothorax"
+    lower = points.get(main.cephapedicellower())
+    assert lower is not None, f"Expected {main.cephapedicellower()!r} in cephalothorax"
 
-    baseend0_y = baseend0.position().y()
-    upper_span = y_max - baseend0_y
-    lower_span = baseend0_y - y_min
+    origin_y = 0.0
+    upper_span = y_max - origin_y
+    lower_span = origin_y - y_min
     assert lower_span > 1e-6, "Expected positive cephalothorax lower span"
     upper_lower_ratio = upper_span / lower_span
 
-    tmp_pedicel_length = basesternum5_1.position().x() - baseend0.position().x()
-    tmp_pedicel_height = baseend0.position().y() - sternumrim5.position().y()
+    tmp_pedicel_length = right.position().x() - upper.position().x()
+    tmp_pedicel_height = upper.position().y() - origin_y
 
     add_global_attr(geo, "tmp_cepha_size", (0.0, 0.0, 0.0))
     geo.setGlobalAttribValue("tmp_cepha_size", (cw, ch, cl))
