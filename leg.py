@@ -12,6 +12,7 @@ from utilities.common import (
     get_parm,
     get_parent,
     get_vector2_parm,
+    points_to_positions,
     rotation_to,
     add_heading,
     remove_attrs,
@@ -211,31 +212,81 @@ def _extrude_legs(
     for i in range(4):
         pt_nums = corners[i * 4:(i + 1) * 4]
         pts = [geo.iterPoints()[p] for p in pt_nums]
-        pos_top_sz = pts[0].position()
-        pos_top_bz = pts[1].position()
-        pos_btm_sz = pts[2].position()
-        pos_btm_bz = pts[3].position()
+        pos_top_sz, pos_top_bz, pos_btm_sz, pos_btm_bz = points_to_positions(pts)
 
         top_mid = (pos_top_sz + pos_top_bz) / 2.0
         btm_mid = (pos_btm_sz + pos_btm_bz) / 2.0
         origin = top_mid
         direction = hou.Vector3(top_mid.x() - btm_mid.x(), 0.0, top_mid.z() - btm_mid.z()).normalized()
 
-        leg_points = _build_leg(node, i)
+        seg_pts, mem_pts = _build_leg(node, i)
 
         q = rotation_to(hou.Vector3(0.0, 0.0, -1.0), direction)
-        for pt in leg_points:
+        for pt in seg_pts + mem_pts:
             pt.setPosition(q.rotate(pt.position()) + origin)
 
-        leg_points[0].setPosition(pos_top_bz)
-        leg_points[1].setPosition(pos_top_sz)
-        leg_points[2].setPosition(pos_btm_bz)
-        leg_points[3].setPosition(pos_btm_sz)
+        _adjust_coxa(node, pts, seg_pts[:8])
+
+
+def _adjust_coxa(
+        node: hou.SopNode,
+        socket_points: list[hou.Point],
+        coxa_points: list[hou.Point],
+) -> None:
+    assert len(coxa_points) == 8, f"Expected 8 coxa points, got {len(coxa_points)}"
+    assert len(socket_points) == 4, f"Expected 4 socket points, got {len(socket_points)}"
+
+    geo = node.geometry()
+    add_prim_attr(geo, "region", "")
+
+    su1, su2, sb1, sb2 = socket_points
+    pos_su1, pos_su2, pos_sb1, pos_sb2 = points_to_positions(socket_points)
+    pos_bu1, pos_bu2, pos_bb1, pos_bb2 = points_to_positions([coxa_points[5], coxa_points[4], coxa_points[7], coxa_points[6]])
+
+    y_d1 = abs(pos_sb1.y() - pos_bb1.y())
+    xz_d1 = math.sqrt((pos_bb1.x() - pos_sb1.x()) ** 2 + (pos_bb1.z() - pos_sb1.z()) ** 2)
+    ratio1 = (y_d1 / xz_d1) if xz_d1 > 1e-6 else 0.5
+    pos_ab1 = hou.Vector3(
+        pos_sb1.x() + (pos_bb1.x() - pos_sb1.x()) * ratio1,
+        pos_bb1.y(),
+        pos_sb1.z() + (pos_bb1.z() - pos_sb1.z()) * ratio1,
+    )
+
+    y_d2 = abs(pos_sb2.y() - pos_bb2.y())
+    xz_d2 = math.sqrt((pos_bb2.x() - pos_sb2.x()) ** 2 + (pos_bb2.z() - pos_sb2.z()) ** 2)
+    ratio2 = (y_d2 / xz_d2) if xz_d2 > 1e-6 else 0.5
+    pos_ab2 = hou.Vector3(
+        pos_sb2.x() + (pos_bb2.x() - pos_sb2.x()) * ratio2,
+        pos_bb2.y(),
+        pos_sb2.z() + (pos_bb2.z() - pos_sb2.z()) * ratio2,
+    )
+
+    pos_au1 = (pos_su1 + pos_bu1) * 0.5
+    pos_au2 = (pos_su2 + pos_bu2) * 0.5
+
+    coxa_points[0].setPosition(pos_au2)
+    coxa_points[1].setPosition(pos_au1)
+    coxa_points[2].setPosition(pos_ab2)
+    coxa_points[3].setPosition(pos_ab1)
+
+    socket_loop = [su2, su1, sb1, sb2]
+    coxa_start_loop = [coxa_points[0], coxa_points[1], coxa_points[3], coxa_points[2]]
+
+    for j in range(4):
+        next_j = (j + 1) % 4
+        prim = fill_face(geo, [
+            socket_loop[j],
+            socket_loop[next_j],
+            coxa_start_loop[next_j],
+            coxa_start_loop[j],
+        ])
+        prim.setAttribValue("region", Region.LEGSEGMENT)
+
 
 def _build_leg(
         node: hou.SopNode,
         index: int,
-) -> list[hou.Point]:
+) -> tuple[list[hou.Point], list[hou.Point]]:
     assert 0 <= index <= 3
     geo = node.geometry()
     add_prim_attr(geo, "region", "")
@@ -280,15 +331,15 @@ def _build_leg(
     for msg in messages:
         node.addWarning(msg)
 
-    all_points: list[hou.Point] = []
+    seg_pts: list[hou.Point] = []
     for seg in segments:
-        seg_pts = [geo.createPoint() for _ in range(8)]
-        for pt, pos in zip(seg_pts, seg):
+        current_seg_pts = [geo.createPoint() for _ in range(8)]
+        for pt, pos in zip(current_seg_pts, seg):
             pt.setPosition(pos)
-        all_points.extend(seg_pts)
+        seg_pts.extend(current_seg_pts)
 
-        start_loop = [seg_pts[0], seg_pts[1], seg_pts[3], seg_pts[2]]
-        end_loop = [seg_pts[4], seg_pts[5], seg_pts[7], seg_pts[6]]
+        start_loop = [current_seg_pts[0], current_seg_pts[1], current_seg_pts[3], current_seg_pts[2]]
+        end_loop = [current_seg_pts[4], current_seg_pts[5], current_seg_pts[7], current_seg_pts[6]]
         for j in range(4):
             next_j = (j + 1) % 4
             prim = fill_face(geo, [
@@ -299,14 +350,13 @@ def _build_leg(
             ])
             prim.setAttribValue("region", Region.LEGSEGMENT)
 
-    all_points = _fill_mebranes(all_points)
-    return all_points
+    return _fill_mebranes(seg_pts)
 
 def _fill_mebranes(
         seg_pts: list[hou.Point],
-) -> list[hou.Point]:
+) -> tuple[list[hou.Point], list[hou.Point]]:
     if not seg_pts:
-        return []
+        return [], []
 
     geo = seg_pts[0].geometry()
     add_prim_attr(geo, "region", "")
@@ -318,14 +368,12 @@ def _fill_mebranes(
     for i in range(num_gaps):
         fu1, fu2, fb1, fb2, lu1, lu2, lb1, lb2 = gap_pts[i * 8:(i + 1) * 8]
 
-        pos_fu1 = fu1.position()
-        pos_fu2 = fu2.position()
-        pos_fb1 = fb1.position()
-        pos_fb2 = fb2.position()
-        pos_lu1 = lu1.position()
-        pos_lu2 = lu2.position()
-        pos_lb1 = lb1.position()
-        pos_lb2 = lb2.position()
+        (
+            pos_fu1, pos_fu2,
+            pos_fb1, pos_fb2,
+            pos_lu1, pos_lu2,
+            pos_lb1, pos_lb2,
+        ) = points_to_positions(gap_pts[i * 8:(i + 1) * 8])
 
         lf = pos_fu1.distanceTo(pos_fb1)
         ll = pos_lu1.distanceTo(pos_lb1)
@@ -371,17 +419,14 @@ def _fill_mebranes(
             ])
             prim2.setAttribValue("region", Region.LEGMEMBRANE)
 
-    return seg_pts + membrane_points
+    return seg_pts, membrane_points
 
 def _get_front_coxa_socket_size(node: hou.SopNode) -> tuple[float, float]:
     geo = node.geometry()
     corners = geo.attribValue("tmp_coxa_corners")
     pts = [geo.iterPoints()[p] for p in corners[:4]]
 
-    pos_top_sz = pts[0].position()
-    pos_top_bz = pts[1].position()
-    pos_btm_sz = pts[2].position()
-    pos_btm_bz = pts[3].position()
+    pos_top_sz, pos_top_bz, pos_btm_sz, pos_btm_bz = points_to_positions(pts)
 
     width = (pos_top_bz - pos_top_sz).length()
     top_mid = (pos_top_sz + pos_top_bz) / 2.0
