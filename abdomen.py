@@ -77,7 +77,8 @@ def build(spider: hou.OpNode, cephalothorax: hou.SopNode) -> hou.SopNode:
 
     mirrored = add_mirror(abdomen, "mirror_left_faces", right_side_faces, (1, 0, 0), True, False)
     renamed = sopify(abdomen, mirrored, _rename_left_ids)
-    cleaned = sopify(abdomen, renamed, _cleanup_temp_attributes)
+    regions = sopify(abdomen, renamed, _add_regions)
+    cleaned = sopify(abdomen, regions, _cleanup_temp_attributes)
 
     recalculate = add_outside_recalculation(abdomen, "recalculate_normals", cleaned)
     add_output(abdomen, "OUT_ABDOMEN", recalculate)
@@ -316,6 +317,13 @@ def _fill_right_side_faces(node: hou.SopNode) -> None:
 
 def _rename_left_ids(node: hou.SopNode) -> None:
     rename_left_ids(node.geometry())
+
+
+def _add_regions(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    add_prim_attr(geo, "region", "abdomen")
+    for prim in geo.prims():
+        prim.setAttribValue("region", "abdomen")
 
 
 def _connect_frames_tmp(node: hou.SopNode) -> None:

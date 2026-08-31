@@ -5,7 +5,7 @@ import hou
 import abdomen
 import base_sops
 import sternum_sops
-from utilities.common import add_prim_attr
+from utilities.common import add_prim_attr, fill_face
 from utilities.helper import (
     add_id_attr,
     affix_id,
@@ -97,13 +97,30 @@ def _connect_pedicel(node: hou.SopNode) -> None:
     abdomensidelower1 = points[abdomen.abdomensidelower(1)]
     abdomensidelower_neg1 = points[abdomen.abdomensidelower(-1)]
 
+    ratio = 1/2
+    # Create duplicates shifted 1/3 toward abdomen
+    dup_baseend0 = geo.createPoint()
+    dup_baseend0.setPosition(baseend0.position() * (1 - ratio) + abdomenverticalrim1.position() * ratio)
+    dup_basesternum5_1 = geo.createPoint()
+    dup_basesternum5_1.setPosition(basesternum5_1.position() * (1 - ratio) + abdomenhorizontalrim1.position() * ratio)
+    dup_basesternum5_2 = geo.createPoint()
+    dup_basesternum5_2.setPosition(basesternum5_2.position() * (1 - ratio) + abdomenhorizontalrim_neg1.position() * ratio)
+    dup_sternumrim5 = geo.createPoint()
+    dup_sternumrim5.setPosition(sternumrim5.position() * (1 - ratio) + abdomenverticalrim_neg1.position() * ratio)
+
     add_prim_attr(geo, "region", "")
+
+    # Fill quads between originals and duplicates (buffer zone)
+    fill_face(geo, [baseend0, basesternum5_1, dup_basesternum5_1, dup_baseend0])
+    fill_face(geo, [basesternum5_1, sternumrim5, dup_sternumrim5, dup_basesternum5_1])
+    fill_face(geo, [sternumrim5, basesternum5_2, dup_basesternum5_2, dup_sternumrim5])
+    fill_face(geo, [basesternum5_2, baseend0, dup_baseend0, dup_basesternum5_2])
 
     # 1. Upper Right
     mid_ur, flt_ur = fill_pentagon(
         geo,
-        [baseend0, abdomenverticalrim1, abdomensideupper1, abdomenhorizontalrim1, basesternum5_1],
-        (baseend0, abdomenverticalrim1),
+        [dup_baseend0, abdomenverticalrim1, abdomensideupper1, abdomenhorizontalrim1, dup_basesternum5_1],
+        (dup_baseend0, abdomenverticalrim1),
     )
     mid_ur.setAttribValue("id", pedicelmiddleupper(0))
     flt_ur.setAttribValue("id", pedicelmiddleupper(1))
@@ -111,8 +128,9 @@ def _connect_pedicel(node: hou.SopNode) -> None:
     # 2. Upper Left
     mid_ul, flt_ul = fill_pentagon(
         geo,
-        [baseend0, basesternum5_2, abdomenhorizontalrim_neg1, abdomensideupper_neg1, abdomenverticalrim1],
-        (baseend0, abdomenverticalrim1),
+        [dup_baseend0, dup_basesternum5_2, abdomenhorizontalrim_neg1, abdomensideupper_neg1, abdomenverticalrim1],
+        (dup_baseend0, abdomenverticalrim1),
+        True,
     )
     mid_ul.setAttribValue("id", pedicelmiddleupper(0))
     flt_ul.setAttribValue("id", pedicelmiddleupper(-1))
@@ -120,8 +138,9 @@ def _connect_pedicel(node: hou.SopNode) -> None:
     # 3. Lower Right
     mid_lr, flt_lr = fill_pentagon(
         geo,
-        [sternumrim5, basesternum5_1, abdomenhorizontalrim1, abdomensidelower1, abdomenverticalrim_neg1],
-        (sternumrim5, abdomenverticalrim_neg1),
+        [dup_sternumrim5, dup_basesternum5_1, abdomenhorizontalrim1, abdomensidelower1, abdomenverticalrim_neg1],
+        (dup_sternumrim5, abdomenverticalrim_neg1),
+        True,
     )
     mid_lr.setAttribValue("id", pedicelmiddlelower(0))
     flt_lr.setAttribValue("id", pedicelmiddlelower(1))
@@ -129,8 +148,8 @@ def _connect_pedicel(node: hou.SopNode) -> None:
     # 4. Lower Left
     mid_ll, flt_ll = fill_pentagon(
         geo,
-        [sternumrim5, abdomenverticalrim_neg1, abdomensidelower_neg1, abdomenhorizontalrim_neg1, basesternum5_2],
-        (sternumrim5, abdomenverticalrim_neg1),
+        [dup_sternumrim5, abdomenverticalrim_neg1, abdomensidelower_neg1, abdomenhorizontalrim_neg1, dup_basesternum5_2],
+        (dup_sternumrim5, abdomenverticalrim_neg1),
     )
     mid_ll.setAttribValue("id", pedicelmiddlelower(0))
     flt_ll.setAttribValue("id", pedicelmiddlelower(-1))

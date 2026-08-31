@@ -267,7 +267,7 @@ def fill_maxilla(node: hou.SopNode) -> None:
         maxilla = geo.createPoint()
         maxilla.setPosition(start_position + direction * (center_position - start_position).length())
         maxilla.setAttribValue("id", f"basemaxilla{1 if side == 0 else -1}")
-        primitive = fill_face(geo, [start, maxilla, end, pivot])
+        primitive = fill_face(geo, [start, maxilla, end, pivot], side == 0)
         primitive.setAttribValue("region", "maxilla")
 
 def fill_pedicel_membrane(node: hou.SopNode) -> None:

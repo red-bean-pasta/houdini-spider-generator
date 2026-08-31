@@ -14,7 +14,10 @@ from utilities.common import (
     get_vector2_parm,
     get_vector3_parm,
     remove_attrs,
-    remove_groups, rotation_to, fill_face_reversed, add_heading, add_float_param,
+    remove_groups,
+    rotation_to,
+    add_heading,
+    add_float_param,
 )
 from utilities.helper import (
     add_id_attr,
@@ -342,7 +345,7 @@ def _add_end_section(node: hou.SopNode) -> None:
     for j, pt in enumerate(c3_pts, start=1):
         set_point_id(pt, cheliceraeend(j))
 
-    end_prim = fill_face_reversed(geo, c3_pts)
+    end_prim = fill_face(geo, c3_pts, True)
     add_prim_attr(geo, "region", "")
     end_prim.setAttribValue("region", "fang")
 
@@ -383,12 +386,12 @@ def _connect_sections(node: hou.SopNode) -> None:
         next_loop = loops[i + 1]
         for j in range(4):
             next_j = (j + 1) % 4
-            fill_face_reversed(geo, [
+            fill_face(geo, [
                 current_loop[j],
                 current_loop[next_j],
                 next_loop[next_j],
                 next_loop[j],
-            ])
+            ], True)
 
 
 def _extract_extrusion(node: hou.SopNode) -> None:
@@ -519,8 +522,8 @@ def _retopology_upper_membrane(node: hou.SopNode) -> None:
     geo.deletePoints(to_del_pts)
 
     id_points = points_by_id(geo)
-    fill_face_reversed(geo, [id_points[cheliceraeupper(0)], id_points[cheliceraeupper(2)], id_points[cheliceraestart(3)], id_points[cheliceraestart(2)]])
-    fill_face_reversed(geo, [id_points[cheliceraeupper(0)], id_points[cheliceraestart(-2)], id_points[cheliceraestart(-3)], id_points[cheliceraeupper(-2)]])
+    fill_face(geo, [id_points[cheliceraeupper(0)], id_points[cheliceraeupper(2)], id_points[cheliceraestart(3)], id_points[cheliceraestart(2)]], True)
+    fill_face(geo, [id_points[cheliceraeupper(0)], id_points[cheliceraestart(-2)], id_points[cheliceraestart(-3)], id_points[cheliceraeupper(-2)]], True)
 
 
 @dataclass
@@ -662,4 +665,4 @@ def _add_intermediate_section(
     for j, pt in enumerate(pts, start=1):
         set_point_id(pt, id_factory(j))
 
-    fill_face_reversed(geo, pts)
+    fill_face(geo, pts, True)

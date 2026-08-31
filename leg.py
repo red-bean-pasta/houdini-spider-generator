@@ -21,10 +21,12 @@ from utilities.common import (
 from utilities.nodes import (
     add_fuse,
     add_mirror,
+    add_outside_recalculation,
     add_output,
     add_reloadable_subnet,
     sopify,
 )
+from utilities.topology import fill_pentagon
 
 
 class Region(StrEnum):
@@ -45,7 +47,8 @@ def build(
     cleaned = sopify(legs, extruded, _remove_tmp_attributes)
     fused = add_fuse(legs, "fuse_sockets", cleaned)
     mirrored = add_mirror(legs, "mirror_left_legs", fused, (1, 0, 0), True, False)
-    add_output(legs, "OUT_LEGS", mirrored)
+    recalculated = add_outside_recalculation(legs, "recalculate_normals", mirrored)
+    add_output(legs, "OUT_LEGS", recalculated)
 
     legs.layoutChildren()
     return legs
@@ -158,22 +161,27 @@ def _extract_right_coxa(node: hou.SopNode) -> None:
     unused_points = [p for p in geo.points() if p not in used_points]
     geo.deletePoints(unused_points)
 
-    socket_points = _get_right_coxa_socket_points(node)
+    socket_corners, socket_midpoints = _get_right_coxa_socket_points(node)
     geo.deletePrims(geo.prims(), keep_points=True)
 
-    flat_pt_nums = [p.number() for group in socket_points for p in group]
+    flat_corner_nums = [p.number() for group in socket_corners for p in group]
     geo.addArrayAttrib(hou.attribType.Global, "tmp_coxa_corners", hou.attribData.Int)
-    geo.setGlobalAttribValue("tmp_coxa_corners", flat_pt_nums)
+    geo.setGlobalAttribValue("tmp_coxa_corners", flat_corner_nums)
+
+    flat_midpoint_nums = [p.number() for group in socket_midpoints for p in group]
+    geo.addArrayAttrib(hou.attribType.Global, "tmp_coxa_midpoints", hou.attribData.Int)
+    geo.setGlobalAttribValue("tmp_coxa_midpoints", flat_midpoint_nums)
 
 def _get_right_coxa_socket_points(
         node: hou.SopNode,
-) -> list[list[hou.Point]]:
+) -> tuple[list[list[hou.Point]], list[list[hou.Point]]]:
     geo = node.geometry()
     prims = sorted(geo.prims(), key=lambda p: p.boundingBox().center().z())
     assert len(prims) == 8, f"Expected 8 socket prims, got {len(prims)}"
 
     groups = [prims[i:i + 2] for i in range(0, 8, 2)]
-    result = []
+    corner_result = []
+    midpoint_result = []
     for group in groups:
         p_set = set()
         for prim in group:
@@ -186,6 +194,7 @@ def _get_right_coxa_socket_points(
         shared_pts = pts_prim0 & pts_prim1
         outer_pts = list(p_set - shared_pts)
         assert len(outer_pts) == 4, f"Expected 4 outer points, got {len(outer_pts)}"
+        assert len(shared_pts) == 2, f"Expected 2 shared points, got {len(shared_pts)}"
 
         mid_y = sum(p.position().y() for p in outer_pts) / 4.0
         top_pts = [p for p in outer_pts if p.position().y() >= mid_y]
@@ -194,13 +203,16 @@ def _get_right_coxa_socket_points(
 
         top_pts.sort(key=lambda p: p.position().z())
         btm_pts.sort(key=lambda p: p.position().z())
-        result.append([top_pts[0], top_pts[1], btm_pts[0], btm_pts[1]])
+        corner_result.append([top_pts[0], top_pts[1], btm_pts[0], btm_pts[1]])
 
-    return result
+        shared_list = sorted(list(shared_pts), key=lambda p: p.position().y(), reverse=True)
+        midpoint_result.append([shared_list[0], shared_list[1]])
+
+    return corner_result, midpoint_result
 
 
 def _remove_tmp_attributes(node: hou.SopNode) -> None:
-    remove_attrs(node.geometry(), global_attribs="tmp_coxa_corners")
+    remove_attrs(node.geometry(), global_attribs=("tmp_coxa_corners", "tmp_coxa_midpoints"))
 
 
 def _extrude_legs(
@@ -208,10 +220,14 @@ def _extrude_legs(
 ) -> None:
     geo = node.geometry()
     corners = geo.attribValue("tmp_coxa_corners")
+    midpoints = geo.attribValue("tmp_coxa_midpoints")
 
     for i in range(4):
         pt_nums = corners[i * 4:(i + 1) * 4]
         pts = [geo.iterPoints()[p] for p in pt_nums]
+        mid_pt_nums = midpoints[i * 2:(i + 1) * 2]
+        mid_pts = [geo.iterPoints()[p] for p in mid_pt_nums]
+
         pos_top_sz, pos_top_bz, pos_btm_sz, pos_btm_bz = points_to_positions(pts)
 
         top_mid = (pos_top_sz + pos_top_bz) / 2.0
@@ -225,23 +241,30 @@ def _extrude_legs(
         for pt in seg_pts + mem_pts:
             pt.setPosition(q.rotate(pt.position()) + origin)
 
-        _adjust_coxa(node, pts, seg_pts[:8])
+        _adjust_coxa(node, pts, mid_pts, seg_pts[:8])
 
 
 def _adjust_coxa(
         node: hou.SopNode,
         socket_points: list[hou.Point],
+        socket_midpoints: list[hou.Point],
         coxa_points: list[hou.Point],
 ) -> None:
     assert len(coxa_points) == 8, f"Expected 8 coxa points, got {len(coxa_points)}"
     assert len(socket_points) == 4, f"Expected 4 socket points, got {len(socket_points)}"
+    assert len(socket_midpoints) == 2, f"Expected 2 socket midpoints, got {len(socket_midpoints)}"
 
     geo = node.geometry()
     add_prim_attr(geo, "region", "")
+    prims_before = set(geo.prims())
 
     su1, su2, sb1, sb2 = socket_points
     pos_su1, pos_su2, pos_sb1, pos_sb2 = points_to_positions(socket_points)
-    pos_bu1, pos_bu2, pos_bb1, pos_bb2 = points_to_positions([coxa_points[5], coxa_points[4], coxa_points[7], coxa_points[6]])
+
+    s_mu, s_mb = socket_midpoints
+    pos_bu1, pos_bu2, pos_bb1, pos_bb2 = points_to_positions([
+        coxa_points[5], coxa_points[4], coxa_points[7], coxa_points[6]
+    ])
 
     y_d1 = abs(pos_sb1.y() - pos_bb1.y())
     xz_d1 = math.sqrt((pos_bb1.x() - pos_sb1.x()) ** 2 + (pos_bb1.z() - pos_sb1.z()) ** 2)
@@ -269,18 +292,34 @@ def _adjust_coxa(
     coxa_points[2].setPosition(pos_ab2)
     coxa_points[3].setPosition(pos_ab1)
 
-    socket_loop = [su2, su1, sb1, sb2]
-    coxa_start_loop = [coxa_points[0], coxa_points[1], coxa_points[3], coxa_points[2]]
+    eu2 = coxa_points[0]
+    eu1 = coxa_points[1]
+    eb2 = coxa_points[2]
+    eb1 = coxa_points[3]
 
-    for j in range(4):
-        next_j = (j + 1) % 4
-        prim = fill_face(geo, [
-            socket_loop[j],
-            socket_loop[next_j],
-            coxa_start_loop[next_j],
-            coxa_start_loop[j],
-        ])
-        prim.setAttribValue("region", Region.LEGSEGMENT)
+    # Upper pentagon: su1, s_mu, su2, eu2, eu1
+    mid_u, _ = fill_pentagon(
+        geo,
+        [su1, s_mu, su2, eu2, eu1],
+        (su1, eu1),
+    )
+    # Bottom pentagon: sb2, s_mb, sb1, eb1, eb2
+    mid_b, _ = fill_pentagon(
+        geo,
+        [sb2, s_mb, sb1, eb1, eb2],
+        (sb1, eb1),
+    )
+
+    # Back side (+Z): single quad
+    fill_face(geo, [sb2, su2, eu2, eb2])
+
+    # Front side (-Z): hexagon split into two quads by (mid_u, mid_b)
+    fill_face(geo, [su1, sb1, mid_b, mid_u])
+    fill_face(geo, [mid_u, mid_b, eb1, eu1])
+
+    for prim in geo.prims():
+        if prim not in prims_before:
+            prim.setAttribValue("region", Region.LEGSEGMENT)
 
 
 def _build_leg(
@@ -333,13 +372,13 @@ def _build_leg(
 
     seg_pts: list[hou.Point] = []
     for seg in segments:
-        current_seg_pts = [geo.createPoint() for _ in range(8)]
-        for pt, pos in zip(current_seg_pts, seg):
+        cur_seg_pts = [geo.createPoint() for _ in range(8)]
+        for pt, pos in zip(cur_seg_pts, seg):
             pt.setPosition(pos)
-        seg_pts.extend(current_seg_pts)
+        seg_pts.extend(cur_seg_pts)
 
-        start_loop = [current_seg_pts[0], current_seg_pts[1], current_seg_pts[3], current_seg_pts[2]]
-        end_loop = [current_seg_pts[4], current_seg_pts[5], current_seg_pts[7], current_seg_pts[6]]
+        start_loop = [cur_seg_pts[0], cur_seg_pts[1], cur_seg_pts[3], cur_seg_pts[2]]
+        end_loop = [cur_seg_pts[4], cur_seg_pts[5], cur_seg_pts[7], cur_seg_pts[6]]
         for j in range(4):
             next_j = (j + 1) % 4
             prim = fill_face(geo, [
@@ -369,10 +408,14 @@ def _fill_mebranes(
         fu1, fu2, fb1, fb2, lu1, lu2, lb1, lb2 = gap_pts[i * 8:(i + 1) * 8]
 
         (
-            pos_fu1, pos_fu2,
-            pos_fb1, pos_fb2,
-            pos_lu1, pos_lu2,
-            pos_lb1, pos_lb2,
+            pos_fu1,
+            pos_fu2,
+            pos_fb1,
+            pos_fb2,
+            pos_lu1,
+            pos_lu2,
+            pos_lb1,
+            pos_lb2,
         ) = points_to_positions(gap_pts[i * 8:(i + 1) * 8])
 
         lf = pos_fu1.distanceTo(pos_fb1)

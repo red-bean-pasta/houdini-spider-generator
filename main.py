@@ -11,6 +11,8 @@ from utilities.helper import points_by_id
 from utilities.nodes import (
     add_fuse,
     add_merge,
+    add_outside_recalculation,
+    add_reload_button,
     sopify,
 )
 
@@ -25,17 +27,21 @@ def build() -> hou.SopNode:
 
     opened_cepha = sopify(spider, moved_cepha, _open_cepha_pedicel)
     opened_cepha.setInput(1, abdomen_node)
-    merged_c_a = add_merge(spider, "merge_cephalothorax_and_abdomen", opened_cepha, abdomen_node)
+
+    opened_abdomen = sopify(spider, abdomen_node, _open_abdomen_pedicel)
+    merged_c_a = add_merge(spider, "merge_cephalothorax_and_abdomen", opened_cepha, opened_abdomen)
 
     pedicel = build_pedicel(spider, merged_c_a)
     merged_ca_p = add_merge(spider, "merge_main_and_pedicel", merged_c_a, pedicel)
+    removed_sockets = sopify(spider, merged_ca_p, _remove_coxa_sockets)
 
     legs = build_legs(spider, merged_ca_p)
-    merged_all = add_merge(spider, "merge_main_and_legs", merged_ca_p, legs)
+    merged_all = add_merge(spider, "merge_main_and_legs", removed_sockets, legs)
     fused = add_fuse(spider, "fuse_main_and_legs", merged_all)
+    recalculated = add_outside_recalculation(spider, "recalculate_normals", fused)
 
-    fused.setDisplayFlag(True)
-    fused.setRenderFlag(True)
+    recalculated.setDisplayFlag(True)
+    recalculated.setRenderFlag(True)
     spider.layoutChildren()
     return spider
 
@@ -51,6 +57,7 @@ def _add_spider() -> hou.SopNode:
     for child in spider.children():
         child.destroy()
 
+    add_reload_button(spider)
     return spider
 
 
@@ -88,6 +95,24 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
     geo.deletePrims(membrane_prims, keep_points=True)
 
     baseend0.setPosition(new_end)
+
+
+def _open_abdomen_pedicel(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    points = points_by_id(geo)
+    origin_point = points.get(abdomen.abdomenorigin())
+    assert origin_point is not None, "Expected abdomenorigin point in abdomen"
+    geo.deletePrims(origin_point.prims(), keep_points=True)
+
+
+def _remove_coxa_sockets(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    socket_prims = [
+        prim for prim in geo.prims()
+        if prim.stringAttribValue("region").startswith(base_sops.Region.COXASOCKET)
+    ]
+    assert len(socket_prims) == 16, f"Expected 16 coxa socket prims, got {len(socket_prims)}"
+    geo.deletePrims(socket_prims, keep_points=True)
 
 
 def _get_root() -> hou.SopNode:
