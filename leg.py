@@ -25,7 +25,7 @@ from utilities.nodes import (
     add_reloadable_subnet,
     sopify,
 )
-from utilities.topology import fill_pentagon_with_buffer
+from utilities.topology import fill_pentagon_with_buffer, loop_cut
 
 
 class Region(StrEnum):
@@ -64,6 +64,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
         1,
         0.15,
         (0.0, 1.0),
+        help="Ratio relative to coxa width, fixed across segments.",
     )
     add_float_param(
         legs,
@@ -247,7 +248,7 @@ def _extrude_legs(
         for pt in seg_pts + mem_pts:
             pt.setPosition(q.rotate(pt.position()) + origin)
 
-        _adjust_coxa(node, pts, mid_pts, seg_pts[:8])
+        _adjust_coxa(node, pts, mid_pts, seg_pts[:16])
 
 
 def _adjust_coxa(
@@ -256,20 +257,22 @@ def _adjust_coxa(
         socket_midpoints: list[hou.Point],
         coxa_points: list[hou.Point],
 ) -> None:
-    assert len(coxa_points) == 8, f"Expected 8 coxa points, got {len(coxa_points)}"
+    assert len(coxa_points) == 16, f"Expected 16 coxa points, got {len(coxa_points)}"
     assert len(socket_points) == 4, f"Expected 4 socket points, got {len(socket_points)}"
     assert len(socket_midpoints) == 2, f"Expected 2 socket midpoints, got {len(socket_midpoints)}"
 
     geo = node.geometry()
     add_prim_attr(geo, "region", "")
-    prims_before = set(geo.prims())
 
     su1, su2, sb1, sb2 = socket_points
     pos_su1, pos_su2, pos_sb1, pos_sb2 = points_to_positions(socket_points)
     s_mu, s_mb = socket_midpoints
-    pos_bu1, pos_bu2, pos_bb1, pos_bb2 = points_to_positions([
-        coxa_points[5], coxa_points[4], coxa_points[7], coxa_points[6]
-    ])
+
+    coxa_start_pts = coxa_points[:4]
+    coxa_start_support_pts = coxa_points[4:8]
+    coxa_end_pts = coxa_points[12:16]
+
+    pos_bu2, pos_bu1, pos_bb2, pos_bb1 = points_to_positions(coxa_end_pts)
 
     y_d1 = abs(pos_sb1.y() - pos_bb1.y())
     xz_d1 = math.sqrt((pos_bb1.x() - pos_sb1.x()) ** 2 + (pos_bb1.z() - pos_sb1.z()) ** 2)
@@ -289,19 +292,26 @@ def _adjust_coxa(
     )
     pos_au1 = (pos_su1 + pos_bu1) * 0.5
     pos_au2 = (pos_su2 + pos_bu2) * 0.5
-    coxa_points[0].setPosition(pos_au2)
-    coxa_points[1].setPosition(pos_au1)
-    coxa_points[2].setPosition(pos_ab2)
-    coxa_points[3].setPosition(pos_ab1)
 
-    eu2 = coxa_points[0]
-    eu1 = coxa_points[1]
-    eb2 = coxa_points[2]
-    eb1 = coxa_points[3]
+    coxa_start_support_pts[0].setPosition(pos_au2)
+    coxa_start_support_pts[1].setPosition(pos_au1)
+    coxa_start_support_pts[2].setPosition(pos_ab2)
+    coxa_start_support_pts[3].setPosition(pos_ab1)
+
+    eu2 = coxa_start_support_pts[0]
+    eu1 = coxa_start_support_pts[1]
+    eb2 = coxa_start_support_pts[2]
+    eb1 = coxa_start_support_pts[3]
 
     parent = get_parent(node)
     support_loop_ratio = get_float_parm(parent, "support_loop_ratio")
-    buffer_ratio = 1.0 - support_loop_ratio
+
+    coxa_width = coxa_start_pts[0].position().distanceTo(coxa_start_pts[1].position())
+    cut_length = coxa_width * support_loop_ratio
+    pos_su_mid = (pos_su1 + pos_su2) * 0.5
+    pos_au_mid = (pos_au1 + pos_au2) * 0.5
+    dist_socket_to_support = pos_su_mid.distanceTo(pos_au_mid)
+    buffer_ratio = 1.0 - cut_length / dist_socket_to_support
 
     # Upper pentagon: su1, s_mu, su2, eu2, eu1
     mid_u, _, b_eu2, b_eu1 = fill_pentagon_with_buffer(
@@ -324,14 +334,12 @@ def _adjust_coxa(
     fill_face(geo, [sb2, su2, b_eu2, b_eb2])
     fill_face(geo, [b_eb2, b_eu2, eu2, eb2])
 
-    # Front side (-Z): split into 3 quads by (mid_u, mid_b) and (b_eu1, b_eb1)
+    # Front side (-Z): split into 3 quads by (mid_u, mid_b) and (b_eu1, b_eu1)
     fill_face(geo, [su1, sb1, mid_b, mid_u])
     fill_face(geo, [mid_u, mid_b, b_eb1, b_eu1])
     fill_face(geo, [b_eu1, b_eb1, eb1, eu1])
 
-    for prim in geo.prims():
-        if prim not in prims_before:
-            prim.setAttribValue("region", Region.LEGSEGMENT)
+    geo.deletePoints(coxa_start_pts)
 
 
 def _build_leg(
@@ -344,7 +352,8 @@ def _build_leg(
     seg_pts, warnings = _build_segments(node, leg_index)
     for w in warnings:
         node.addWarning(w)
-    return _fill_mebranes(seg_pts)
+    all_seg_pts = _add_loop_cuts(node, seg_pts)
+    return _fill_mebranes(all_seg_pts)
 
 def _build_segments(
         node: hou.SopNode,
@@ -413,6 +422,62 @@ def _build_segments(
 
     return MessagedResult(seg_pts, messages)
 
+def _add_loop_cuts(
+        node: hou.SopNode,
+        seg_pts: list[hou.Point],
+) -> list[hou.Point]:
+    assert len(seg_pts) % 8 == 0, f"Expected seg_pts length to be a multiple of 8, got {len(seg_pts)}"
+    geo = node.geometry()
+    parent = get_parent(node)
+    support_loop_ratio = get_float_parm(parent, "support_loop_ratio")
+
+    coxa_width = seg_pts[0].position().distanceTo(seg_pts[1].position())
+    cut_length = coxa_width * support_loop_ratio
+
+    num_segs = len(seg_pts) // 8
+    all_seg_pts: list[hou.Point] = []
+
+    for i in range(num_segs):
+        cur_pts = seg_pts[i * 8:(i + 1) * 8]
+        p0, p1, p2, p3, p4, p5, p6, p7 = cur_pts
+
+        edge1 = geo.findEdge(p0, p4)
+        assert edge1 is not None, "Expected edge between p0 and p4"
+        prim1 = [p for p in edge1.prims() if p1 in p.points()][0]
+        start_cut_pts, _ = loop_cut(
+            geo,
+            prim1,
+            p0,
+            p4,
+            cut_length,
+            use_ratio=False,
+        )
+        m0, m1, m3, m2 = start_cut_pts
+        ordered_start_cut = [m0, m1, m2, m3]
+
+        edge2 = geo.findEdge(p4, m0)
+        assert edge2 is not None, "Expected edge between p4 and m0"
+        prim2 = [p for p in edge2.prims() if m1 in p.points()][0]
+        end_cut_pts, _ = loop_cut(
+            geo,
+            prim2,
+            p4,
+            m0,
+            cut_length,
+            use_ratio=False,
+        )
+        em0, em1, em3, em2 = end_cut_pts
+        ordered_end_cut = [em0, em1, em2, em3]
+
+        all_seg_pts.extend([
+            p0, p1, p2, p3,
+            ordered_start_cut[0], ordered_start_cut[1], ordered_start_cut[2], ordered_start_cut[3],
+            ordered_end_cut[0], ordered_end_cut[1], ordered_end_cut[2], ordered_end_cut[3],
+            p4, p5, p6, p7,
+        ])
+
+    return all_seg_pts
+
 def _fill_mebranes(
         seg_pts: list[hou.Point],
 ) -> tuple[list[hou.Point], list[hou.Point]]:
@@ -421,13 +486,15 @@ def _fill_mebranes(
 
     geo = seg_pts[0].geometry()
     add_prim_attr(geo, "region", "")
-    gap_pts = seg_pts[4:-4]
-    assert len(gap_pts) % 8 == 0, f"Expected gap_pts length to be a multiple of 8, got {len(gap_pts)}"
+    assert len(seg_pts) % 16 == 0, f"Expected seg_pts length to be a multiple of 16, got {len(seg_pts)}"
 
     membrane_points: list[hou.Point] = []
-    num_gaps = len(gap_pts) // 8
-    for i in range(num_gaps):
-        fu1, fu2, fb1, fb2, lu1, lu2, lb1, lb2 = gap_pts[i * 8:(i + 1) * 8]
+    num_segs = len(seg_pts) // 16
+    for i in range(num_segs - 1):
+        former_end = seg_pts[i * 16 + 12:(i + 1) * 16]
+        latter_start = seg_pts[(i + 1) * 16:(i + 1) * 16 + 4]
+        fu1, fu2, fb1, fb2 = former_end
+        lu1, lu2, lb1, lb2 = latter_start
 
         (
             pos_fu1,
@@ -438,7 +505,7 @@ def _fill_mebranes(
             pos_lu2,
             pos_lb1,
             pos_lb2,
-        ) = points_to_positions(gap_pts[i * 8:(i + 1) * 8])
+        ) = points_to_positions(former_end + latter_start)
 
         lf = pos_fu1.distanceTo(pos_fb1)
         ll = pos_lu1.distanceTo(pos_lb1)

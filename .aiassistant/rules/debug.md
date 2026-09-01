@@ -39,3 +39,6 @@ print("All nodes cooked successfully.")
 '
 ```
 to navigate. This command is more as an example. You can use your own.
+
+## NOTE
+Do code analyzing for most of the debugging. While command example is given, it doesn't mean you can simply run commands forever yet with little gain. Try find bug statically. Use commands only if it really helps and yields good result, or when simple code analyzing fails.
