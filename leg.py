@@ -260,7 +260,6 @@ def _adjust_coxa(
 
     su1, su2, sb1, sb2 = socket_points
     pos_su1, pos_su2, pos_sb1, pos_sb2 = points_to_positions(socket_points)
-
     s_mu, s_mb = socket_midpoints
     pos_bu1, pos_bu2, pos_bb1, pos_bb2 = points_to_positions([
         coxa_points[5], coxa_points[4], coxa_points[7], coxa_points[6]
@@ -274,7 +273,6 @@ def _adjust_coxa(
         pos_bb1.y(),
         pos_sb1.z() + (pos_bb1.z() - pos_sb1.z()) * ratio1,
     )
-
     y_d2 = abs(pos_sb2.y() - pos_bb2.y())
     xz_d2 = math.sqrt((pos_bb2.x() - pos_sb2.x()) ** 2 + (pos_bb2.z() - pos_sb2.z()) ** 2)
     ratio2 = (y_d2 / xz_d2) if xz_d2 > 1e-6 else 0.5
@@ -283,10 +281,8 @@ def _adjust_coxa(
         pos_bb2.y(),
         pos_sb2.z() + (pos_bb2.z() - pos_sb2.z()) * ratio2,
     )
-
     pos_au1 = (pos_su1 + pos_bu1) * 0.5
     pos_au2 = (pos_su2 + pos_bu2) * 0.5
-
     coxa_points[0].setPosition(pos_au2)
     coxa_points[1].setPosition(pos_au1)
     coxa_points[2].setPosition(pos_ab2)
@@ -296,7 +292,6 @@ def _adjust_coxa(
     eu1 = coxa_points[1]
     eb2 = coxa_points[2]
     eb1 = coxa_points[3]
-
     # Upper pentagon: su1, s_mu, su2, eu2, eu1
     mid_u, _ = fill_pentagon(
         geo,
@@ -309,7 +304,6 @@ def _adjust_coxa(
         [sb2, s_mb, sb1, eb1, eb2],
         (sb1, eb1),
     )
-
     # Back side (+Z): single quad
     fill_face(geo, [sb2, su2, eu2, eb2])
 
@@ -356,11 +350,12 @@ def _build_leg(
         coxa_width = front_coxa_width * leg_width_ratios[index - 1]
         coxa_length = front_coxa_length * leg_length_ratios[index - 1]
 
-    coxa_height = coxa_width * segment_height_ratio
+    coxa_height = coxa_width
     coxa_size = (coxa_width, coxa_height, coxa_length)
 
     segments, messages = _get_leg_points(
         coxa_size,
+        segment_height_ratio,
         shrink_ratio,
         list(length_ratios),
         spine_ratio,
@@ -480,6 +475,7 @@ def _get_front_coxa_socket_size(node: hou.SopNode) -> tuple[float, float]:
 
 def _get_leg_points(
         coxa_size: tuple[float, float, float],
+        segment_height_ratio: float,
         section_shrink_ratio: float,
         length_ratios: list[float],
         spine_ratio: float,
@@ -513,8 +509,10 @@ def _get_leg_points(
             if i > 0 else
             length_ratios[0] / 1.0
         )
+        cur_height_ratio = 1.0 if i == 0 else segment_height_ratio
         (former_wedged, latter), seg_messages = _append_segment(
             segments[-1],
+            cur_height_ratio,
             section_shrink_ratio,
             length_ratio_to_former,
             spine_ratio,
@@ -532,6 +530,7 @@ def _get_leg_points(
 
 def _append_segment(
         former_positions: list[hou.Vector3],
+        height_ratio: float,
         section_shrink_ratio: float,
         length_ratio: float,
         spine_ratio: float,
@@ -559,7 +558,7 @@ def _append_segment(
     former_size = (former_width, former_height)
 
     latter_width = former_width * section_shrink_ratio
-    latter_height = former_height * section_shrink_ratio
+    latter_height = latter_width * height_ratio
     latter_size = (latter_width, latter_height)
     latter_length = former_length * length_ratio
 
