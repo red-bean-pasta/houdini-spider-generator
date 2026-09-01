@@ -159,6 +159,7 @@ def descend_sternum_spine(node: hou.SopNode) -> None:
     assert control is not None, "Expected CONTROL node"
 
     depth = get_float_parm(control, "half_width") * get_float_parm(parent, "width_depth_ratio")
+    power = get_float_parm(parent, "spine_descend_handle")
     points = points_by_id(geo)
 
     top = points[sternumrim(0)].position()
@@ -173,10 +174,23 @@ def descend_sternum_spine(node: hou.SopNode) -> None:
             continue
         position = point.position()
         if position[2] <= middle[2]:
-            y = -abs(position[2] - top[2]) / upper_span * depth
+            y = _get_eased_depth(position[2], top[2], middle[2], 0.0, -depth, power)
         else:
-            y = -abs(bottom[2] - position[2]) / lower_span * depth
+            y = _get_eased_depth(position[2], bottom[2], middle[2], 0.0, -depth, power)
         point.setPosition((position[0], y, position[2]))
+
+def _get_eased_depth(
+    x: float,
+    x0: float,
+    x1: float,
+    y0: float,
+    y1: float,
+    power: float,
+) -> float:
+    span = x1 - x0
+    assert span != 0.0, "Expected non-zero span for easing interpolation"
+    t = max(0.0, min(1.0, (x - x0) / span))
+    return y0 + (y1 - y0) * (t ** power)
 
 
 def build_sternum_faces(node: hou.SopNode) -> None:

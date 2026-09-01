@@ -64,9 +64,16 @@ def _add_parameters(sternum: hou.SopNode) -> None:
     )
     add_float_param(
         sternum,
+        "spine_descend_handle",
+        1,
+        0.75,
+        (0.0, None),
+    )
+    add_float_param(
+        sternum,
         "spine_loop_ratio",
         1,
-        0.5,
+        1.0,
         (0.0, 1.0),
         help="Ratio along radial spokes from spine to rim for the intermediate spine loop",
     )

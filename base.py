@@ -50,17 +50,17 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
 def _add_parameters(base: hou.SopNode) -> None:
     add_float_param(
         base,
-        "coxa_width_ratio",
-        2,
-        (1.0, 1.2),
+        "coxa_height_ratio",
+        1,
+        1.2,
         (0.0, None),
     )
     add_float_param(
         base,
-        "coxa_depth_ratio",
+        "coxa_rotation_angle",
         1,
-        0.35,
-        (0.0, None),
+        36,
+        (0.0, 90.0),
     )
     add_float_param(
         base,

@@ -91,9 +91,7 @@ def build_coxa_flaps(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
 
-    width_x = get_float_parm(parent, "coxa_width_ratiox")
-    width_y = get_float_parm(parent, "coxa_width_ratioy")
-    flap_ratio = width_y / max(width_x, 1e-6)
+    flap_ratio = get_float_parm(parent, "coxa_height_ratio")
 
     flap_edges = [
         tuple(edge.points())
@@ -193,22 +191,28 @@ def cleanup_connected_side_flap_ids(node: hou.SopNode) -> None:
 def rotate_coxa_flaps(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
-    height_ratio = get_float_parm(parent, "coxa_width_ratioy") / max(get_float_parm(parent, "coxa_width_ratiox"), 1e-6)
-    depth_ratio = min(get_float_parm(parent, "coxa_depth_ratio"), height_ratio)
-    rise_scale = depth_ratio / height_ratio if height_ratio > 1e-6 else 0.0
+    angle = get_float_parm(parent, "coxa_rotation_angle")
+    clamped_angle = max(0.0, min(90.0, angle))
+    rad = math.radians(clamped_angle)
+    sin_angle = math.sin(rad)
+    cos_angle = math.cos(rad)
 
+    rotated_points = set()
     for primitive in geo.prims():
         points = list(primitive.points())
         assert len(points) == 4, f"Expected a coxa flap quad, got {len(points)} points"
         for origin, outer in ((points[3], points[0]), (points[2], points[1])):
+            if outer.number() in rotated_points:
+                continue
+            rotated_points.add(outer.number())
+
             offset = outer.position() - origin.position()
             height = offset.length()
             if height <= 1e-6:
                 continue
 
-            rise = height * rise_scale
-            projected = math.sqrt(max(0.0, height * height - rise * rise))
-            projection_scale = projected / height
+            rise = height * sin_angle
+            projection_scale = cos_angle
             offset = hou.Vector3(
                 offset[0] * projection_scale,
                 rise,
