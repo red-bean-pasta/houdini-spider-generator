@@ -1,3 +1,5 @@
+import math
+
 import hou
 
 import abdomen
@@ -8,6 +10,7 @@ from abdomen import build as build_abdomen
 from cephalothorax import build as build_cephalothorax
 from leg import build as build_legs
 from pedicel import build as build_pedicel
+from utilities.common import fill_face
 from utilities.helper import points_by_id
 from utilities.nodes import (
     add_fuse,
@@ -19,13 +22,13 @@ from utilities.nodes import (
 
 
 def cephapedicelupper() -> str:
-    return "cephapedicelupper"
+    return base_sops.baseend(0)
 def cephapedicellower() -> str:
-    return sternum_sops.sternumrim(5)
+    return "cephapedicellower"
 def cephapedicelright() -> str:
-    return "cephapedicelright"
+    return base_sops.basesternum(5, 1)
 def cephapedicelleft() -> str:
-    return "cephapedicelleft"
+    return base_sops.basesternum(5, 2)
 
 
 def build() -> hou.SopNode:
@@ -71,15 +74,25 @@ def _add_spider() -> hou.SopNode:
 
 def _open_cepha_pedicel(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-
     points = points_by_id(geo)
+
     baseend0 = points.get(base_sops.baseend(0))
     assert baseend0 is not None, "Expected baseend0 point in cephalothorax"
     headback0 = points.get(head.headback(0))
     assert headback0 is not None, "Expected headback0 point in cephalothorax"
     sternumrim5 = points.get(sternum_sops.sternumrim(5))
     assert sternumrim5 is not None, "Expected sternumrim5 point in cephalothorax"
+    bs5_1 = points.get(base_sops.basesternum(5, 1))
+    assert bs5_1 is not None, "Expected basesternum5_1 point in cephalothorax"
+    bs5_2 = points.get(base_sops.basesternum(5, 2))
+    assert bs5_2 is not None, "Expected basesternum5_2 point in cephalothorax"
 
+    p_lower, right_inner, left_inner = _identify_pedicel_membrane_points(geo)
+    _position_pedicel_opening_points(baseend0, headback0, sternumrim5, p_lower)
+    _adjust_side_cepha_pedicel_points(bs5_1, bs5_2, right_inner, left_inner)
+    _reconnect_sternum_pedicel_loop(geo, p_lower, left_inner, right_inner, sternumrim5, bs5_1, bs5_2)
+
+def _identify_pedicel_membrane_points(geo: hou.Geometry) -> tuple[hou.Point, hou.Point, hou.Point]:
     membrane_prims = [
         prim for prim in geo.prims()
         if prim.stringAttribValue("region") == "basepedicelmembrane"
@@ -87,39 +100,80 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
     assert len(membrane_prims) == 1, f"Expected 1 basepedicelmembrane prim, got {len(membrane_prims)}"
     mem_prim = membrane_prims[0]
 
-    p_point = None
+    p_lower = None
+    right_inner = None
+    left_inner = None
     for pt in mem_prim.points():
         pt_id = pt.stringAttribValue("id")
         if pt_id == sternum_sops.sternumrim(5):
             continue
         if abs(pt.position().x()) < 1e-4:
-            p_point = pt
-            pt.setAttribValue("id", cephapedicelupper())
+            p_lower = pt
+            pt.setAttribValue("id", cephapedicellower())
         elif pt.position().x() > 0:
-            pt.setAttribValue("id", cephapedicelright())
+            right_inner = pt
         else:
-            pt.setAttribValue("id", cephapedicelleft())
+            left_inner = pt
 
-    assert p_point is not None, "Expected upper p point in basepedicelmembrane"
+    assert p_lower is not None, "Expected lower p point in basepedicelmembrane"
+    assert right_inner is not None, "Expected right inner point in basepedicelmembrane"
+    assert left_inner is not None, "Expected left inner point in basepedicelmembrane"
+    return p_lower, right_inner, left_inner
 
+def _position_pedicel_opening_points(
+    baseend0: hou.Point,
+    headback0: hou.Point,
+    sternumrim5: hou.Point,
+    p_lower: hou.Point,
+) -> None:
     p_end = baseend0.position()
     p_head = headback0.position()
-    p_p = p_point.position()
+    p_p = p_lower.position()
+    p_sternum = sternumrim5.position()
 
     d = (p_end - p_p).length()
-    line_vec = p_head - p_end
-    line_dir = line_vec.normalized()
 
-    target_height = p_end.y() - sternumrim5.position().y()
+    target_height = p_end.y() - p_sternum.y()
     dy = p_head.y() - p_end.y()
     assert abs(dy) > 1e-6, "Expected non-zero y delta between baseend0 and headback0"
     t = target_height / dy
-    new_end = p_end + t * line_vec
+    new_end = p_end + t * (p_head - p_end)
 
-    p_point.setPosition(new_end)
-    baseend0.setPosition(new_end + line_dir * d)
+    baseend0.setPosition(new_end)
 
-    geo.deletePrims(membrane_prims, keep_points=True)
+    dir_sternum_to_orig_end = (p_end - p_sternum).normalized()
+    p_lower.setPosition(p_sternum + dir_sternum_to_orig_end * d)
+
+def _adjust_side_cepha_pedicel_points(
+    bs5_1: hou.Point,
+    bs5_2: hou.Point,
+    right_inner: hou.Point,
+    left_inner: hou.Point,
+) -> None:
+    for r, c1 in ((bs5_1, right_inner), (bs5_2, left_inner)):
+        offset = r.position() - c1.position()
+        dx, dz = offset.x(), offset.z()
+        len_xz = math.sqrt(dx**2 + dz**2)
+        new_z = c1.position().z() + math.copysign(len_xz, dz)
+        r.setPosition(hou.Vector3(c1.position().x(), r.position().y(), new_z))
+
+def _reconnect_sternum_pedicel_loop(
+    geo: hou.Geometry,
+    p_lower: hou.Point,
+    left_inner: hou.Point,
+    right_inner: hou.Point,
+    sternumrim5: hou.Point,
+    bs5_1: hou.Point,
+    bs5_2: hou.Point,
+) -> None:
+    p_prims = list(p_lower.prims())
+    geo.deletePrims(p_prims, keep_points=True)
+
+    f_left = fill_face(geo, [bs5_2, p_lower, sternumrim5, left_inner])
+    f_left.setAttribValue("region", base_sops.Region.BASEBUFFERMEMBRANE)
+
+    f_right = fill_face(geo, [bs5_1, p_lower, sternumrim5, right_inner], True)
+    f_right.setAttribValue("region", base_sops.Region.BASEBUFFERMEMBRANE)
 
 
 def _open_abdomen_pedicel(node: hou.SopNode) -> None:
