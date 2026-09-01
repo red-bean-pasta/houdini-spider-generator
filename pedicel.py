@@ -96,16 +96,16 @@ def _connect_pedicel(node: hou.SopNode) -> None:
     abdomensidelower1 = points[abdomen.abdomensidelower(1)]
     abdomensidelower_neg1 = points[abdomen.abdomensidelower(-1)]
 
-    ratio = 4/5
+    ratio = 0.035
     # Create duplicates shifted toward abdomen
     dup_upper = geo.createPoint()
-    dup_upper.setPosition(upper.position() * (1 - ratio) + abdomenverticalrim1.position() * ratio)
+    dup_upper.setPosition(upper.position() * ratio + abdomenverticalrim1.position() * (1 - ratio))
     dup_right = geo.createPoint()
-    dup_right.setPosition(right.position() * (1 - ratio) + abdomenhorizontalrim1.position() * ratio)
+    dup_right.setPosition(right.position() * ratio + abdomenhorizontalrim1.position() * (1 - ratio))
     dup_left = geo.createPoint()
-    dup_left.setPosition(left.position() * (1 - ratio) + abdomenhorizontalrim_neg1.position() * ratio)
+    dup_left.setPosition(left.position() * ratio + abdomenhorizontalrim_neg1.position() * (1 - ratio))
     dup_lower = geo.createPoint()
-    dup_lower.setPosition(lower.position() * (1 - ratio) + abdomenverticalrim_neg1.position() * ratio)
+    dup_lower.setPosition(lower.position() * ratio + abdomenverticalrim_neg1.position() * (1 - ratio))
 
     add_prim_attr(geo, "region", "")
 

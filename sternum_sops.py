@@ -8,6 +8,7 @@ from utilities.common import (
     fill_face,
     get_float_parm,
     get_parent,
+    is_equal_approx,
     remove_groups,
 )
 from utilities.helper import (
@@ -180,23 +181,74 @@ def descend_sternum_spine(node: hou.SopNode) -> None:
 
 def build_sternum_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
-    sort_by_z = lambda point: point.position().z()
-    center = sorted(
-        (point for point in geo.points() if point.position().x() == 0),
-        key=sort_by_z,
-    )
-    right = sorted(
-        (point for point in geo.points() if point.position().x() > 0),
-        key=sort_by_z,
-    )
-    left = sorted(
-        (point for point in geo.points() if point.position().x() < 0),
-        key=sort_by_z,
-    )
+    parent = get_parent(node)
+    t = get_float_parm(parent, "spine_loop_ratio")
+    assert 0.0 < t <= 1.0
+
+    sort_by_z = lambda p: p.position().z()
+    center = sorted((p for p in geo.points() if p.position().x() == 0), key=sort_by_z)
+    right = sorted((p for p in geo.points() if p.position().x() > 0), key=sort_by_z)
+    left = sorted((p for p in geo.points() if p.position().x() < 0), key=sort_by_z)
+
+    if is_equal_approx(t, 1.0):
+        _build_base_faces(geo, center, right, left)
+    else:
+        _build_subdivided_spine_faces(geo, center, right, left, t)
+
+def _build_base_faces(
+    geo: hou.Geometry,
+    center: list[hou.Point],
+    right: list[hou.Point],
+    left: list[hou.Point],
+) -> None:
     for index in range(len(center) - 2):
         fill_face(geo, [center[index], right[index], right[index + 1], center[index + 1]], True)
         fill_face(geo, [center[index], center[index + 1], left[index + 1], left[index]], True)
     fill_face(geo, [center[-2], right[-1], center[-1], left[-1]], True)
+
+def _build_subdivided_spine_faces(
+    geo: hou.Geometry,
+    center: list[hou.Point],
+    right: list[hou.Point],
+    left: list[hou.Point],
+    t: float,
+) -> None:
+    def _lerp(p1: hou.Point, p2: hou.Point, ratio: float) -> hou.Point:
+        pt = geo.createPoint()
+        pt.setPosition(p1.position() * (1.0 - ratio) + p2.position() * ratio)
+        return pt
+
+    loop_r = [_lerp(c, r, t) for c, r in zip(center[1:-1], right[1:])]
+    loop_l = [_lerp(c, l, t) for c, l in zip(center[1:-1], left[1:])]
+    loop_c = _lerp(center[-2], center[-1], t)
+
+    m1 = _lerp(center[1], center[0], t)
+    m2_r = _lerp(center[1], right[0], t)
+    m3_r = loop_r[0]
+    m2_l = _lerp(center[1], left[0], t)
+    m3_l = loop_l[0]
+
+    # Front 3 faces (Right)
+    fill_face(geo, [center[1], m1, m2_r, m3_r], True)
+    fill_face(geo, [m3_r, m2_r, right[0], right[1]], True)
+    fill_face(geo, [m2_r, m1, center[0], right[0]], True)
+
+    # Front 3 faces (Left)
+    fill_face(geo, [center[1], m3_l, m2_l, m1], True)
+    fill_face(geo, [m3_l, left[1], left[0], m2_l], True)
+    fill_face(geo, [m2_l, left[0], center[0], m1], True)
+
+    # Side quads along spokes
+    for i in range(len(loop_r) - 1):
+        fill_face(geo, [center[i + 1], loop_r[i], loop_r[i + 1], center[i + 2]], True)
+        fill_face(geo, [loop_r[i], right[i + 1], right[i + 2], loop_r[i + 1]], True)
+        fill_face(geo, [center[i + 1], center[i + 2], loop_l[i + 1], loop_l[i]], True)
+        fill_face(geo, [loop_l[i], loop_l[i + 1], left[i + 2], left[i + 1]], True)
+
+    # Rear diamond quads
+    fill_face(geo, [center[-2], loop_r[-1], loop_c, loop_l[-1]], True)
+    fill_face(geo, [loop_r[-1], right[-1], center[-1], loop_c], True)
+    fill_face(geo, [loop_l[-1], loop_c, center[-1], left[-1]], True)
 
 
 def add_prim_regions(node: hou.SopNode) -> None:
@@ -207,11 +259,17 @@ def add_prim_regions(node: hou.SopNode) -> None:
         prim.setAttribValue("region", "sternum")
 
 
-def extrude_sternum_loop(parent: hou.SopNode, faces: hou.SopNode) -> hou.SopNode:
-    boundary_prepared = sopify(parent, faces, _prepare_outer_boundary)
+def prepare_outer_boundary(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    grp = geo.createEdgeGroup("tmp_outer_boundary")
+    for edge in geo.globEdges("*"):
+        if len(edge.prims()) == 1:
+            grp.add(edge)
 
+
+def extrude_sternum_loop(parent: hou.SopNode, input_node: hou.SopNode) -> hou.SopNode:
     extrude = parent.createNode("polyextrude", "extrude_sternum_loop")
-    extrude.setInput(0, boundary_prepared)
+    extrude.setInput(0, input_node)
     extrude.parm("group").set("tmp_outer_boundary")
     extrude.parm("dist").setExpression('ch("../membrane_ratio") * ch("../CONTROL/half_width")')
     extrude.parm("outputside").set(1)
@@ -220,14 +278,6 @@ def extrude_sternum_loop(parent: hou.SopNode, faces: hou.SopNode) -> hou.SopNode
     adjusted = sopify(parent, classified, adjust_midpoints_after_extrusion)
     cleanup = sopify(parent, adjusted, _cleanup_loop_attributes)
     return cleanup
-
-def _prepare_outer_boundary(node: hou.SopNode) -> None:
-    geo = node.geometry()
-    grp = geo.createEdgeGroup("tmp_outer_boundary")
-    outer_ids = outer_loop_ids()
-    for edge in geo.globEdges("*"):
-        if all(pt.stringAttribValue("id").startswith(outer_ids) for pt in edge.points()):
-            grp.add(edge)
 
 def _classify_sternum_loop(node: hou.SopNode) -> None:
     geo = node.geometry()
@@ -246,6 +296,7 @@ def adjust_midpoints_after_extrusion(node: hou.SopNode) -> None:
             end = points[sternumrim(5) if i == 4 else sternumrim(side * (i + 1))].position()
             midpoint = (start + end) / 2.0
             points[sternummiddle(side * i)].setPosition(midpoint)
+
 
 def _cleanup_loop_attributes(node: hou.SopNode) -> None:
     geo = node.geometry()
