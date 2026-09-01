@@ -7,6 +7,7 @@ from utilities.common import (
     add_prim_attr,
     fill_face,
     get_float_parm,
+    get_params,
     get_parent,
     is_equal_approx,
     remove_groups,
@@ -46,15 +47,17 @@ def left_half(node: hou.SopNode) -> None:
     parent = get_parent(node)
     control = parent.node("CONTROL"); assert control is not None
 
-    front_ratio = get_float_parm(parent, "width_length_ratiox")
-    back_ratio = get_float_parm(parent, "width_length_ratioy")
-    angle = math.radians(get_float_parm(control, "leg_angle"))
-    w = get_float_parm(control, "half_width")
+    params = get_params(parent, use_tuple=False)
+    control_params = get_params(control, use_tuple=False)
+
+    front_ratio, back_ratio = params.width_length_ratio
+    angle = math.radians(control_params.leg_angle)
+    w = control_params.half_width
 
     forward_height = w * front_ratio
     back_half = w * back_ratio
     length = math.sqrt(back_half * back_half + w * w) / (2.0 * math.sin(angle / 2.0))
-    top_width = w * get_float_parm(parent, "top_width_ratio")
+    top_width = w * params.top_width_ratio
 
     p0 = hou.Vector3(0.0, 0.0, -forward_height)
     p1 = hou.Vector3(top_width, 0.0, -forward_height)
@@ -158,8 +161,11 @@ def descend_sternum_spine(node: hou.SopNode) -> None:
     control = parent.node("CONTROL")
     assert control is not None, "Expected CONTROL node"
 
-    depth = get_float_parm(control, "half_width") * get_float_parm(parent, "width_depth_ratio")
-    power = get_float_parm(parent, "spine_descend_handle")
+    params = get_params(parent, use_tuple=False)
+    control_params = get_params(control, use_tuple=False)
+
+    depth = control_params.half_width * params.width_depth_ratio
+    power = params.spine_descend_handle
     points = points_by_id(geo)
 
     top = points[sternumrim(0)].position()

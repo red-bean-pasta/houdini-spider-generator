@@ -9,9 +9,8 @@ from utilities.common import (
     add_prim_attr,
     fill_face,
     get_float_parm,
-    get_parm,
+    get_params,
     get_parent,
-    get_vector2_parm,
     points_to_positions,
     rotation_to,
     add_heading,
@@ -26,7 +25,7 @@ from utilities.nodes import (
     add_reloadable_subnet,
     sopify,
 )
-from utilities.topology import fill_pentagon
+from utilities.topology import fill_pentagon_with_buffer
 
 
 class Region(StrEnum):
@@ -58,6 +57,13 @@ def _add_parameters(legs: hou.OpNode) -> None:
     add_heading(
         legs,
         "Basic",
+    )
+    add_float_param(
+        legs,
+        "support_loop_ratio",
+        1,
+        0.15,
+        (0.0, 1.0),
     )
     add_float_param(
         legs,
@@ -292,24 +298,36 @@ def _adjust_coxa(
     eu1 = coxa_points[1]
     eb2 = coxa_points[2]
     eb1 = coxa_points[3]
+
+    parent = get_parent(node)
+    support_loop_ratio = get_float_parm(parent, "support_loop_ratio")
+    buffer_ratio = 1.0 - support_loop_ratio
+
     # Upper pentagon: su1, s_mu, su2, eu2, eu1
-    mid_u, _ = fill_pentagon(
+    mid_u, _, b_eu2, b_eu1 = fill_pentagon_with_buffer(
         geo,
         [su1, s_mu, su2, eu2, eu1],
+        (eu2, eu1),
+        buffer_ratio,
         (su1, eu1),
     )
     # Bottom pentagon: sb2, s_mb, sb1, eb1, eb2
-    mid_b, _ = fill_pentagon(
+    mid_b, _, b_eb1, b_eb2 = fill_pentagon_with_buffer(
         geo,
         [sb2, s_mb, sb1, eb1, eb2],
+        (eb1, eb2),
+        buffer_ratio,
         (sb1, eb1),
     )
-    # Back side (+Z): single quad
-    fill_face(geo, [sb2, su2, eu2, eb2])
 
-    # Front side (-Z): hexagon split into two quads by (mid_u, mid_b)
+    # Back side (+Z): split into 2 quads by (b_eu2, b_eb2)
+    fill_face(geo, [sb2, su2, b_eu2, b_eb2])
+    fill_face(geo, [b_eb2, b_eu2, eu2, eb2])
+
+    # Front side (-Z): split into 3 quads by (mid_u, mid_b) and (b_eu1, b_eb1)
     fill_face(geo, [su1, sb1, mid_b, mid_u])
-    fill_face(geo, [mid_u, mid_b, eb1, eu1])
+    fill_face(geo, [mid_u, mid_b, b_eb1, b_eu1])
+    fill_face(geo, [b_eu1, b_eb1, eb1, eu1])
 
     for prim in geo.prims():
         if prim not in prims_before:
@@ -318,37 +336,48 @@ def _adjust_coxa(
 
 def _build_leg(
         node: hou.SopNode,
-        index: int,
+        leg_index: int,
 ) -> tuple[list[hou.Point], list[hou.Point]]:
-    assert 0 <= index <= 3
     geo = node.geometry()
     add_prim_attr(geo, "region", "")
+
+    seg_pts, warnings = _build_segments(node, leg_index)
+    for w in warnings:
+        node.addWarning(w)
+    return _fill_mebranes(seg_pts)
+
+def _build_segments(
+        node: hou.SopNode,
+        leg_index: int,
+) -> MessagedResult[list[hou.Point]]:
+    assert 0 <= leg_index <= 3
+    geo = node.geometry()
     parent = get_parent(node)
 
-    segment_height_ratio = get_float_parm(parent, "segment_height_ratio")
-    spine_ratio = get_float_parm(parent, "segment_lateral_ratio")
-    shrink_ratio = get_float_parm(parent, "segment_section_shrink_ratio")
-
-    min_segment_flexes = get_parm(parent, "min_segment_flexes", tuple[float, ...])
-    max_segment_yaws = get_parm(parent, "max_segment_yaws", tuple[float, ...])
-    minimum_membrane = get_parm(parent, "minimum_membrane_spec", tuple[float, float])
+    params = get_params(parent, use_tuple=False)
+    segment_height_ratio = params.segment_height_ratio
+    spine_ratio = params.segment_lateral_ratio
+    shrink_ratio = params.segment_section_shrink_ratio
+    min_segment_flexes = params.min_segment_flexes
+    max_segment_yaws = params.max_segment_yaws
+    minimum_membrane = params.minimum_membrane_spec
     segment_specs = tuple(zip(max_segment_yaws[1:], min_segment_flexes[1:]))
 
-    front_coxa_size_ratio = get_vector2_parm(parent, "front_coxa_size_ratio")
-    length_ratios = get_parm(parent, "front_segment_length_ratios", tuple[float, ...])
-    leg_width_ratios = get_parm(parent, "leg_width_ratios", tuple[float, float, float])
-    leg_length_ratios = get_parm(parent, "leg_length_ratios", tuple[float, float, float])
+    front_coxa_size_ratio = params.front_coxa_size_ratio
+    length_ratios = params.front_segment_length_ratios
+    leg_width_ratios = params.leg_width_ratios
+    leg_length_ratios = params.leg_length_ratios
 
-    front_socket_width, _ = _get_front_coxa_socket_size(node)
+    front_socket_width, _ = _get_front_coxa_socket_size(geo)
     front_coxa_width = front_socket_width * front_coxa_size_ratio.x()
     front_coxa_length = front_socket_width * front_coxa_size_ratio.y()
 
-    if index == 0:
+    if leg_index == 0:
         coxa_width = front_coxa_width
         coxa_length = front_coxa_length
     else:
-        coxa_width = front_coxa_width * leg_width_ratios[index - 1]
-        coxa_length = front_coxa_length * leg_length_ratios[index - 1]
+        coxa_width = front_coxa_width * leg_width_ratios[leg_index - 1]
+        coxa_length = front_coxa_length * leg_length_ratios[leg_index - 1]
 
     coxa_height = coxa_width
     coxa_size = (coxa_width, coxa_height, coxa_length)
@@ -362,8 +391,6 @@ def _build_leg(
         segment_specs,
         minimum_membrane,
     )
-    for msg in messages:
-        node.addWarning(msg)
 
     seg_pts: list[hou.Point] = []
     for seg in segments:
@@ -384,7 +411,7 @@ def _build_leg(
             ])
             prim.setAttribValue("region", Region.LEGSEGMENT)
 
-    return _fill_mebranes(seg_pts)
+    return MessagedResult(seg_pts, messages)
 
 def _fill_mebranes(
         seg_pts: list[hou.Point],
@@ -459,8 +486,7 @@ def _fill_mebranes(
 
     return seg_pts, membrane_points
 
-def _get_front_coxa_socket_size(node: hou.SopNode) -> tuple[float, float]:
-    geo = node.geometry()
+def _get_front_coxa_socket_size(geo: hou.Geometry) -> tuple[float, float]:
     corners = geo.attribValue("tmp_coxa_corners")
     pts = [geo.iterPoints()[p] for p in corners[:4]]
 

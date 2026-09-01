@@ -10,7 +10,7 @@ from utilities.common import (
     add_float_param,
     add_prim_attr,
     fill_face,
-    get_float_parm,
+    get_params,
     get_parent,
 )
 from utilities.helper import (
@@ -190,8 +190,9 @@ def _add_corners_half(node: hou.SopNode) -> None:
     basesternum1_2_position = points[basesternum1_2].position()
 
     height = baseend0_position[2] - cheliceraeupper0_position[2]
-    height_ratio = get_float_parm(parent, "height_ratio")
-    flat_ratio = get_float_parm(parent, "flat_ratio")
+    params = get_params(parent)
+    height_ratio = params.height_ratio
+    flat_ratio = params.flat_ratio
     y_offset = hou.Vector3(0.0, height * height_ratio, 0.0)
     z_offset = hou.Vector3(0.0, 0.0, height * flat_ratio)
 

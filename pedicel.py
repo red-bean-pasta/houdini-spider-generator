@@ -100,7 +100,7 @@ def _connect_pedicel(node: hou.SopNode) -> None:
     add_prim_attr(geo, "region", "")
 
     # 1. Upper Right
-    mid_ur, flt_ur = fill_pentagon_with_buffer(
+    mid_ur, flt_ur, _, _ = fill_pentagon_with_buffer(
         geo,
         [upper, abdomenverticalrim1, abdomensideupper1, abdomenhorizontalrim1, right],
         (upper, right),
@@ -111,7 +111,7 @@ def _connect_pedicel(node: hou.SopNode) -> None:
     flt_ur.setAttribValue("id", pedicelmiddleupper(1))
 
     # 2. Upper Left
-    mid_ul, flt_ul = fill_pentagon_with_buffer(
+    mid_ul, flt_ul, _, _ = fill_pentagon_with_buffer(
         geo,
         [upper, left, abdomenhorizontalrim_neg1, abdomensideupper_neg1, abdomenverticalrim1],
         (upper, left),
@@ -123,7 +123,7 @@ def _connect_pedicel(node: hou.SopNode) -> None:
     flt_ul.setAttribValue("id", pedicelmiddleupper(-1))
 
     # 3. Lower Right
-    mid_lr, flt_lr = fill_pentagon_with_buffer(
+    mid_lr, flt_lr, _, _ = fill_pentagon_with_buffer(
         geo,
         [lower, right, abdomenhorizontalrim1, abdomensidelower1, abdomenverticalrim_neg1],
         (lower, right),
@@ -135,7 +135,7 @@ def _connect_pedicel(node: hou.SopNode) -> None:
     flt_lr.setAttribValue("id", pedicelmiddlelower(1))
 
     # 4. Lower Left
-    mid_ll, flt_ll = fill_pentagon_with_buffer(
+    mid_ll, flt_ll, _, _ = fill_pentagon_with_buffer(
         geo,
         [lower, abdomenverticalrim_neg1, abdomensidelower_neg1, abdomenhorizontalrim_neg1, left],
         (lower, left),

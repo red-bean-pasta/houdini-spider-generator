@@ -9,7 +9,7 @@ from utilities.common import (
     add_global_attr,
     add_prim_attr,
     fill_face,
-    get_float_parm,
+    get_params,
     get_parent,
     remove_attrs,
 )
@@ -166,11 +166,12 @@ def _add_width_frame(node: hou.SopNode) -> None:
     tmp_pedicel_length = geo.attribValue("tmp_pedicel_length")
     assert tmp_pedicel_length is not None, "Expected tmp_pedicel_length attribute"
 
-    size_ratio_x = get_float_parm(parent, "size_ratiox")
-    size_ratio_z = get_float_parm(parent, "size_ratioz")
-    plateau_start = get_float_parm(parent, "plateau_durationx")
-    plateau_end = get_float_parm(parent, "plateau_durationy")
-    end_ratio = get_float_parm(control, "end_ratio")
+    params = get_params(parent)
+    control_params = get_params(control)
+
+    size_ratio_x, _, size_ratio_z = params.size_ratio
+    plateau_start, plateau_end = params.plateau_duration
+    end_ratio = control_params.end_ratio
 
     length = cl * size_ratio_z
     half_width = cw * size_ratio_x / 2.0
@@ -214,11 +215,12 @@ def _add_height_frame(node: hou.SopNode) -> None:
     tmp_pedicel_height = geo.attribValue("tmp_pedicel_height")
     assert tmp_pedicel_height is not None, "Expected tmp_pedicel_height attribute"
 
-    size_ratio_y = get_float_parm(parent, "size_ratioy")
-    size_ratio_z = get_float_parm(parent, "size_ratioz")
-    plateau_start = get_float_parm(parent, "plateau_durationx")
-    plateau_end = get_float_parm(parent, "plateau_durationy")
-    end_ratio = get_float_parm(control, "end_ratio")
+    params = get_params(parent)
+    control_params = get_params(control)
+
+    _, size_ratio_y, size_ratio_z = params.size_ratio
+    plateau_start, plateau_end = params.plateau_duration
+    end_ratio = control_params.end_ratio
 
     length = cl * size_ratio_z
     height = ch * size_ratio_y

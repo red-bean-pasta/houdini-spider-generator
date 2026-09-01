@@ -10,9 +10,8 @@ from utilities.common import (
     add_prim_attr,
     fill_face,
     get_float_parm,
+    get_params,
     get_parent,
-    get_vector2_parm,
-    get_vector3_parm,
     remove_attrs,
     remove_groups,
     rotation_to,
@@ -315,9 +314,10 @@ def _add_end_section(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     parent = get_parent(node)
 
-    end_section_offset = get_vector3_parm(parent, "end_section_offset")
-    end_section_rotation = get_vector2_parm(parent, "end_section_rotation")
-    end_section_ratio = get_vector2_parm(parent, "end_section_ratio")
+    params = get_params(parent, use_tuple=False)
+    end_section_offset = params.end_section_offset
+    end_section_rotation = params.end_section_rotation
+    end_section_ratio = params.end_section_ratio
 
     start_section = _get_start_section_frame(geo)
     offset_baseline = start_section.offset_baseline
@@ -595,12 +595,13 @@ def _add_intermediate_section(
     geo: hou.Geometry = node.geometry()
     parent = get_parent(node)
 
-    end_section_offset = get_vector3_parm(parent, "end_section_offset")
-    end_section_rotation = get_vector2_parm(parent, "end_section_rotation")
-    end_section_ratio = get_vector2_parm(parent, "end_section_ratio")
-    middle_section_offset = get_vector2_parm(parent, "middle_section_offset")
-    middle_section_height_ratio = get_float_parm(parent, "middle_section_height_ratio")
-    middle_section_ratio = get_vector2_parm(parent, "middle_section_ratio")
+    params = get_params(parent, use_tuple=False)
+    end_section_offset = params.end_section_offset
+    end_section_rotation = params.end_section_rotation
+    end_section_ratio = params.end_section_ratio
+    middle_section_offset = params.middle_section_offset
+    middle_section_height_ratio = params.middle_section_height_ratio
+    middle_section_ratio = params.middle_section_ratio
 
     start_section = _get_start_section_frame(geo)
     offset_baseline = start_section.offset_baseline

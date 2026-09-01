@@ -1,6 +1,5 @@
 ---
-apply: by model decision
-instructions: when debugging
+apply: always
 ---
 
 1. read `instructions/general.md`

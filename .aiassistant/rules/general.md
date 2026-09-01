@@ -34,7 +34,7 @@ This is a project that tries to model a spider in a biologically topology way in
 - Dynamically adjust the thinking chain based on task difficulty. If the task is small, bounded or obvious, don't over-think. Balance token efficiency, intelligence and development speed. 
 - Prefer code analyzing first, and only then use targeted commands and inspecting for debugging. Do not flood with useless and guessing commands.
 - For file updating and editing, use ACP tools like `client_edit_file`. DO NOT USE MCP tool like `apply_patch` or `pycharm_execute_terminal_command`, or python `file.write`
-
+- Do not use a lot of sed when reading the whole document is available. sed can easily miss and require a lot of back-and-forth. 
 
 ## Reiterate
 - No newline abusing
