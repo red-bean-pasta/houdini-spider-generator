@@ -24,7 +24,7 @@ from utilities.helper import (
     set_points_id,
     unique_points_start_with_id,
 )
-from utilities.identifying import attribute_after_inset
+from utilities.identifying import attribute_after_inset, deduplicate_point_attributes
 from utilities.nodes import sopify
 
 
@@ -307,7 +307,6 @@ def extrude_base_buffer(parent: hou.SopNode, fused_pedicel: hou.SopNode) -> hou.
     cleanup = sopify(parent, classified, _cleanup_buffer_attributes)
     return cleanup
 
-
 def _prepare_outer_boundary(node: hou.SopNode) -> None:
     geo = node.geometry()
     grp = geo.createEdgeGroup("tmp_outer_boundary")
@@ -316,21 +315,12 @@ def _prepare_outer_boundary(node: hou.SopNode) -> None:
         if all(pt.stringAttribValue("id").startswith(outer_ids) for pt in edge.points()):
             grp.add(edge)
 
-
 def _classify_base_buffer(node: hou.SopNode) -> None:
     geo = node.geometry()
-    outer_ids = outer_loop_ids()
-
     for prim in geo.prims():
         if not prim.stringAttribValue("region"):
             prim.setAttribValue("region", Region.BASEBUFFERMEMBRANE)
-
-    for point in geo.points():
-        prims = point.prims()
-        if any(prim.stringAttribValue("region") != Region.BASEBUFFERMEMBRANE for prim in prims):
-            if point.stringAttribValue("id").startswith(outer_ids):
-                point.setAttribValue("id", "")
-
+    deduplicate_point_attributes(geo, "id", outer_loop_ids(), keep_first=False)
 
 def _cleanup_buffer_attributes(node: hou.SopNode) -> None:
     geo = node.geometry()

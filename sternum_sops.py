@@ -8,6 +8,7 @@ from utilities.common import (
     fill_face,
     get_float_parm,
     get_parent,
+    remove_groups,
 )
 from utilities.helper import (
     add_id_attr,
@@ -15,6 +16,8 @@ from utilities.helper import (
     points_by_id,
     set_points_id,
 )
+from utilities.identifying import deduplicate_point_attributes
+from utilities.nodes import sopify
 
 
 class ID(StrEnum):
@@ -42,14 +45,13 @@ def left_half(node: hou.SopNode) -> None:
     parent = get_parent(node)
     control = parent.node("CONTROL"); assert control is not None
 
-    ratio_x = get_float_parm(parent, "width_length_ratiox")
-    ratio_y = get_float_parm(parent, "width_length_ratioy")
-    ratio_z = get_float_parm(parent, "width_length_ratioz")
+    front_ratio = get_float_parm(parent, "width_length_ratiox")
+    back_ratio = get_float_parm(parent, "width_length_ratioy")
     angle = math.radians(get_float_parm(control, "leg_angle"))
     w = get_float_parm(control, "half_width")
 
-    forward_height = w / ratio_x * ratio_y
-    back_half = w / ratio_x * ratio_z
+    forward_height = w * front_ratio
+    back_half = w * back_ratio
     length = math.sqrt(back_half * back_half + w * w) / (2.0 * math.sin(angle / 2.0))
     top_width = w * get_float_parm(parent, "top_width_ratio")
 
@@ -203,3 +205,48 @@ def add_prim_regions(node: hou.SopNode) -> None:
     add_prim_attr(geo, "region", "")
     for prim in geo.prims():
         prim.setAttribValue("region", "sternum")
+
+
+def extrude_sternum_loop(parent: hou.SopNode, faces: hou.SopNode) -> hou.SopNode:
+    boundary_prepared = sopify(parent, faces, _prepare_outer_boundary)
+
+    extrude = parent.createNode("polyextrude", "extrude_sternum_loop")
+    extrude.setInput(0, boundary_prepared)
+    extrude.parm("group").set("tmp_outer_boundary")
+    extrude.parm("dist").setExpression('ch("../membrane_ratio") * ch("../CONTROL/half_width")')
+    extrude.parm("outputside").set(1)
+
+    classified = sopify(parent, extrude, _classify_sternum_loop)
+    adjusted = sopify(parent, classified, adjust_midpoints_after_extrusion)
+    cleanup = sopify(parent, adjusted, _cleanup_loop_attributes)
+    return cleanup
+
+def _prepare_outer_boundary(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    grp = geo.createEdgeGroup("tmp_outer_boundary")
+    outer_ids = outer_loop_ids()
+    for edge in geo.globEdges("*"):
+        if all(pt.stringAttribValue("id").startswith(outer_ids) for pt in edge.points()):
+            grp.add(edge)
+
+def _classify_sternum_loop(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    for prim in geo.prims():
+        if not prim.stringAttribValue("region"):
+            prim.setAttribValue("region", "sternum")
+    deduplicate_point_attributes(geo, "id", outer_loop_ids(), keep_first=False)
+
+def adjust_midpoints_after_extrusion(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    points = points_by_id(geo)
+    points[sternumrim(0)].setPosition((points[sternumrim(1)].position() + points[sternumrim(-1)].position()) / 2.0)
+    for side in (1, -1):
+        for i in range(1, 5):
+            start = points[sternumrim(side * i)].position()
+            end = points[sternumrim(5) if i == 4 else sternumrim(side * (i + 1))].position()
+            midpoint = (start + end) / 2.0
+            points[sternummiddle(side * i)].setPosition(midpoint)
+
+def _cleanup_loop_attributes(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    remove_groups(geo, edge_groups="tmp_outer_boundary")

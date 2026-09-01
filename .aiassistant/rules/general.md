@@ -28,9 +28,11 @@ This is a project that tries to model a spider in a biologically topology way in
 - Do not do exhaust listing. Prefer extraction, pattern, and positions (if robust). Exhaust listing is only acceptable if the logic is naturally "identifier" based, instead of geometry based.
 - New lines communicate grouping and logical separation; do not use them merely to wrap a short call or expression, especially in one liner methods that holds small significance like `assert` or `raise_error`. Abusing newlines only make navigation harder.
 - prefer `assert` over `NodeError` as assertion is correctly shown in .hip file.
+- Methods should be separated by 2 new lines for clean code navigation. However, submethods are separated from its parent and sibling methods by 1 new lines for better logic grouping. Submethods refers to methods further broke down from one methods, not nested methods. Small methods, e.g., one liners, should be separated by 1 new line or even no new line to avoid cluster.
 
 ## Agent
-- Dynamically adjust the thinking chain based on task difficulty. If the task is small, bounded or obvious, don't over-think. Balance token efficiency, intelligence and development speed.
+- Dynamically adjust the thinking chain based on task difficulty. If the task is small, bounded or obvious, don't over-think. Balance token efficiency, intelligence and development speed. 
+- Prefer code analyzing first, and only then use targeted commands and inspecting for debugging. Do not flood with useless and guessing commands.
 - For file updating and editing, use ACP tools like `client_edit_file`. DO NOT USE MCP tool like `apply_patch` or `pycharm_execute_terminal_command`, or python `file.write`
 
 

@@ -18,7 +18,8 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     _add_parameters(base)
 
     sternum = build_sternum(base)
-    propagate_parameters(base, sternum)
+    propagate_parameters(base, sternum, skip_params="membrane_ratio")
+    sternum.parm("membrane_ratio").set(base.parm("membrane_ratio"))
 
     rim = sopify(base, sternum, base_sops.extract_sternum_rim)
     flaps = sopify(base, rim, base_sops.build_coxa_flaps)

@@ -60,8 +60,9 @@ def deduplicate_id_attr(
     geo: hou.Geometry,
     prefix: str | tuple[str, ...] | None = None,
     add_affix: bool = False,
+    keep_first: bool = True,
 ) -> None:
-    deduplicate_point_attributes(geo, "id", prefix, add_affix=add_affix)
+    deduplicate_point_attributes(geo, "id", prefix, add_affix=add_affix, keep_first=keep_first)
 
 
 def rename_left_ids(geo: hou.Geometry) -> None:
