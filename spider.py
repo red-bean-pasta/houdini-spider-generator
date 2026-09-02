@@ -25,7 +25,10 @@ from utilities.nodes import (
     add_reload_button,
     sopify,
 )
-from utilities.topology import fill_pentagon
+from utilities.topology import (
+    fill_pentagon,
+    fill_pentagon_with_buffer,
+)
 
 
 def cephapedicelupper() -> str:
@@ -264,11 +267,32 @@ def _reconnect_sternum_pedicel_loop(
     p_prims = list(cp_lower.prims())
     geo.deletePrims(p_prims, keep_points=True)
 
-    fill_pentagon(geo, [cp_right, bs5_1, right_inner, s5, cp_lower], (cp_lower, s5), False)
-    fill_pentagon(geo, [cp_left, bs5_2, left_inner, s5, cp_lower], (cp_lower, s5), True)
+    buffer_ratio = 0.035
 
-    fill_face(geo, [cp_right, bs5_1, baseend0, cp_upper], True)
-    fill_face(geo, [cp_left, bs5_2, baseend0, cp_upper], False)
+    _, _, b_lower, b_right = fill_pentagon_with_buffer(
+        geo,
+        [cp_right, bs5_1, right_inner, s5, cp_lower],
+        (cp_lower, cp_right),
+        buffer_ratio,
+        (cp_lower, s5),
+        reverse=True,
+    )
+
+    b_left_pos = cp_left.position() * (1 - buffer_ratio) + bs5_2.position() * buffer_ratio
+    b_left = geo.createPoint()
+    b_left.setPosition(b_left_pos)
+
+    fill_face(geo, [cp_lower, cp_left, b_left, b_lower], reverse=False)
+    fill_pentagon(geo, [b_left, bs5_2, left_inner, s5, b_lower], (b_lower, s5), reverse=False)
+
+    b_upper_pos = cp_upper.position() * (1 - buffer_ratio) + baseend0.position() * buffer_ratio
+    b_upper = geo.createPoint()
+    b_upper.setPosition(b_upper_pos)
+
+    fill_face(geo, [cp_upper, cp_right, b_right, b_upper], reverse=True)
+    fill_face(geo, [b_upper, b_right, bs5_1, baseend0], reverse=True)
+    fill_face(geo, [cp_upper, cp_left, b_left, b_upper], reverse=False)
+    fill_face(geo, [b_upper, b_left, bs5_2, baseend0], reverse=False)
 
     for prim in geo.prims():
         if not prim.stringAttribValue("region"):
