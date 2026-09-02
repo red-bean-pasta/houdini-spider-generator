@@ -17,6 +17,7 @@ from utilities.nodes import (
     add_merge,
     add_outside_recalculation,
     add_reload_button,
+    propagate_parameters,
     sopify,
 )
 
@@ -43,6 +44,7 @@ def build() -> hou.SopNode:
     merged_c_a = add_merge(spider, "merge_cephalothorax_and_abdomen", opened_cepha, opened_abdomen)
 
     pedicel = build_pedicel(spider, merged_c_a)
+    propagate_parameters(spider, pedicel)
     merged_ca_p = add_merge(spider, "merge_main_and_pedicel", merged_c_a, pedicel)
     removed_sockets = sopify(spider, merged_ca_p, _remove_coxa_sockets)
 

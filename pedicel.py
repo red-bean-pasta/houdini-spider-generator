@@ -4,7 +4,10 @@ import hou
 
 import abdomen
 import main
-from utilities.common import add_prim_attr
+from utilities.common import (
+    add_float_param,
+    add_prim_attr,
+)
 from utilities.helper import (
     add_id_attr,
     affix_id,
@@ -32,6 +35,7 @@ def pedicelmiddlelower(*i: int | str) -> str:
 def build(spider: hou.OpNode, merged_cepha_and_abdomen: hou.SopNode) -> hou.SopNode:
     pedicel = add_reloadable_subnet(spider, "pedicel")
     pedicel.setInput(0, merged_cepha_and_abdomen)
+    _add_parameters(pedicel)
 
     source = pedicel.indirectInputs()[0]
     needed_points = sopify(pedicel, source, _extract_needed_points)
@@ -43,6 +47,17 @@ def build(spider: hou.OpNode, merged_cepha_and_abdomen: hou.SopNode) -> hou.SopN
     add_output(pedicel, "OUT_PEDICEL", cleaned)
     pedicel.layoutChildren()
     return pedicel
+
+
+def _add_parameters(pedicel: hou.SopNode) -> None:
+    add_float_param(
+        pedicel,
+        "size_ratio",
+        2,
+        (1.0, 1.0),
+        (0.0, None),
+        help="Pedicel width and height ratio relative to the base pedicel opening.",
+    )
 
 
 def _extract_needed_points(node: hou.SopNode) -> None:

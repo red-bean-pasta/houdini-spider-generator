@@ -62,7 +62,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
         legs,
         "support_loop_ratio",
         1,
-        0.15,
+        0.015,
         (0.0, 1.0),
         help="Ratio relative to coxa width, fixed across segments.",
     )
@@ -83,10 +83,12 @@ def _add_parameters(legs: hou.OpNode) -> None:
     )
     add_float_param(
         legs,
-        "segment_section_shrink_ratio",
-        1,
-        0.875,
+        "segment_shrink_ratios",
+        2,
+        (0.95, 0.875),
         (0.0, None),
+        hou.parmNamingScheme.Base1,
+        help="1 for in-segment section shrinking; 2 for between-section.",
     )
     add_float_param(
         legs,
@@ -349,13 +351,16 @@ def _build_leg(
     geo = node.geometry()
     add_prim_attr(geo, "region", "")
 
-    seg_pts, warnings = _build_segments(node, leg_index)
+    seg_pts, warnings = _build_segment_tubes(node, leg_index)
     for w in warnings:
         node.addWarning(w)
-    all_seg_pts = _add_loop_cuts(node, seg_pts)
-    return _fill_mebranes(all_seg_pts)
+    all_seg_pts = _add_segment_loop_cuts(node, seg_pts)
+    all_seg_pts, mem_pts = _fill_mebranes(all_seg_pts)
+    all_mem_pts = _add_membrane_loop_cuts(node, all_seg_pts, mem_pts)
+    _close_tarsus(all_seg_pts)
+    return all_seg_pts, all_mem_pts
 
-def _build_segments(
+def _build_segment_tubes(
         node: hou.SopNode,
         leg_index: int,
 ) -> MessagedResult[list[hou.Point]]:
@@ -366,7 +371,7 @@ def _build_segments(
     params = get_params(parent, use_tuple=False)
     segment_height_ratio = params.segment_height_ratio
     spine_ratio = params.segment_lateral_ratio
-    shrink_ratio = params.segment_section_shrink_ratio
+    shrink_ratios = params.segment_shrink_ratios
     min_segment_flexes = params.min_segment_flexes
     max_segment_yaws = params.max_segment_yaws
     minimum_membrane = params.minimum_membrane_spec
@@ -394,7 +399,7 @@ def _build_segments(
     segments, messages = _get_leg_points(
         coxa_size,
         segment_height_ratio,
-        shrink_ratio,
+        shrink_ratios,
         list(length_ratios),
         spine_ratio,
         segment_specs,
@@ -422,7 +427,7 @@ def _build_segments(
 
     return MessagedResult(seg_pts, messages)
 
-def _add_loop_cuts(
+def _add_segment_loop_cuts(
         node: hou.SopNode,
         seg_pts: list[hou.Point],
 ) -> list[hou.Point]:
@@ -439,44 +444,90 @@ def _add_loop_cuts(
 
     for i in range(num_segs):
         cur_pts = seg_pts[i * 8:(i + 1) * 8]
-        p0, p1, p2, p3, p4, p5, p6, p7 = cur_pts
+        start_pts = cur_pts[:4]
+        end_pts = cur_pts[4:]
 
-        edge1 = geo.findEdge(p0, p4)
-        assert edge1 is not None, "Expected edge between p0 and p4"
-        prim1 = [p for p in edge1.prims() if p1 in p.points()][0]
-        start_cut_pts, _ = loop_cut(
-            geo,
-            prim1,
-            p0,
-            p4,
-            cut_length,
-            use_ratio=False,
-        )
-        m0, m1, m3, m2 = start_cut_pts
-        ordered_start_cut = [m0, m1, m2, m3]
-
-        edge2 = geo.findEdge(p4, m0)
-        assert edge2 is not None, "Expected edge between p4 and m0"
-        prim2 = [p for p in edge2.prims() if m1 in p.points()][0]
-        end_cut_pts, _ = loop_cut(
-            geo,
-            prim2,
-            p4,
-            m0,
-            cut_length,
-            use_ratio=False,
-        )
-        em0, em1, em3, em2 = end_cut_pts
-        ordered_end_cut = [em0, em1, em2, em3]
+        start_cut = _add_tube_loop_cut(geo, start_pts, end_pts, cut_length)
+        end_cut = _add_tube_loop_cut(geo, end_pts, start_cut, cut_length)
 
         all_seg_pts.extend([
-            p0, p1, p2, p3,
-            ordered_start_cut[0], ordered_start_cut[1], ordered_start_cut[2], ordered_start_cut[3],
-            ordered_end_cut[0], ordered_end_cut[1], ordered_end_cut[2], ordered_end_cut[3],
-            p4, p5, p6, p7,
+            *start_pts,
+            *start_cut,
+            *end_cut,
+            *end_pts,
         ])
 
     return all_seg_pts
+
+def _add_membrane_loop_cuts(
+        node: hou.SopNode,
+        seg_pts: list[hou.Point],
+        mem_pts: list[hou.Point],
+) -> list[hou.Point]:
+    assert len(seg_pts) % 16 == 0, f"Expected seg_pts length to be a multiple of 16, got {len(seg_pts)}"
+    geo = node.geometry()
+    parent = get_parent(node)
+    support_loop_ratio = get_float_parm(parent, "support_loop_ratio")
+
+    coxa_width = seg_pts[0].position().distanceTo(seg_pts[1].position())
+    cut_length = coxa_width * support_loop_ratio
+
+    num_segs = len(seg_pts) // 16
+    all_mem_pts: list[hou.Point] = []
+
+    for i in range(num_segs - 1):
+        former_end = seg_pts[i * 16 + 12:(i + 1) * 16]
+        latter_start = seg_pts[(i + 1) * 16:(i + 1) * 16 + 4]
+        mid_pts = mem_pts[i * 4:(i + 1) * 4]
+
+        fu1 = former_end[0]
+        lu1 = latter_start[0]
+        half_width = fu1.position().distanceTo(lu1.position()) * 0.5
+        if cut_length >= half_width:
+            all_mem_pts.extend(mid_pts)
+            continue
+
+        former_cut = _add_tube_loop_cut(geo, former_end, mid_pts, cut_length)
+        latter_cut = _add_tube_loop_cut(geo, latter_start, mid_pts, cut_length)
+        all_mem_pts.extend([
+            *former_cut,
+            *mid_pts,
+            *latter_cut,
+        ])
+
+    return all_mem_pts
+
+def _close_tarsus(
+        seg_pts: list[hou.Point],
+) -> None:
+    assert len(seg_pts) >= 4, f"Expected at least 4 seg_pts, got {len(seg_pts)}"
+    geo = seg_pts[0].geometry()
+    p4, p5, p6, p7 = seg_pts[-4:]
+    prim = fill_face(geo, [p4, p6, p7, p5])
+    prim.setAttribValue("region", Region.LEGSEGMENT)
+
+def _add_tube_loop_cut(
+        geo: hou.Geometry,
+        start_pts: list[hou.Point],
+        end_pts: list[hou.Point],
+        cut_length: float,
+) -> list[hou.Point]:
+    s0, s1, s2, s3 = start_pts
+    e0, e1, e2, e3 = end_pts
+
+    edge = geo.findEdge(s0, e0)
+    assert edge is not None, f"Expected edge between {s0} and {e0}"
+    prim = [p for p in edge.prims() if s1 in p.points()][0]
+    cut_pts, _ = loop_cut(
+        geo,
+        prim,
+        s0,
+        e0,
+        cut_length,
+        use_ratio=False,
+    )
+    m0, m1, m3, m2 = cut_pts
+    return [m0, m1, m2, m3]
 
 def _fill_mebranes(
         seg_pts: list[hou.Point],
@@ -569,7 +620,7 @@ def _get_front_coxa_socket_size(geo: hou.Geometry) -> tuple[float, float]:
 def _get_leg_points(
         coxa_size: tuple[float, float, float],
         segment_height_ratio: float,
-        section_shrink_ratio: float,
+        section_shrink_ratios: tuple[float, float],
         length_ratios: list[float],
         spine_ratio: float,
         segment_specs: tuple[tuple[float, float], ...],
@@ -606,7 +657,7 @@ def _get_leg_points(
         (former_wedged, latter), seg_messages = _append_segment(
             segments[-1],
             cur_height_ratio,
-            section_shrink_ratio,
+            section_shrink_ratios,
             length_ratio_to_former,
             spine_ratio,
             max_yaw,
@@ -624,7 +675,7 @@ def _get_leg_points(
 def _append_segment(
         former_positions: list[hou.Vector3],
         height_ratio: float,
-        section_shrink_ratio: float,
+        section_shrink_ratios: tuple[float, float],
         length_ratio: float,
         spine_ratio: float,
         max_yaw: float,
@@ -650,37 +701,46 @@ def _append_segment(
     former_length = start_top1.z() - end_top1.z()
     former_size = (former_width, former_height)
 
-    latter_width = former_width * section_shrink_ratio
-    latter_height = latter_width * height_ratio
-    latter_size = (latter_width, latter_height)
+    in_shrink, between_shrink = section_shrink_ratios
+    latter_start_width = former_width * between_shrink
+    latter_start_height = latter_start_width * height_ratio
+    latter_start_size = (latter_start_width, latter_start_height)
     latter_length = former_length * length_ratio
+
+    latter_end_width = latter_start_width * in_shrink
+    latter_end_height = latter_start_height * in_shrink
 
     (offset, wedge_angle), messages = _calc_segment_offset_and_wedge(
         max_yaw,
         min_flex,
         spine_ratio,
-        (former_size, latter_size),
+        (former_size, latter_start_size),
         minimum_membrane,
     )
 
     latter_start_top_y = end_top1.y() + offset.y()
-    latter_start_btm_y = latter_start_top_y - latter_height
+    latter_start_btm_y = latter_start_top_y - latter_start_height
     latter_start_z = end_top1.z() - offset.x()
     latter_end_z = latter_start_z - latter_length
-    latter_hw = latter_width / 2.0
+    latter_start_hw = latter_start_width / 2.0
+    latter_end_hw = latter_end_width / 2.0
 
-    delta_z_latter = latter_height * math.tan(math.radians(wedge_angle))
+    delta_z_latter = latter_start_height * math.tan(math.radians(wedge_angle))
     latter_start_btm_z = latter_start_z - delta_z_latter
 
+    offset_y_in = -(latter_start_height - latter_end_height) * spine_ratio
+    latter_end_top_y = latter_start_top_y + offset_y_in
+    latter_end_btm_y = latter_end_top_y - latter_end_height
+
     latter_segment = [
-        hou.Vector3(latter_hw, latter_start_top_y, latter_start_z),
-        hou.Vector3(-latter_hw, latter_start_top_y, latter_start_z),
-        hou.Vector3(latter_hw, latter_start_btm_y, latter_start_btm_z),
-        hou.Vector3(-latter_hw, latter_start_btm_y, latter_start_btm_z),
-        hou.Vector3(latter_hw, latter_start_top_y, latter_end_z),
-        hou.Vector3(-latter_hw, latter_start_top_y, latter_end_z),
-        hou.Vector3(latter_hw, latter_start_btm_y, latter_end_z),
-        hou.Vector3(-latter_hw, latter_start_btm_y, latter_end_z),
+        hou.Vector3(latter_start_hw, latter_start_top_y, latter_start_z),
+        hou.Vector3(-latter_start_hw, latter_start_top_y, latter_start_z),
+        hou.Vector3(latter_start_hw, latter_start_btm_y, latter_start_btm_z),
+        hou.Vector3(-latter_start_hw, latter_start_btm_y, latter_start_btm_z),
+        hou.Vector3(latter_end_hw, latter_end_top_y, latter_end_z),
+        hou.Vector3(-latter_end_hw, latter_end_top_y, latter_end_z),
+        hou.Vector3(latter_end_hw, latter_end_btm_y, latter_end_z),
+        hou.Vector3(-latter_end_hw, latter_end_btm_y, latter_end_z),
     ]
 
     delta_z_former = former_height * math.tan(math.radians(wedge_angle))
