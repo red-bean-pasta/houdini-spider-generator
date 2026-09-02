@@ -11,9 +11,11 @@ from cephalothorax import build as build_cephalothorax
 from leg import build as build_legs
 from pedicel import build as build_pedicel
 from utilities.common import (
+    add_float_param,
+    add_folder,
     fill_face,
     get_params,
-    get_parent, add_folder, add_float_param,
+    get_parent,
 )
 from utilities.helper import points_by_id
 from utilities.nodes import (
@@ -23,10 +25,11 @@ from utilities.nodes import (
     add_reload_button,
     sopify,
 )
+from utilities.topology import fill_pentagon
 
 
 def cephapedicelupper() -> str:
-    return base_sops.baseend(0)
+    return "cephapedicelupper"
 def cephapedicellower() -> str:
     return "cephapedicellower"
 def cephapedicelright() -> str:
@@ -82,18 +85,40 @@ def _add_parameters(spider: hou.OpNode) -> None:
         spider,
         "pedicel_size_ratio",
         2,
-        (1.0, 0.5),
+        (0.5, 0.5),
         (0.0, 1.0),
         folder_label="Build",
         help="Pedicel width and height ratio relative to the base pedicel opening."
     )
 
 
+def _open_abdomen_pedicel(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    points = points_by_id(geo)
+    origin_point = points.get(abdomen.abdomenorigin())
+    assert origin_point is not None, "Expected abdomenorigin point in abdomen"
+    prims = list(origin_point.prims())
+    geo.deletePrims(prims, keep_points=True)
+    if origin_point in geo.points():
+        geo.deletePoints([origin_point])
+
+
+def _remove_coxa_sockets(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    socket_prims = [
+        prim for prim in geo.prims()
+        if prim.stringAttribValue("region").startswith(base_sops.Region.COXASOCKET)
+    ]
+    assert len(socket_prims) == 16, f"Expected 16 coxa socket prims, got {len(socket_prims)}"
+    geo.deletePrims(socket_prims, keep_points=True)
+
+
 def _open_cepha_pedicel(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     parent = get_parent(node)
     params = get_params(parent)
-    pedicel_size_ratio_x, pedicel_size_ratio_y = params.pedicel_size_ratio
+    pedicel_size_ratio = params.pedicel_size_ratio
+    pedicel_size_ratio_x, _ = pedicel_size_ratio
 
     points = points_by_id(geo)
 
@@ -110,9 +135,21 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
 
     p_lower, right_inner, left_inner = _identify_pedicel_membrane_points(geo)
     _adjust_side_coxa_points(bs5_1, bs5_2, right_inner, left_inner)
-    _add_side_cepha_pedicel_points(geo, baseend0, bs5_1, bs5_2, pedicel_size_ratio_x)
-    _position_vertical_pedicel_opening_points(baseend0, headback0, sternumrim5, p_lower, pedicel_size_ratio_y)
-    _reconnect_sternum_pedicel_loop(geo, p_lower, left_inner, right_inner, sternumrim5, bs5_1, bs5_2)
+    cp_right, cp_left = _add_side_cepha_pedicel_points(geo, baseend0, bs5_1, bs5_2, pedicel_size_ratio_x)
+    cp_upper = _position_vertical_pedicel_points(geo, baseend0, headback0, sternumrim5, p_lower, pedicel_size_ratio)
+    _reconnect_sternum_pedicel_loop(
+        geo,
+        cp_upper,
+        cp_right,
+        cp_left,
+        p_lower,
+        left_inner,
+        right_inner,
+        bs5_1,
+        bs5_2,
+        sternumrim5,
+        baseend0,
+    )
 
 def _identify_pedicel_membrane_points(geo: hou.Geometry) -> tuple[hou.Point, hou.Point, hou.Point]:
     membrane_prims = [
@@ -179,18 +216,21 @@ def _add_side_cepha_pedicel_points(
 
     return pt_right, pt_left
 
-def _position_vertical_pedicel_opening_points(
+def _position_vertical_pedicel_points(
+    geo: hou.Geometry,
     baseend0: hou.Point,
     headback0: hou.Point,
     sternumrim5: hou.Point,
     lower: hou.Point,
-    pedicel_size_ratio_y: float,
-) -> None:
+    pedicel_size_ratio: tuple[float, float],
+) -> hou.Point:
+    ratio_x, ratio_y = pedicel_size_ratio
+
     p_end = baseend0.position()
     p_head = headback0.position()
     p_sternum = sternumrim5.position()
 
-    p_lower = p_sternum * pedicel_size_ratio_y + p_end * (1 - pedicel_size_ratio_y)
+    p_lower = p_sternum * ratio_y + p_end * (1 - ratio_y)
     lower.setPosition(p_lower)
 
     target_height = p_end.y() - p_lower.y()
@@ -201,41 +241,35 @@ def _position_vertical_pedicel_opening_points(
 
     baseend0.setPosition(new_end)
 
+    p_upper = new_end * (1 - ratio_x) + p_end * ratio_x
+    upper = geo.createPoint()
+    upper.setPosition(p_upper)
+    upper.setAttribValue("id", cephapedicelupper())
+
+    return upper
+
 def _reconnect_sternum_pedicel_loop(
     geo: hou.Geometry,
-    p_lower: hou.Point,
+    cp_upper: hou.Point,
+    cp_right: hou.Point,
+    cp_left: hou.Point,
+    cp_lower: hou.Point,
     left_inner: hou.Point,
     right_inner: hou.Point,
-    sternumrim5: hou.Point,
     bs5_1: hou.Point,
     bs5_2: hou.Point,
+    s5: hou.Point,
+    baseend0: hou.Point,
 ) -> None:
-    p_prims = list(p_lower.prims())
+    p_prims = list(cp_lower.prims())
     geo.deletePrims(p_prims, keep_points=True)
 
-    f_left = fill_face(geo, [bs5_2, p_lower, sternumrim5, left_inner])
-    f_left.setAttribValue("region", base_sops.Region.BASEBUFFERMEMBRANE)
+    fill_pentagon(geo, [cp_right, bs5_1, right_inner, s5, cp_lower], (cp_lower, s5), False)
+    fill_pentagon(geo, [cp_left, bs5_2, left_inner, s5, cp_lower], (cp_lower, s5), True)
 
-    f_right = fill_face(geo, [bs5_1, p_lower, sternumrim5, right_inner], True)
-    f_right.setAttribValue("region", base_sops.Region.BASEBUFFERMEMBRANE)
+    fill_face(geo, [cp_right, bs5_1, baseend0, cp_upper], True)
+    fill_face(geo, [cp_left, bs5_2, baseend0, cp_upper], False)
 
-
-def _open_abdomen_pedicel(node: hou.SopNode) -> None:
-    geo: hou.Geometry = node.geometry()
-    points = points_by_id(geo)
-    origin_point = points.get(abdomen.abdomenorigin())
-    assert origin_point is not None, "Expected abdomenorigin point in abdomen"
-    prims = list(origin_point.prims())
-    geo.deletePrims(prims, keep_points=True)
-    if origin_point in geo.points():
-        geo.deletePoints([origin_point])
-
-
-def _remove_coxa_sockets(node: hou.SopNode) -> None:
-    geo: hou.Geometry = node.geometry()
-    socket_prims = [
-        prim for prim in geo.prims()
-        if prim.stringAttribValue("region").startswith(base_sops.Region.COXASOCKET)
-    ]
-    assert len(socket_prims) == 16, f"Expected 16 coxa socket prims, got {len(socket_prims)}"
-    geo.deletePrims(socket_prims, keep_points=True)
+    for prim in geo.prims():
+        if not prim.stringAttribValue("region"):
+            prim.setAttribValue("region", base_sops.Region.BASEBUFFERMEMBRANE)
