@@ -10,7 +10,11 @@ from abdomen import build as build_abdomen
 from cephalothorax import build as build_cephalothorax
 from leg import build as build_legs
 from pedicel import build as build_pedicel
-from utilities.common import fill_face
+from utilities.common import (
+    fill_face,
+    get_params,
+    get_parent,
+)
 from utilities.helper import points_by_id
 from utilities.nodes import (
     add_fuse,
@@ -76,6 +80,10 @@ def _add_spider() -> hou.SopNode:
 
 def _open_cepha_pedicel(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
+    parent = get_parent(node)
+    params = get_params(parent)
+    _, pedicel_size_ratio_y = params.pedicel_size_ratio
+
     points = points_by_id(geo)
 
     baseend0 = points.get(base_sops.baseend(0))
@@ -90,7 +98,7 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
     assert bs5_2 is not None, "Expected basesternum5_2 point in cephalothorax"
 
     p_lower, right_inner, left_inner = _identify_pedicel_membrane_points(geo)
-    _position_pedicel_opening_points(baseend0, headback0, sternumrim5, p_lower)
+    _position_pedicel_opening_points(baseend0, headback0, sternumrim5, p_lower, pedicel_size_ratio_y)
     _adjust_side_cepha_pedicel_points(bs5_1, bs5_2, right_inner, left_inner)
     _reconnect_sternum_pedicel_loop(geo, p_lower, left_inner, right_inner, sternumrim5, bs5_1, bs5_2)
 
@@ -126,25 +134,23 @@ def _position_pedicel_opening_points(
     baseend0: hou.Point,
     headback0: hou.Point,
     sternumrim5: hou.Point,
-    p_lower: hou.Point,
+    lower: hou.Point,
+    pedicel_size_ratio_y: float,
 ) -> None:
     p_end = baseend0.position()
     p_head = headback0.position()
-    p_p = p_lower.position()
     p_sternum = sternumrim5.position()
 
-    d = (p_end - p_p).length()
+    p_lower = p_sternum * pedicel_size_ratio_y + p_end * (1 - pedicel_size_ratio_y)
+    lower.setPosition(p_lower)
 
-    target_height = p_end.y() - p_sternum.y()
+    target_height = p_end.y() - p_lower.y()
     dy = p_head.y() - p_end.y()
     assert abs(dy) > 1e-6, "Expected non-zero y delta between baseend0 and headback0"
     t = target_height / dy
     new_end = p_end + t * (p_head - p_end)
 
     baseend0.setPosition(new_end)
-
-    dir_sternum_to_orig_end = (p_end - p_sternum).normalized()
-    p_lower.setPosition(p_sternum + dir_sternum_to_orig_end * d)
 
 def _adjust_side_cepha_pedicel_points(
     bs5_1: hou.Point,
