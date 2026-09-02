@@ -3,7 +3,7 @@ from enum import StrEnum, auto
 
 import hou
 
-import main
+import spider
 from utilities.common import (
     add_float_param,
     add_global_attr,
@@ -53,8 +53,8 @@ def abdomensidelower(*i: int | str) -> str:
     return affix_id(ID.ABDOMENSIDELOWER, *i)
 
 
-def build(spider: hou.OpNode, cephalothorax: hou.SopNode) -> hou.SopNode:
-    abdomen = add_reloadable_subnet(spider, "abdomen")
+def build(spider_node: hou.OpNode, cephalothorax: hou.SopNode) -> hou.SopNode:
+    abdomen = add_reloadable_subnet(spider_node, "abdomen")
     abdomen.setInput(0, cephalothorax)
     _add_parameters(abdomen)
     _add_controls(abdomen)
@@ -124,12 +124,12 @@ def _prepare_cephalothorax_info(node: hou.SopNode) -> None:
     y_min = bbox.minvec().y()
 
     points = points_by_id(geo)
-    upper = points.get(main.cephapedicelupper())
-    assert upper is not None, f"Expected {main.cephapedicelupper()!r} in cephalothorax"
-    right = points.get(main.cephapedicelright())
-    assert right is not None, f"Expected {main.cephapedicelright()!r} in cephalothorax"
-    lower = points.get(main.cephapedicellower())
-    assert lower is not None, f"Expected {main.cephapedicellower()!r} in cephalothorax"
+    upper = points.get(spider.cephapedicelupper())
+    assert upper is not None, f"Expected {spider.cephapedicelupper()!r} in cephalothorax"
+    right = points.get(spider.cephapedicelright())
+    assert right is not None, f"Expected {spider.cephapedicelright()!r} in cephalothorax"
+    lower = points.get(spider.cephapedicellower())
+    assert lower is not None, f"Expected {spider.cephapedicellower()!r} in cephalothorax"
 
     origin_y = 0.0
     upper_span = y_max - origin_y
@@ -185,13 +185,13 @@ def _add_width_frame(node: hou.SopNode) -> None:
 
     geo.clear()
     add_id_attr(geo)
-    points_data = [
-        (abdomenorigin(), origin),
-        (abdomenhorizontalrim(1), r1),
-        (abdomenhorizontalrim(2), r2),
-        (abdomenhorizontalrim(3), r3),
-        (abdomenhorizontalrim(4), r4),
-        (abdomenend(), end),
+    points_data = [\
+        (abdomenorigin(), origin),\
+        (abdomenhorizontalrim(1), r1),\
+        (abdomenhorizontalrim(2), r2),\
+        (abdomenhorizontalrim(3), r3),\
+        (abdomenhorizontalrim(4), r4),\
+        (abdomenend(), end),\
     ]
     for point_id, position in points_data:
         point = geo.createPoint()
@@ -241,17 +241,17 @@ def _add_height_frame(node: hou.SopNode) -> None:
 
     geo.clear()
     add_id_attr(geo)
-    points_data = [
-        (abdomenorigin(), o),
-        (abdomenverticalrim(1), r1),
-        (abdomenverticalrim(2), r2),
-        (abdomenverticalrim(3), r3),
-        (abdomenverticalrim(4), r4),
-        (abdomenend(), end),
-        (abdomenverticalrim(-4), rn4),
-        (abdomenverticalrim(-3), rn3),
-        (abdomenverticalrim(-2), rn2),
-        (abdomenverticalrim(-1), rn1),
+    points_data = [\
+        (abdomenorigin(), o),\
+        (abdomenverticalrim(1), r1),\
+        (abdomenverticalrim(2), r2),\
+        (abdomenverticalrim(3), r3),\
+        (abdomenverticalrim(4), r4),\
+        (abdomenend(), end),\
+        (abdomenverticalrim(-4), rn4),\
+        (abdomenverticalrim(-3), rn3),\
+        (abdomenverticalrim(-2), rn2),\
+        (abdomenverticalrim(-1), rn1),\
     ]
     for point_id, position in points_data:
         point = geo.createPoint()
@@ -317,7 +317,7 @@ def _fill_right_side_faces(node: hou.SopNode) -> None:
 
 
 def _rename_left_ids(node: hou.SopNode) -> None:
-    rename_left_ids(node.geometry())
+    rename_left_ids(node.geometry())\
 
 
 def _add_regions(node: hou.SopNode) -> None:
@@ -334,12 +334,12 @@ def _connect_frames_tmp(node: hou.SopNode) -> None:
     o = abdomenorigin()
     e = abdomenend()
 
-    chains = [
-        [o] + [abdomenhorizontalrim(i) for i in range(1, 5)] + [e],
-        [o] + [abdomenverticalrim(i) for i in range(1, 5)] + [e],
-        [o] + [abdomenverticalrim(-i) for i in range(1, 5)] + [e],
-        [o] + [abdomensideupper(i) for i in range(1, 5)] + [e],
-        [o] + [abdomensidelower(i) for i in range(1, 5)] + [e],
+    chains = [\
+        [o] + [abdomenhorizontalrim(i) for i in range(1, 5)] + [e],\
+        [o] + [abdomenverticalrim(i) for i in range(1, 5)] + [e],\
+        [o] + [abdomenverticalrim(-i) for i in range(1, 5)] + [e],\
+        [o] + [abdomensideupper(i) for i in range(1, 5)] + [e],\
+        [o] + [abdomensidelower(i) for i in range(1, 5)] + [e],\
     ]
 
     for chain in chains:
@@ -351,8 +351,7 @@ def _connect_frames_tmp(node: hou.SopNode) -> None:
 
 
 def _cleanup_temp_attributes(node: hou.SopNode) -> None:
-    geo = node.geometry()
     remove_attrs(
-        geo,
+        node.geometry(),
         global_attribs=("tmp_cepha_size", "tmp_cepha_upper_lower_ratio", "tmp_pedicel_length", "tmp_pedicel_height"),
     )

@@ -3,11 +3,8 @@ from enum import StrEnum, auto
 import hou
 
 import abdomen
-import main
-from utilities.common import (
-    add_float_param,
-    add_prim_attr,
-)
+import spider
+from utilities.common import add_prim_attr
 from utilities.helper import (
     add_id_attr,
     affix_id,
@@ -32,10 +29,9 @@ def pedicelmiddlelower(*i: int | str) -> str:
     return affix_id(ID.PEDICELMIDDLELOWER, *i)
 
 
-def build(spider: hou.OpNode, merged_cepha_and_abdomen: hou.SopNode) -> hou.SopNode:
-    pedicel = add_reloadable_subnet(spider, "pedicel")
+def build(spider_node: hou.OpNode, merged_cepha_and_abdomen: hou.SopNode) -> hou.SopNode:
+    pedicel = add_reloadable_subnet(spider_node, "pedicel")
     pedicel.setInput(0, merged_cepha_and_abdomen)
-    _add_parameters(pedicel)
 
     source = pedicel.indirectInputs()[0]
     needed_points = sopify(pedicel, source, _extract_needed_points)
@@ -49,26 +45,15 @@ def build(spider: hou.OpNode, merged_cepha_and_abdomen: hou.SopNode) -> hou.SopN
     return pedicel
 
 
-def _add_parameters(pedicel: hou.SopNode) -> None:
-    add_float_param(
-        pedicel,
-        "size_ratio",
-        2,
-        (1.0, 1.0),
-        (0.0, None),
-        help="Pedicel width and height ratio relative to the base pedicel opening.",
-    )
-
-
 def _extract_needed_points(node: hou.SopNode) -> None:
     geo = node.geometry()
     points = points_by_id(geo)
 
     needed_ids = (
-        main.cephapedicelupper(),
-        main.cephapedicelright(),
-        main.cephapedicelleft(),
-        main.cephapedicellower(),
+        spider.cephapedicelupper(),
+        spider.cephapedicelright(),
+        spider.cephapedicelleft(),
+        spider.cephapedicellower(),
         abdomen.abdomenverticalrim(1),
         abdomen.abdomenverticalrim(-1),
         abdomen.abdomenhorizontalrim(1),
@@ -97,10 +82,10 @@ def _connect_pedicel(node: hou.SopNode) -> None:
     geo = node.geometry()
     points = points_by_id(geo)
 
-    upper = points[main.cephapedicelupper()]
-    right = points[main.cephapedicelright()]
-    left = points[main.cephapedicelleft()]
-    lower = points[main.cephapedicellower()]
+    upper = points[spider.cephapedicelupper()]
+    right = points[spider.cephapedicelright()]
+    left = points[spider.cephapedicelleft()]
+    lower = points[spider.cephapedicellower()]
 
     abdomenverticalrim1 = points[abdomen.abdomenverticalrim(1)]
     abdomenverticalrim_neg1 = points[abdomen.abdomenverticalrim(-1)]
