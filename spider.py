@@ -13,7 +13,7 @@ from pedicel import build as build_pedicel
 from utilities.common import (
     fill_face,
     get_params,
-    get_parent,
+    get_parent, add_folder, add_float_param,
 )
 from utilities.helper import points_by_id
 from utilities.nodes import (
@@ -74,27 +74,19 @@ def _add_spider(parent: hou.OpNode) -> hou.SopNode:
 
 
 def _add_parameters(spider: hou.OpNode) -> None:
-    ptg = spider.parmTemplateGroup()
-    if ptg.find("pedicel_size_ratio"):
-        return
-
-    folder = ptg.findFolder("Build")
-    if not folder:
-        folder = hou.FolderParmTemplate("build", "Build", folder_type=hou.folderType.Tabs)
-        ptg.append(folder)
-
-    param = hou.FloatParmTemplate(
-        "pedicel_size_ratio",
-        "Pedicel Size Ratio",
-        num_components=2,
-        default_value=(1.0, 1.0),
-        min=0.0,
-        min_is_strict=True,
-        naming_scheme=hou.parmNamingScheme.XYZW,
-        help="Pedicel width and height ratio relative to the base pedicel opening.",
+    add_folder(
+        spider,
+        "build"
     )
-    ptg.appendToFolder("Build", param)
-    spider.setParmTemplateGroup(ptg)
+    add_float_param(
+        spider,
+        "pedicel_size_ratio",
+        2,
+        (1.0, 0.5),
+        (0.0, 1.0),
+        folder_label="Build",
+        help="Pedicel width and height ratio relative to the base pedicel opening."
+    )
 
 
 def _open_cepha_pedicel(node: hou.SopNode) -> None:
