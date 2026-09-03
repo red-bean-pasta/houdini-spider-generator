@@ -9,6 +9,7 @@ from utilities.common import (
     add_global_attr,
     add_prim_attr,
     fill_face,
+    get_control,
     get_params,
     get_parent,
     remove_attrs,
@@ -156,8 +157,6 @@ def _prepare_cephalothorax_info(node: hou.SopNode) -> None:
 def _add_width_frame(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
-    control = parent.node("CONTROL")
-    assert control is not None, "Expected CONTROL node"
 
     tmp_cepha_size = geo.attribValue("tmp_cepha_size")
     assert tmp_cepha_size is not None, "Expected tmp_cepha_size attribute"
@@ -167,7 +166,7 @@ def _add_width_frame(node: hou.SopNode) -> None:
     assert tmp_pedicel_length is not None, "Expected tmp_pedicel_length attribute"
 
     params = get_params(parent)
-    control_params = get_params(control)
+    control_params = get_params(get_control(node))
 
     size_ratio_x, _, size_ratio_z = params.size_ratio
     plateau_start, plateau_end = params.plateau_duration
@@ -185,13 +184,13 @@ def _add_width_frame(node: hou.SopNode) -> None:
 
     geo.clear()
     add_id_attr(geo)
-    points_data = [\
-        (abdomenorigin(), origin),\
-        (abdomenhorizontalrim(1), r1),\
-        (abdomenhorizontalrim(2), r2),\
-        (abdomenhorizontalrim(3), r3),\
-        (abdomenhorizontalrim(4), r4),\
-        (abdomenend(), end),\
+    points_data = [
+        (abdomenorigin(), origin),
+        (abdomenhorizontalrim(1), r1),
+        (abdomenhorizontalrim(2), r2),
+        (abdomenhorizontalrim(3), r3),
+        (abdomenhorizontalrim(4), r4),
+        (abdomenend(), end),
     ]
     for point_id, position in points_data:
         point = geo.createPoint()
@@ -202,8 +201,6 @@ def _add_width_frame(node: hou.SopNode) -> None:
 def _add_height_frame(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
-    control = parent.node("CONTROL")
-    assert control is not None, "Expected CONTROL node"
 
     tmp_cepha_size = geo.attribValue("tmp_cepha_size")
     assert tmp_cepha_size is not None, "Expected tmp_cepha_size attribute"
@@ -216,7 +213,7 @@ def _add_height_frame(node: hou.SopNode) -> None:
     assert tmp_pedicel_height is not None, "Expected tmp_pedicel_height attribute"
 
     params = get_params(parent)
-    control_params = get_params(control)
+    control_params = get_params(get_control(node))
 
     _, size_ratio_y, size_ratio_z = params.size_ratio
     plateau_start, plateau_end = params.plateau_duration
@@ -241,17 +238,17 @@ def _add_height_frame(node: hou.SopNode) -> None:
 
     geo.clear()
     add_id_attr(geo)
-    points_data = [\
-        (abdomenorigin(), o),\
-        (abdomenverticalrim(1), r1),\
-        (abdomenverticalrim(2), r2),\
-        (abdomenverticalrim(3), r3),\
-        (abdomenverticalrim(4), r4),\
-        (abdomenend(), end),\
-        (abdomenverticalrim(-4), rn4),\
-        (abdomenverticalrim(-3), rn3),\
-        (abdomenverticalrim(-2), rn2),\
-        (abdomenverticalrim(-1), rn1),\
+    points_data = [
+        (abdomenorigin(), o),
+        (abdomenverticalrim(1), r1),
+        (abdomenverticalrim(2), r2),
+        (abdomenverticalrim(3), r3),
+        (abdomenverticalrim(4), r4),
+        (abdomenend(), end),
+        (abdomenverticalrim(-4), rn4),
+        (abdomenverticalrim(-3), rn3),
+        (abdomenverticalrim(-2), rn2),
+        (abdomenverticalrim(-1), rn1),
     ]
     for point_id, position in points_data:
         point = geo.createPoint()
@@ -317,7 +314,7 @@ def _fill_right_side_faces(node: hou.SopNode) -> None:
 
 
 def _rename_left_ids(node: hou.SopNode) -> None:
-    rename_left_ids(node.geometry())\
+    rename_left_ids(node.geometry())
 
 
 def _add_regions(node: hou.SopNode) -> None:
@@ -334,12 +331,12 @@ def _connect_frames_tmp(node: hou.SopNode) -> None:
     o = abdomenorigin()
     e = abdomenend()
 
-    chains = [\
-        [o] + [abdomenhorizontalrim(i) for i in range(1, 5)] + [e],\
-        [o] + [abdomenverticalrim(i) for i in range(1, 5)] + [e],\
-        [o] + [abdomenverticalrim(-i) for i in range(1, 5)] + [e],\
-        [o] + [abdomensideupper(i) for i in range(1, 5)] + [e],\
-        [o] + [abdomensidelower(i) for i in range(1, 5)] + [e],\
+    chains = [
+        [o] + [abdomenhorizontalrim(i) for i in range(1, 5)] + [e],
+        [o] + [abdomenverticalrim(i) for i in range(1, 5)] + [e],
+        [o] + [abdomenverticalrim(-i) for i in range(1, 5)] + [e],
+        [o] + [abdomensideupper(i) for i in range(1, 5)] + [e],
+        [o] + [abdomensidelower(i) for i in range(1, 5)] + [e],
     ]
 
     for chain in chains:

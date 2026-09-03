@@ -6,6 +6,7 @@ import hou
 from utilities.common import (
     add_prim_attr,
     fill_face,
+    get_control,
     get_float_parm,
     get_params,
     get_parent,
@@ -45,10 +46,9 @@ def _ordered_points(points: list[hou.Point]) -> list[hou.Point]:
 def left_half(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
-    control = parent.node("CONTROL"); assert control is not None
 
     params = get_params(parent, use_tuple=False)
-    control_params = get_params(control, use_tuple=False)
+    control_params = get_params(get_control(node), use_tuple=False)
 
     front_ratio, back_ratio = params.width_length_ratio
     angle = math.radians(control_params.leg_angle)
@@ -158,11 +158,8 @@ def descend_sternum_spine(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
 
-    control = parent.node("CONTROL")
-    assert control is not None, "Expected CONTROL node"
-
     params = get_params(parent, use_tuple=False)
-    control_params = get_params(control, use_tuple=False)
+    control_params = get_params(get_control(node), use_tuple=False)
 
     depth = control_params.half_width * params.width_depth_ratio
     power = params.spine_descend_handle
@@ -319,5 +316,4 @@ def adjust_midpoints_after_extrusion(node: hou.SopNode) -> None:
 
 
 def _cleanup_loop_attributes(node: hou.SopNode) -> None:
-    geo = node.geometry()
-    remove_groups(geo, edge_groups="tmp_outer_boundary")
+    remove_groups(node.geometry(), edge_groups="tmp_outer_boundary")

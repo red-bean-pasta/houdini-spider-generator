@@ -8,6 +8,7 @@ from utilities.common import (
     add_float_param,
     add_prim_attr,
     fill_face,
+    get_control,
     get_float_parm,
     get_params,
     get_parent,
@@ -61,38 +62,6 @@ def _add_parameters(legs: hou.OpNode) -> None:
     )
     add_float_param(
         legs,
-        "support_loop_ratio",
-        1,
-        0.015,
-        (0.0, 1.0),
-        help="Ratio relative to coxa width, fixed across segments.",
-    )
-    add_float_param(
-        legs,
-        "segment_height_ratio",
-        1,
-        1.15,
-        (0.0, None),
-    )
-    add_float_param(
-        legs,
-        "segment_lateral_ratio",
-        1,
-        0.5,
-        (0.0, None),
-        help="The top to the thickest part : the thickest part to the bottom",
-    )
-    add_float_param(
-        legs,
-        "segment_shrink_ratios",
-        2,
-        (0.95, 0.875),
-        (0.0, None),
-        hou.parmNamingScheme.Base1,
-        help="1 for in-segment section shrinking; 2 for between-section.",
-    )
-    add_float_param(
-        legs,
         "min_segment_flexes",
         7,
         (140, 180, 200, 30, 95, 150, 170),
@@ -106,15 +75,6 @@ def _add_parameters(legs: hou.OpNode) -> None:
         (15, 25, 0, 0, 0, 0, 20),
         (0.0, None),
         hou.parmNamingScheme.Base1,
-    )
-    add_float_param(
-        legs,
-        "minimum_membrane_spec",
-        2,
-        (1.0, 5.0),
-        (0.0, None),
-        hou.parmNamingScheme.Base1,
-        help="Membrane distance in ratio to the latter segment's width; Wedge angle in degrees",
     )
     add_heading(
         legs,
@@ -161,6 +121,47 @@ def _add_parameters(legs: hou.OpNode) -> None:
 
 def _add_controls(parent: hou.SopNode) -> hou.SopNode:
     control = parent.createNode("null", "CONTROL")
+    add_float_param(
+        control,
+        "support_loop_ratio",
+        1,
+        0.015,
+        (0.0, 1.0),
+        help="Ratio relative to coxa width, fixed across segments.",
+    )
+    add_float_param(
+        control,
+        "segment_height_ratio",
+        1,
+        1.15,
+        (0.0, None),
+    )
+    add_float_param(
+        control,
+        "segment_lateral_ratio",
+        1,
+        0.5,
+        (0.0, None),
+        help="The top to the thickest part : the thickest part to the bottom",
+    )
+    add_float_param(
+        control,
+        "segment_shrink_ratios",
+        2,
+        (0.95, 0.875),
+        (0.0, None),
+        hou.parmNamingScheme.Base1,
+        help="1 for in-segment section shrinking; 2 for between-section.",
+    )
+    add_float_param(
+        control,
+        "minimum_membrane_spec",
+        2,
+        (1.0, 5.0),
+        (0.0, None),
+        hou.parmNamingScheme.Base1,
+        help="Membrane distance in ratio to the latter segment's width; Wedge angle in degrees",
+    )
     add_float_param(
         control,
         "tarsus_wedge_angle",
@@ -257,10 +258,10 @@ def _extrude_legs(
         origin = top_mid
         direction = hou.Vector3(top_mid.x() - btm_mid.x(), 0.0, top_mid.z() - btm_mid.z()).normalized()
 
-        seg_pts, mem_pts = _build_leg(node, i)
+        seg_pts, thickness_pts, mem_pts = _build_leg(node, i)
 
         q = rotation_to(hou.Vector3(0.0, 0.0, -1.0), direction)
-        for pt in seg_pts + mem_pts:
+        for pt in seg_pts + thickness_pts + mem_pts:
             pt.setPosition(q.rotate(pt.position()) + origin)
 
         _adjust_coxa(node, pts, mid_pts, seg_pts[:16])
@@ -318,8 +319,7 @@ def _adjust_coxa(
     eb2 = coxa_start_support_pts[2]
     eb1 = coxa_start_support_pts[3]
 
-    parent = get_parent(node)
-    support_loop_ratio = get_float_parm(parent, "support_loop_ratio")
+    support_loop_ratio = get_float_parm(get_control(node), "support_loop_ratio")
 
     coxa_width = coxa_start_pts[0].position().distanceTo(coxa_start_pts[1].position())
     cut_length = coxa_width * support_loop_ratio
@@ -360,18 +360,19 @@ def _adjust_coxa(
 def _build_leg(
         node: hou.SopNode,
         leg_index: int,
-) -> tuple[list[hou.Point], list[hou.Point]]:
+) -> tuple[list[hou.Point], list[hou.Point], list[hou.Point]]:
     geo = node.geometry()
     add_prim_attr(geo, "region", "")
 
     seg_pts, warnings = _build_segment_tubes(node, leg_index)
     for w in warnings:
         node.addWarning(w)
+    thickness_pts = _add_segment_thickness(node, seg_pts)
     all_seg_pts = _add_segment_loop_cuts(node, seg_pts)
-    all_seg_pts, mem_pts = _fill_mebranes(all_seg_pts)
-    all_mem_pts = _add_membrane_loop_cuts(node, all_seg_pts, mem_pts)
+    mem_pts = _fill_mebranes(thickness_pts)
+    all_mem_pts = _add_membrane_loop_cuts(node, seg_pts, thickness_pts, mem_pts)
     _close_tarsus(node, all_seg_pts)
-    return all_seg_pts, all_mem_pts
+    return all_seg_pts, thickness_pts, all_mem_pts
 
 def _build_segment_tubes(
         node: hou.SopNode,
@@ -382,12 +383,15 @@ def _build_segment_tubes(
     parent = get_parent(node)
 
     params = get_params(parent, use_tuple=False)
-    segment_height_ratio = params.segment_height_ratio
-    spine_ratio = params.segment_lateral_ratio
-    shrink_ratios = params.segment_shrink_ratios
+    control_params = get_params(get_control(parent), use_tuple=False)
+
+    segment_height_ratio = control_params.segment_height_ratio
+    spine_ratio = control_params.segment_lateral_ratio
+    shrink_ratios = control_params.segment_shrink_ratios
+    minimum_membrane = control_params.minimum_membrane_spec
+
     min_segment_flexes = params.min_segment_flexes
     max_segment_yaws = params.max_segment_yaws
-    minimum_membrane = params.minimum_membrane_spec
     segment_specs = tuple(zip(max_segment_yaws[1:], min_segment_flexes[1:]))
 
     front_coxa_size_ratio = params.front_coxa_size_ratio
@@ -440,14 +444,81 @@ def _build_segment_tubes(
 
     return MessagedResult(seg_pts, messages)
 
+def _add_segment_thickness(
+        node: hou.SopNode,
+        seg_pts: list[hou.Point],
+) -> list[hou.Point]:
+    assert len(seg_pts) % 8 == 0, f"Expected seg_pts length to be a multiple of 8, got {len(seg_pts)}"
+    geo = node.geometry()
+    support_loop_ratio = get_float_parm(get_control(node), "support_loop_ratio")
+    coxa_width = seg_pts[0].position().distanceTo(seg_pts[1].position())
+    cut_length = coxa_width * support_loop_ratio
+
+    num_segs = len(seg_pts) // 8
+    thickness_pts: list[hou.Point] = []
+
+    for i in range(num_segs - 1):
+        former_end = seg_pts[i * 8 + 4:(i + 1) * 8]
+        latter_start = seg_pts[(i + 1) * 8:(i + 1) * 8 + 4]
+
+        former_inset = _inset_loop(geo, former_end, cut_length)
+        latter_inset = _inset_loop(geo, latter_start, cut_length)
+
+        e_loop = [former_end[0], former_end[1], former_end[3], former_end[2]]
+        ie_loop = [former_inset[0], former_inset[1], former_inset[3], former_inset[2]]
+        for j in range(4):
+            next_j = (j + 1) % 4
+            prim = fill_face(geo, [
+                e_loop[next_j],
+                e_loop[j],
+                ie_loop[j],
+                ie_loop[next_j],
+            ])
+            prim.setAttribValue("region", Region.LEGSEGMENT)
+
+        s_loop = [latter_start[0], latter_start[1], latter_start[3], latter_start[2]]
+        is_loop = [latter_inset[0], latter_inset[1], latter_inset[3], latter_inset[2]]
+        for j in range(4):
+            next_j = (j + 1) % 4
+            prim = fill_face(geo, [
+                s_loop[j],
+                s_loop[next_j],
+                is_loop[next_j],
+                is_loop[j],
+            ])
+            prim.setAttribValue("region", Region.LEGSEGMENT)
+
+        thickness_pts.extend([*former_inset, *latter_inset])
+
+    return thickness_pts
+
+def _inset_loop(
+        geo: hou.Geometry,
+        pts: list[hou.Point],
+        cut_length: float,
+) -> list[hou.Point]:
+    assert len(pts) == 4
+    pos0, pos1, pos2, pos3 = points_to_positions(pts)
+    v_down = pos2 - pos0
+    dir_down = v_down.normalized()
+
+    pos_in0 = pos0 + hou.Vector3(-cut_length, 0, 0) + dir_down * cut_length
+    pos_in1 = pos1 + hou.Vector3(cut_length, 0, 0) + dir_down * cut_length
+    pos_in2 = pos2 + hou.Vector3(-cut_length, 0, 0) - dir_down * cut_length
+    pos_in3 = pos3 + hou.Vector3(cut_length, 0, 0) - dir_down * cut_length
+
+    p_in = [geo.createPoint() for _ in range(4)]
+    for p, pos in zip(p_in, (pos_in0, pos_in1, pos_in2, pos_in3)):
+        p.setPosition(pos)
+    return p_in
+
 def _add_segment_loop_cuts(
         node: hou.SopNode,
         seg_pts: list[hou.Point],
 ) -> list[hou.Point]:
     assert len(seg_pts) % 8 == 0, f"Expected seg_pts length to be a multiple of 8, got {len(seg_pts)}"
     geo = node.geometry()
-    parent = get_parent(node)
-    support_loop_ratio = get_float_parm(parent, "support_loop_ratio")
+    support_loop_ratio = get_float_parm(get_control(node), "support_loop_ratio")
 
     coxa_width = seg_pts[0].position().distanceTo(seg_pts[1].position())
     cut_length = coxa_width * support_loop_ratio
@@ -475,22 +546,22 @@ def _add_segment_loop_cuts(
 def _add_membrane_loop_cuts(
         node: hou.SopNode,
         seg_pts: list[hou.Point],
+        thickness_pts: list[hou.Point],
         mem_pts: list[hou.Point],
 ) -> list[hou.Point]:
-    assert len(seg_pts) % 16 == 0, f"Expected seg_pts length to be a multiple of 16, got {len(seg_pts)}"
+    assert len(thickness_pts) % 8 == 0, f"Expected thickness_pts length to be a multiple of 8, got {len(thickness_pts)}"
     geo = node.geometry()
-    parent = get_parent(node)
-    support_loop_ratio = get_float_parm(parent, "support_loop_ratio")
+    support_loop_ratio = get_float_parm(get_control(node), "support_loop_ratio")
 
     coxa_width = seg_pts[0].position().distanceTo(seg_pts[1].position())
     cut_length = coxa_width * support_loop_ratio
 
-    num_segs = len(seg_pts) // 16
+    num_joints = len(thickness_pts) // 8
     all_mem_pts: list[hou.Point] = []
 
-    for i in range(num_segs - 1):
-        former_end = seg_pts[i * 16 + 12:(i + 1) * 16]
-        latter_start = seg_pts[(i + 1) * 16:(i + 1) * 16 + 4]
+    for i in range(num_joints):
+        former_end = thickness_pts[i * 8:i * 8 + 4]
+        latter_start = thickness_pts[i * 8 + 4:(i + 1) * 8]
         mid_pts = mem_pts[i * 4:(i + 1) * 4]
 
         fu1 = former_end[0]
@@ -520,10 +591,7 @@ def _close_tarsus(
     prim = fill_face(geo, [p4, p6, p7, p5])
     prim.setAttribValue("region", Region.LEGSEGMENT)
 
-    parent = get_parent(node)
-    control = parent.node("CONTROL")
-    assert control is not None, "Expected CONTROL node"
-    tarsus_wedge_angle = get_float_parm(control, "tarsus_wedge_angle")
+    tarsus_wedge_angle = get_float_parm(get_control(node), "tarsus_wedge_angle")
 
     pos4, pos5, pos6, pos7 = points_to_positions([p4, p5, p6, p7])
     offset_y = pos4.y() - pos6.y()
@@ -555,20 +623,20 @@ def _add_tube_loop_cut(
     return [m0, m1, m2, m3]
 
 def _fill_mebranes(
-        seg_pts: list[hou.Point],
-) -> tuple[list[hou.Point], list[hou.Point]]:
-    if not seg_pts:
-        return [], []
+        thickness_pts: list[hou.Point],
+) -> list[hou.Point]:
+    if not thickness_pts:
+        return []
 
-    geo = seg_pts[0].geometry()
+    geo = thickness_pts[0].geometry()
     add_prim_attr(geo, "region", "")
-    assert len(seg_pts) % 16 == 0, f"Expected seg_pts length to be a multiple of 16, got {len(seg_pts)}"
+    assert len(thickness_pts) % 8 == 0, f"Expected thickness_pts length to be a multiple of 8, got {len(thickness_pts)}"
 
     membrane_points: list[hou.Point] = []
-    num_segs = len(seg_pts) // 16
-    for i in range(num_segs - 1):
-        former_end = seg_pts[i * 16 + 12:(i + 1) * 16]
-        latter_start = seg_pts[(i + 1) * 16:(i + 1) * 16 + 4]
+    num_joints = len(thickness_pts) // 8
+    for i in range(num_joints):
+        former_end = thickness_pts[i * 8:i * 8 + 4]
+        latter_start = thickness_pts[i * 8 + 4:(i + 1) * 8]
         fu1, fu2, fb1, fb2 = former_end
         lu1, lu2, lb1, lb2 = latter_start
 
@@ -627,7 +695,7 @@ def _fill_mebranes(
             ])
             prim2.setAttribValue("region", Region.LEGMEMBRANE)
 
-    return seg_pts, membrane_points
+    return membrane_points
 
 def _get_front_coxa_socket_size(geo: hou.Geometry) -> tuple[float, float]:
     corners = geo.attribValue("tmp_coxa_corners")
