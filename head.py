@@ -13,7 +13,7 @@ from utilities.common import (
     get_params,
     get_parent,
 )
-from utilities.helper import (
+from helper import (
     add_id_attr,
     affix_id,
     fill_face_by_id,

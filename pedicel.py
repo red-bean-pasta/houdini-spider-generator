@@ -5,7 +5,7 @@ import hou
 import abdomen
 import spider
 from utilities.common import add_prim_attr
-from utilities.helper import (
+from helper import (
     add_id_attr,
     affix_id,
     points_by_id,

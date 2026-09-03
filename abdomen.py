@@ -13,7 +13,7 @@ from utilities.common import (
     get_parent,
     remove_attrs,
 )
-from utilities.helper import (
+from helper import (
     add_id_attr,
     affix_id,
     points_by_id,

@@ -18,7 +18,7 @@ from utilities.common import (
     add_heading,
     add_float_param,
 )
-from utilities.helper import (
+from helper import (
     add_id_attr,
     affix_id,
     deduplicate_id_attr,

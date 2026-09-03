@@ -17,7 +17,7 @@ from utilities.common import (
     get_params,
     get_parent,
 )
-from utilities.helper import points_by_id
+from helper import points_by_id
 from utilities.nodes import (
     add_fuse,
     add_merge,
@@ -282,12 +282,14 @@ def _reconnect_sternum_pedicel_loop(
     b_left = geo.createPoint()
     b_left.setPosition(b_left_pos)
 
-    fill_face(geo, [cp_lower, cp_left, b_left, b_lower], reverse=False)
-    fill_pentagon(geo, [b_left, bs5_2, left_inner, s5, b_lower], (b_lower, s5), reverse=False)
-
     b_upper_pos = cp_upper.position() * (1 - buffer_ratio) + baseend0.position() * buffer_ratio
     b_upper = geo.createPoint()
     b_upper.setPosition(b_upper_pos)
+
+    _adjust_opening_points_depth(cp_right, cp_left, cp_upper)
+
+    fill_face(geo, [cp_lower, cp_left, b_left, b_lower], reverse=False)
+    fill_pentagon(geo, [b_left, bs5_2, left_inner, s5, b_lower], (b_lower, s5), reverse=False)
 
     fill_face(geo, [cp_upper, cp_right, b_right, b_upper], reverse=True)
     fill_face(geo, [b_upper, b_right, bs5_1, baseend0], reverse=True)
@@ -297,3 +299,13 @@ def _reconnect_sternum_pedicel_loop(
     for prim in geo.prims():
         if not prim.stringAttribValue("region"):
             prim.setAttribValue("region", base_sops.Region.BASEBUFFERMEMBRANE)
+
+def _adjust_opening_points_depth(
+    cp_right: hou.Point,
+    cp_left: hou.Point,
+    cp_upper: hou.Point,
+) -> None:
+    offset_z = (cp_right.position().x() - cp_left.position().x()) / 4.0
+    for pt in (cp_right, cp_left, cp_upper):
+        pos = pt.position()
+        pt.setPosition(hou.Vector3(pos.x(), pos.y(), pos.z() - offset_z))

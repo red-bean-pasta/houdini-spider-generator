@@ -14,7 +14,7 @@ from utilities.common import (
     remove_attrs,
     remove_groups,
 )
-from utilities.helper import (
+from helper import (
     add_id_attr,
     affix_id,
     deduplicate_id_attr,

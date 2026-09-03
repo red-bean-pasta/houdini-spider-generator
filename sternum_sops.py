@@ -12,7 +12,7 @@ from utilities.common import (
     is_equal_approx,
     remove_groups,
 )
-from utilities.helper import (
+from helper import (
     add_id_attr,
     affix_id,
     points_by_id,

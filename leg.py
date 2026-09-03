@@ -40,6 +40,7 @@ def build(
     legs = add_reloadable_subnet(spider, "legs")
     legs.setInput(0, base)
     _add_parameters(legs)
+    _add_controls(legs)
 
     extracted = sopify(legs, legs.indirectInputs()[0], _extract_right_coxa)
     extruded = sopify(legs, extracted, _extrude_legs)
@@ -156,6 +157,18 @@ def _add_parameters(legs: hou.OpNode) -> None:
         (0.0, None),
         hou.parmNamingScheme.Base1,
     )
+
+
+def _add_controls(parent: hou.SopNode) -> hou.SopNode:
+    control = parent.createNode("null", "CONTROL")
+    add_float_param(
+        control,
+        "tarsus_wedge_angle",
+        1,
+        45.0,
+        (-60.0, 60.0),
+    )
+    return control
 
 
 def _extract_right_coxa(node: hou.SopNode) -> None:
@@ -357,7 +370,7 @@ def _build_leg(
     all_seg_pts = _add_segment_loop_cuts(node, seg_pts)
     all_seg_pts, mem_pts = _fill_mebranes(all_seg_pts)
     all_mem_pts = _add_membrane_loop_cuts(node, all_seg_pts, mem_pts)
-    _close_tarsus(all_seg_pts)
+    _close_tarsus(node, all_seg_pts)
     return all_seg_pts, all_mem_pts
 
 def _build_segment_tubes(
@@ -498,6 +511,7 @@ def _add_membrane_loop_cuts(
     return all_mem_pts
 
 def _close_tarsus(
+        node: hou.SopNode,
         seg_pts: list[hou.Point],
 ) -> None:
     assert len(seg_pts) >= 4, f"Expected at least 4 seg_pts, got {len(seg_pts)}"
@@ -505,6 +519,18 @@ def _close_tarsus(
     p4, p5, p6, p7 = seg_pts[-4:]
     prim = fill_face(geo, [p4, p6, p7, p5])
     prim.setAttribValue("region", Region.LEGSEGMENT)
+
+    parent = get_parent(node)
+    control = parent.node("CONTROL")
+    assert control is not None, "Expected CONTROL node"
+    tarsus_wedge_angle = get_float_parm(control, "tarsus_wedge_angle")
+
+    pos4, pos5, pos6, pos7 = points_to_positions([p4, p5, p6, p7])
+    offset_y = pos4.y() - pos6.y()
+    offset_z = offset_y * math.tan(math.radians(tarsus_wedge_angle))
+
+    p6.setPosition(hou.Vector3(pos6.x(), pos6.y(), pos6.z() - offset_z))
+    p7.setPosition(hou.Vector3(pos7.x(), pos7.y(), pos7.z() - offset_z))
 
 def _add_tube_loop_cut(
         geo: hou.Geometry,
@@ -519,7 +545,6 @@ def _add_tube_loop_cut(
     assert edge is not None, f"Expected edge between {s0} and {e0}"
     prim = [p for p in edge.prims() if s1 in p.points()][0]
     cut_pts, _ = loop_cut(
-        geo,
         prim,
         s0,
         e0,
