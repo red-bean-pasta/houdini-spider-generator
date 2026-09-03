@@ -4,7 +4,7 @@ from typing import Callable
 import hou
 
 import base_sops
-import sternum_sops
+import sternum
 from chelicerae import cheliceraeupper
 from utilities.common import (
     add_float_param,
@@ -151,7 +151,7 @@ def _extract_work_base(node: hou.SopNode) -> None:
             and (
                 point_id.startswith("base")
                 or point_id.startswith("chelicerae")
-                or point_id == sternum_sops.sternumrim(0)
+                or point_id == sternum.sternumrim(0)
             )
         ),
     )
@@ -177,7 +177,7 @@ def _add_corners_half(node: hou.SopNode) -> None:
     parent = get_parent(node)
     points = points_by_id(geo)
 
-    sternumrim0 = sternum_sops.sternumrim(0)
+    sternumrim0 = sternum.sternumrim(0)
     cheliceraeupper0 = cheliceraeupper(0)
     basesternum1_2 = base_sops.basesternum(1, 2)
     baseend0 = base_sops.baseend(0)

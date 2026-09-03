@@ -3,9 +3,9 @@ from enum import StrEnum, auto
 
 import hou
 
-import sternum_sops
-from sternum_sops import ID as STERNUM_ID
-from sternum_sops import sternumrim
+import sternum
+from sternum import ID as STERNUM_ID
+from sternum import sternumrim
 from utilities.common import (
     add_prim_attr,
     fill_face,
@@ -60,7 +60,7 @@ def extract_sternum_rim(node: hou.SopNode) -> None:
     geo = node.geometry()
     sternum_rim = {
         point_id: point.position()
-        for point_id, point in unique_points_start_with_id(geo, sternum_sops.outer_loop_ids()).items()
+        for point_id, point in unique_points_start_with_id(geo, sternum.outer_loop_ids()).items()
     }
     rim_edges = [
         tuple(point.stringAttribValue("id") for point in edge.points())

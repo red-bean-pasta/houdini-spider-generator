@@ -5,7 +5,7 @@ import hou
 import abdomen
 import base_sops
 import head
-import sternum_sops
+import sternum
 from abdomen import build as build_abdomen
 from cephalothorax import build as build_cephalothorax
 from leg import build as build_legs
@@ -129,7 +129,7 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
     assert baseend0 is not None, "Expected baseend0 point in cephalothorax"
     headback0 = points.get(head.headback(0))
     assert headback0 is not None, "Expected headback0 point in cephalothorax"
-    sternumrim5 = points.get(sternum_sops.sternumrim(5))
+    sternumrim5 = points.get(sternum.sternumrim(5))
     assert sternumrim5 is not None, "Expected sternumrim5 point in cephalothorax"
     bs5_1 = points.get(base_sops.basesternum(5, 1))
     assert bs5_1 is not None, "Expected basesternum5_1 point in cephalothorax"
@@ -167,7 +167,7 @@ def _identify_pedicel_membrane_points(geo: hou.Geometry) -> tuple[hou.Point, hou
     left_inner = None
     for pt in mem_prim.points():
         pt_id = pt.stringAttribValue("id")
-        if pt_id == sternum_sops.sternumrim(5):
+        if pt_id == sternum.sternumrim(5):
             continue
         if abs(pt.position().x()) < 1e-4:
             p_lower = pt
