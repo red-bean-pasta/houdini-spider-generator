@@ -31,8 +31,7 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     depth = sopify(sternum, fuse, sternum_sops.descend_sternum_spine)
     faces = sopify(sternum, depth, sternum_sops.build_sternum_faces)
     regions = sopify(sternum, faces, sternum_sops.add_prim_regions)
-    boundary_prepared = sopify(sternum, regions, sternum_sops.prepare_outer_boundary)
-    buffered = sternum_sops.extrude_sternum_loop(sternum, boundary_prepared)
+    buffered = sopify(sternum, regions, sternum_sops.outset_sternum_loop)
 
     _ = add_output(sternum, "OUT_STERNUM", buffered)
     sternum.layoutChildren()
@@ -67,7 +66,7 @@ def _add_parameters(sternum: hou.SopNode) -> None:
         "spine_descend_handle",
         1,
         0.75,
-        (0.0, None),
+        (0.0, 1.0),
     )
     add_float_param(
         sternum,
