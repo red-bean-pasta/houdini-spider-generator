@@ -303,7 +303,7 @@ def _cleanup_inset_flaps(node: hou.SopNode) -> None:
 
 def _prepare_extrusion(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-    socket_prims: list[hou.Prim] = [
+    socket_prims: list[hou.Prim] = [\
         prim for prim in geo.prims()
         if prim.stringAttribValue("region").startswith("chelicerasocket")
     ]
@@ -522,8 +522,12 @@ def _retopology_upper_membrane(node: hou.SopNode) -> None:
     geo.deletePoints(to_del_pts)
 
     id_points = points_by_id(geo)
-    fill_face(geo, [id_points[cheliceraeupper(0)], id_points[cheliceraeupper(2)], id_points[cheliceraestart(3)], id_points[cheliceraestart(2)]], True)
-    fill_face(geo, [id_points[cheliceraeupper(0)], id_points[cheliceraestart(-2)], id_points[cheliceraestart(-3)], id_points[cheliceraeupper(-2)]], True)
+    set_point_id(id_points[cheliceraeupper(2)], cheliceraeupper(1))
+    set_point_id(id_points[cheliceraeupper(-2)], cheliceraeupper(-1))
+
+    id_points = points_by_id(geo)
+    fill_face(geo, [id_points[cheliceraeupper(0)], id_points[cheliceraeupper(1)], id_points[cheliceraestart(3)], id_points[cheliceraestart(2)]], True)
+    fill_face(geo, [id_points[cheliceraeupper(0)], id_points[cheliceraestart(-2)], id_points[cheliceraestart(-3)], id_points[cheliceraeupper(-1)]], True)
 
 
 @dataclass

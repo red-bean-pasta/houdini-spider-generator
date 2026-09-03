@@ -38,24 +38,22 @@ class ID(StrEnum):
     HEADSIDEFRONT = auto()
     HEADSIDEMIDDLE = auto()
     HEADSIDEBACK = auto()
+    HEADSUPPORT = auto()
 
 def headfront(*i: int | str) -> str:
     return affix_id(ID.HEADFRONT, *i)
-
 def headback(*i: int | str) -> str:
     return affix_id(ID.HEADBACK, *i)
-
 def headtopmiddle(*i: int | str) -> str:
     return affix_id(ID.HEADTOPMIDDLE, *i)
-
 def headsidefront(*i: int | str) -> str:
     return affix_id(ID.HEADSIDEFRONT, *i)
-
 def headsidemiddle(*i: int | str) -> str:
     return affix_id(ID.HEADSIDEMIDDLE, *i)
-
 def headsideback(*i: int | str) -> str:
     return affix_id(ID.HEADSIDEBACK, *i)
+def headsupport(*i: int | str) -> str:
+    return affix_id(ID.HEADSUPPORT, *i)
 
 
 def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
@@ -68,14 +66,16 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
     base_points = sopify(head, source, _extract_work_base)
     corners = sopify(head, base_points, _add_corners_half)
     back_faces = sopify(head, corners, _fill_back_loop_faces)
-    right_half = sopify(head, back_faces, _fill_side_faces)
+    support_faces = sopify(head, back_faces, _fill_support_loop_faces)
+    right_half = sopify(head, support_faces, _fill_side_faces)
     regions = sopify(head, right_half, _add_side_regions)
     mirrored = add_mirror(head, "left_mirror", regions, (1, 0, 0), True, False)
     faces = sopify(head, mirrored, _rename_left_ids)
 
     merged = add_merge(head, "merge_base_rim", base_rim, faces)
     fused = add_fuse(head, "fuse_base_rim", merged)
-    add_output(head, "OUT_HEAD", fused)
+    cleaned = sopify(head, fused, _cleanup)
+    add_output(head, "OUT_HEAD", cleaned)
     head.layoutChildren()
     return head
 
@@ -94,6 +94,15 @@ def _add_parameters(head: hou.SopNode) -> None:
         1,
         0.4,
         (0.0, None),
+    )
+    add_float_param(
+        head,
+        "top_support_loop_ratio",
+        2,
+        (0.2, 0.5),
+        (0.0, 1.0),
+        hou.parmNamingScheme.Base1,
+        help="Affects how sharp or boxy the head looks; the first is for front ratio and the second for behind",
     )
     add_float_param(
         head,
@@ -140,7 +149,6 @@ def _add_named_point(
 
 def _extract_work_base(node: hou.SopNode) -> None:
     excluded_ids = {
-        base_sops.basesternum(0),
         base_sops.basesternum(1, 1),
     }
     _extract_points(
@@ -150,7 +158,7 @@ def _extract_work_base(node: hou.SopNode) -> None:
             and point_id not in excluded_ids
             and (
                 point_id.startswith("base")
-                or point_id.startswith("chelicerae")
+                or point_id in (cheliceraeupper(0), cheliceraeupper(1))
                 or point_id == sternum.sternumrim(0)
             )
         ),
@@ -167,7 +175,14 @@ def _extract_base_rim(node: hou.SopNode) -> None:
         node,
         lambda point_id, position: (
             point_id not in excluded_ids
-            and (point_id.startswith("base") or point_id.startswith("chelicerae"))
+            and (
+                point_id.startswith("base")
+                or point_id in (
+                    cheliceraeupper(0),
+                    cheliceraeupper(1),
+                    cheliceraeupper(-1),
+                )
+            )
         ),
     )
 
@@ -179,49 +194,80 @@ def _add_corners_half(node: hou.SopNode) -> None:
 
     sternumrim0 = sternum.sternumrim(0)
     cheliceraeupper0 = cheliceraeupper(0)
+    basesternum0 = base_sops.basesternum(0)
     basesternum1_2 = base_sops.basesternum(1, 2)
+    basesternum3 = base_sops.basesternum(3)
+    basesternum5_1 = base_sops.basesternum(5, 1)
     baseend0 = base_sops.baseend(0)
-    expected_ids = (sternumrim0, cheliceraeupper0, basesternum1_2, baseend0)
+    expected_ids = (
+        sternumrim0,
+        cheliceraeupper0,
+        basesternum0,
+        basesternum1_2,
+        basesternum3,
+        basesternum5_1,
+        baseend0,
+    )
     assert all(point_id in points for point_id in expected_ids), "Expected head reference points"
 
-    sternumrim0_position = points[sternumrim0].position()
-    cheliceraeupper0_position = points[cheliceraeupper0].position()
-    baseend0_position = points[baseend0].position()
-    basesternum1_2_position = points[basesternum1_2].position()
+    sternumrim0_pos = points[sternumrim0].position()
+    cheliceraeupper0_pos = points[cheliceraeupper0].position()
+    basesternum0_pos = points[basesternum0].position()
+    basesternum1_2_pos = points[basesternum1_2].position()
+    basesternum3_pos = points[basesternum3].position()
+    basesternum5_1_pos = points[basesternum5_1].position()
+    baseend0_pos = points[baseend0].position()
 
-    height = baseend0_position[2] - cheliceraeupper0_position[2]
+    height = baseend0_pos[2] - cheliceraeupper0_pos[2]
     params = get_params(parent)
     height_ratio = params.height_ratio
     flat_ratio = params.flat_ratio
+    top_support_loop_ratio1, top_support_loop_ratio2 = params.top_support_loop_ratio
+    top_support_loop_ratio_mid = (top_support_loop_ratio1 + top_support_loop_ratio2) / 2.0
     y_offset = hou.Vector3(0.0, height * height_ratio, 0.0)
     z_offset = hou.Vector3(0.0, 0.0, height * flat_ratio)
 
     def align_front(position: hou.Vector3) -> hou.Vector3:
         return position + y_offset - hou.Vector3(
             0.0,
-            position[1] - sternumrim0_position[1],
+            position[1] - sternumrim0_pos[1],
             0.0,
         )
 
-    headfront0_position = align_front(cheliceraeupper0_position)
-    headfront1_position = align_front(basesternum1_2_position)
-    headback0_position = headfront0_position + z_offset
-    headback1_position = headfront1_position + z_offset
-    headtopmiddle1_position = (headfront1_position + headback1_position) / 2.0
-    headtopmiddle0_position = (headfront0_position + headback0_position) / 2.0
+    headfront0_pos = align_front(cheliceraeupper0_pos)
+    headfront1_pos = align_front(basesternum1_2_pos)
+    headback0_pos = headfront0_pos + z_offset
+    headback1_pos = headfront1_pos + z_offset
+    headtopmiddle1_pos = (headfront1_pos + headback1_pos) / 2.0
+    headtopmiddle0_pos = (headfront0_pos + headback0_pos) / 2.0
+
+    r1 = top_support_loop_ratio1
+    r2 = top_support_loop_ratio2
+    r_mid = top_support_loop_ratio_mid
+
+    headsupport0_pos = headfront0_pos * (1.0 - r1) + basesternum0_pos * r1
+    headsupport1_pos = headfront1_pos * (1.0 - r1) + basesternum1_2_pos * r1
+    headsupport2_pos = headtopmiddle1_pos * (1.0 - r_mid) + basesternum3_pos * r_mid
+    headsupport3_pos = headback1_pos * (1.0 - r2) + basesternum5_1_pos * r2
+    headsupport4_pos = headback0_pos * (1.0 - r2) + baseend0_pos * r2
 
     point_data = [
         (point_id, point.position())
         for point_id, point in points.items()
-        if point_id != sternumrim0
+        if point_id not in (sternumrim0, basesternum0)
     ]
     new_points = [
-        (headfront(0), headfront0_position),
-        (headfront(1), headfront1_position),
-        (headback(0), headback0_position),
-        (headback(1), headback1_position),
-        (headtopmiddle(1), headtopmiddle1_position),
-        (headtopmiddle(0), headtopmiddle0_position),
+        (headfront(0), headfront0_pos),
+        (headfront(1), headfront1_pos),
+        (headback(0), headback0_pos),
+        (headback(1), headback1_pos),
+        (headtopmiddle(1), headtopmiddle1_pos),
+        (headtopmiddle(0), headtopmiddle0_pos),
+        (headsupport(0), headsupport0_pos),
+        (headsupport(1), headsupport1_pos),
+        (headsupport(2), headsupport2_pos),
+        (headsupport(3), headsupport3_pos),
+        (headsupport(4), headsupport4_pos),
     ]
     _add_points(geo, point_data + new_points)
 
@@ -231,13 +277,13 @@ def _fill_back_loop_faces(node: hou.SopNode) -> None:
     faces = (
         (
             cheliceraeupper(0),
-            headfront(0),
-            headfront(1),
-            cheliceraeupper(2),
+            headsupport(0),
+            headsupport(1),
+            cheliceraeupper(1),
         ),
         (
-            cheliceraeupper(2),
-            headfront(1),
+            cheliceraeupper(1),
+            headsupport(1),
             base_sops.basesternum(1, 2),
             base_sops.basemaxilla(1),
         ),
@@ -254,15 +300,56 @@ def _fill_back_loop_faces(node: hou.SopNode) -> None:
             headback(0),
         ),
         (
-            headback(0),
             headback(1),
-            base_sops.basesternum(5, 1),
+            headback(0),
+            headsupport(4),
+            headsupport(3),
+        ),
+        (
+            headsupport(3),
+            headsupport(4),
             base_sops.baseend(0),
+            base_sops.basesternum(5, 1),
         ),
     )
-    regions = ("headfrontmain", "headfrontcheek", "headtop", "headtop", "headback")
+    regions = (
+        "headfrontmain",
+        "headfrontcheek",
+        "headtop",
+        "headtop",
+        "headtop",
+        "headback",
+    )
 
     add_prim_attr(geo, "region", "")
+    for i, face in enumerate(faces):
+        prim = fill_face_by_id(geo, list(face))
+        prim.setAttribValue("region", regions[i])
+
+def _fill_support_loop_faces(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    faces = (
+        (
+            headfront(0),
+            headfront(1),
+            headsupport(1),
+            headsupport(0),
+        ),
+        (
+            headfront(1),
+            headtopmiddle(1),
+            headsupport(2),
+            headsupport(1),
+        ),
+        (
+            headtopmiddle(1),
+            headback(1),
+            headsupport(3),
+            headsupport(2),
+        ),
+    )
+    regions = ("headtop", "headtop", "headtop")
+
     for i, face in enumerate(faces):
         prim = fill_face_by_id(geo, list(face))
         prim.setAttribValue("region", regions[i])
@@ -319,15 +406,16 @@ def _fill_side_faces(node: hou.SopNode) -> None:
         for offset in back_offsets[1:]
     ]
 
-    headfront_point = points.get(headfront(1))
-    headmiddle_point = points.get(headtopmiddle(1))
-    headback_point = points.get(headback(1))
+    headfront_point = points.get(headsupport(1))
+    headmiddle_point = points.get(headsupport(2))
+    headback_point = points.get(headsupport(3))
     assert (
         headfront_point is not None
         and headmiddle_point is not None
         and headback_point is not None
     ), "Expected head side reference points"
     headfront_position = headfront_point.position()
+    headmiddle_position = headmiddle_point.position()
     headback_position = headback_point.position()
 
     side_points = []
@@ -337,7 +425,8 @@ def _fill_side_faces(node: hou.SopNode) -> None:
     ):
         front_position = center_position + (headfront_position - center_position) * front_ratio
         back_position = center_position + (headback_position - center_position) * back_ratio
-        middle_position = (front_position + back_position) / 2.0
+        middle_ratio = (front_ratio + back_ratio) / 2.0
+        middle_position = center_position + (headmiddle_position - center_position) * middle_ratio
         side_points.append(
             (
                 _add_named_point(geo, front_position, headsidefront(layer)),
@@ -387,3 +476,10 @@ def _add_side_regions(node: hou.SopNode) -> None:
 
 def _rename_left_ids(node: hou.SopNode) -> None:
     rename_left_ids(node.geometry())
+
+
+def _cleanup(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    unused = [p for p in geo.points() if not p.prims()]
+    if unused:
+        geo.deletePoints(unused)
