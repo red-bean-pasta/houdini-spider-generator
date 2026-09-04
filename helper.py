@@ -45,8 +45,8 @@ def get_id_range(geo: hou.Geometry, prefix: str) -> tuple[int, int] | None:
     return indexed_attr_range(geo, "id", prefix)
 
 
-def fill_face_by_id(geo: hou.Geometry, values: list[str]) -> hou.Polygon:
-    return fill_face_by_attr(geo, "id", values)
+def fill_face_by_id(geo: hou.Geometry, values: Sequence[str], reverse: bool = False) -> hou.Polygon:
+    return fill_face_by_attr(geo, "id", values, reverse)
 
 
 def unique_points_start_with_id(

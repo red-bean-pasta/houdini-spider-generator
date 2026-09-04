@@ -6,20 +6,22 @@ import hou
 import base_sops
 import sternum
 from chelicerae import cheliceraeupper
-from utilities.common import (
-    add_float_param,
-    add_prim_attr,
-    fill_face,
-    get_params,
-    get_parent,
-)
 from helper import (
     add_id_attr,
     affix_id,
+    deduplicate_id_attr,
     fill_face_by_id,
     points_by_id,
     rename_left_ids,
     set_point_id,
+)
+from utilities.common import (
+    add_float_param,
+    add_prim_attr,
+    fill_face,
+    get_float_parm,
+    get_params,
+    get_parent,
 )
 from utilities.nodes import (
     add_fuse,
@@ -29,6 +31,7 @@ from utilities.nodes import (
     add_reloadable_subnet,
     sopify,
 )
+from utilities.topology import inset
 
 
 class ID(StrEnum):
@@ -74,7 +77,8 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
 
     merged = add_merge(head, "merge_base_rim", base_rim, faces)
     fused = add_fuse(head, "fuse_base_rim", merged)
-    cleaned = sopify(head, fused, _cleanup)
+    outset_geo = sopify(head, fused, _inset_base_loop)
+    cleaned = sopify(head, outset_geo, _cleanup)
     add_output(head, "OUT_HEAD", cleaned)
     head.layoutChildren()
     return head
@@ -274,47 +278,54 @@ def _add_corners_half(node: hou.SopNode) -> None:
 
 def _fill_back_loop_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
-    faces = (
+    faces = {
         (
             cheliceraeupper(0),
             headsupport(0),
             headsupport(1),
             cheliceraeupper(1),
-        ),
+        ): True,
         (
             cheliceraeupper(1),
             headsupport(1),
             base_sops.basesternum(1, 2),
             base_sops.basemaxilla(1),
-        ),
+        ): True,
+        (
+            headfront(0),
+            headfront(1),
+            headsupport(1),
+            headsupport(0),
+        ): True,
         (
             headfront(0),
             headfront(1),
             headtopmiddle(1),
             headtopmiddle(0),
-        ),
+        ): False,
         (
             headtopmiddle(0),
             headtopmiddle(1),
             headback(1),
             headback(0),
-        ),
+        ): False,
         (
             headback(1),
             headback(0),
             headsupport(4),
             headsupport(3),
-        ),
+        ): True,
         (
             headsupport(3),
             headsupport(4),
             base_sops.baseend(0),
             base_sops.basesternum(5, 1),
-        ),
-    )
+        ): True,
+    }
     regions = (
         "headfrontmain",
         "headfrontcheek",
+        "headtop",
         "headtop",
         "headtop",
         "headtop",
@@ -322,36 +333,30 @@ def _fill_back_loop_faces(node: hou.SopNode) -> None:
     )
 
     add_prim_attr(geo, "region", "")
-    for i, face in enumerate(faces):
-        prim = fill_face_by_id(geo, list(face))
+    for i, (face, reverse) in enumerate(faces.items()):
+        prim = fill_face_by_id(geo, face, reverse)
         prim.setAttribValue("region", regions[i])
 
 def _fill_support_loop_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
-    faces = (
-        (
-            headfront(0),
-            headfront(1),
-            headsupport(1),
-            headsupport(0),
-        ),
+    faces = {
         (
             headfront(1),
             headtopmiddle(1),
             headsupport(2),
             headsupport(1),
-        ),
+        ): True,
         (
             headtopmiddle(1),
             headback(1),
             headsupport(3),
             headsupport(2),
-        ),
-    )
-    regions = ("headtop", "headtop", "headtop")
+        ): True,
+    }
+    regions = ("headtop", "headtop")
 
-    for i, face in enumerate(faces):
-        prim = fill_face_by_id(geo, list(face))
+    for i, (face, reverse) in enumerate(faces.items()):
+        prim = fill_face_by_id(geo, face, reverse)
         prim.setAttribValue("region", regions[i])
 
 
@@ -476,6 +481,22 @@ def _add_side_regions(node: hou.SopNode) -> None:
 
 def _rename_left_ids(node: hou.SopNode) -> None:
     rename_left_ids(node.geometry())
+
+
+def _inset_base_loop(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    parent = get_parent(node)
+    points = points_by_id(geo)
+    headfront0 = points.get(headfront(0))
+    baseend0 = points.get(base_sops.baseend(0))
+    if headfront0 is None or baseend0 is None:
+        return
+    height = headfront0.position().y() - baseend0.position().y()
+    membrane_ratio = get_float_parm(parent, "membrane_ratio")
+    dist = membrane_ratio * height
+
+    inset(list(geo.prims()), dist, use_ratio=False)
+    deduplicate_id_attr(geo, None, keep_first=True)
 
 
 def _cleanup(node: hou.SopNode) -> None:

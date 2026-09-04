@@ -127,8 +127,8 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
 
     baseend0 = points.get(base_sops.baseend(0))
     assert baseend0 is not None, "Expected baseend0 point in cephalothorax"
-    headback0 = points.get(head.headback(0))
-    assert headback0 is not None, "Expected headback0 point in cephalothorax"
+    headsupport4 = points.get(head.headsupport(4))
+    assert headsupport4 is not None, "Expected headsupport4 point in cephalothorax"
     sternumrim5 = points.get(sternum.sternumrim(5))
     assert sternumrim5 is not None, "Expected sternumrim5 point in cephalothorax"
     bs5_1 = points.get(base_sops.basesternum(5, 1))
@@ -139,7 +139,7 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
     p_lower, right_inner, left_inner = _identify_pedicel_membrane_points(geo)
     _adjust_side_coxa_points(bs5_1, bs5_2, right_inner, left_inner)
     cp_right, cp_left = _add_side_cepha_pedicel_points(geo, baseend0, bs5_1, bs5_2, pedicel_size_ratio_x)
-    cp_upper = _position_vertical_pedicel_points(geo, baseend0, headback0, sternumrim5, p_lower, pedicel_size_ratio)
+    cp_upper = _position_vertical_pedicel_points(geo, baseend0, headsupport4, sternumrim5, p_lower, pedicel_size_ratio)
     _reconnect_sternum_pedicel_loop(
         geo,
         cp_upper,
@@ -222,7 +222,7 @@ def _add_side_cepha_pedicel_points(
 def _position_vertical_pedicel_points(
     geo: hou.Geometry,
     baseend0: hou.Point,
-    headback0: hou.Point,
+    headsupport4: hou.Point,
     sternumrim5: hou.Point,
     lower: hou.Point,
     pedicel_size_ratio: tuple[float, float],
@@ -230,7 +230,7 @@ def _position_vertical_pedicel_points(
     ratio_x, ratio_y = pedicel_size_ratio
 
     p_end = baseend0.position()
-    p_head = headback0.position()
+    p_head = headsupport4.position()
     p_sternum = sternumrim5.position()
 
     p_lower = p_sternum * ratio_y + p_end * (1 - ratio_y)
@@ -240,9 +240,14 @@ def _position_vertical_pedicel_points(
     dy = p_head.y() - p_end.y()
     assert abs(dy) > 1e-6, "Expected non-zero y delta between baseend0 and headback0"
     t = target_height / dy
-    new_end = p_end + t * (p_head - p_end)
+    offset = t * (p_head - p_end)
+    new_end = p_end + offset
 
     baseend0.setPosition(new_end)
+
+    support_end = _find_head_support_end_point(baseend0)
+    if support_end is not None:
+        support_end.setPosition((p_head + new_end) * 0.5)
 
     p_upper = new_end * (1 - ratio_x) + p_end * ratio_x
     upper = geo.createPoint()
@@ -250,6 +255,14 @@ def _position_vertical_pedicel_points(
     upper.setAttribValue("id", cephapedicelupper())
 
     return upper
+
+def _find_head_support_end_point(baseend0: hou.Point) -> hou.Point | None:
+    for prim in baseend0.prims():
+        if prim.stringAttribValue("region") == "headback":
+            for pt in prim.points():
+                if pt != baseend0 and abs(pt.position().x()) < 1e-4:
+                    return pt
+    return None
 
 def _reconnect_sternum_pedicel_loop(
     geo: hou.Geometry,
@@ -275,7 +288,7 @@ def _reconnect_sternum_pedicel_loop(
         (cp_lower, cp_right),
         buffer_ratio,
         (cp_lower, s5),
-        reverse=True,
+        reverse=False,
     )
 
     b_left_pos = cp_left.position() * (1 - buffer_ratio) + bs5_2.position() * buffer_ratio
@@ -288,8 +301,8 @@ def _reconnect_sternum_pedicel_loop(
 
     _adjust_opening_points_depth(cp_right, cp_left, cp_upper)
 
-    fill_face(geo, [cp_lower, cp_left, b_left, b_lower], reverse=False)
-    fill_pentagon(geo, [b_left, bs5_2, left_inner, s5, b_lower], (b_lower, s5), reverse=False)
+    fill_face(geo, [cp_lower, cp_left, b_left, b_lower], reverse=True)
+    fill_pentagon(geo, [b_left, bs5_2, left_inner, s5, b_lower], (b_lower, s5), reverse=True)
 
     fill_face(geo, [cp_upper, cp_right, b_right, b_upper], reverse=True)
     fill_face(geo, [b_upper, b_right, bs5_1, baseend0], reverse=True)
