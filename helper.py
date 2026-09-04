@@ -65,18 +65,43 @@ def deduplicate_id_attr(
     deduplicate_point_attributes(geo, "id", prefix, add_affix=add_affix, keep_first=keep_first)
 
 
-def rename_left_ids(geo: hou.Geometry) -> None:
+def rename_left_ids(geo: hou.Geometry, affix_index: int | None = 0) -> None:
+    """Rename point IDs for mirrored geometry on the left side (x < 0).
+
+    Negates the numeric affix at the given `affix_index` (default 0).
+    - If `affix_index` is an integer: negates the affix at that index, supporting negative indexing like `list[-1]` to negate the last affix.
+    - If `affix_index` is None: negates all affixes.
+
+    If an ID has only a single affix (e.g. "cheliceraestart1"), that affix is negated even if `affix_index` is out of range.
+    """
     def filtrate(p: hou.Point) -> bool:
         return p.position()[0] < 0.0
 
     def rename(point_id: str) -> str | Literal[False]:
+        parts = point_id.split("_")
         first_digit = next(
-            (index for index, character in enumerate(point_id) if character.isdigit()),
+            (index for index, character in enumerate(parts[0]) if character.isdigit() or character == "-"),
             None,
         )
         if first_digit is None:
             return False
-        return f"{point_id[:first_digit]}-{point_id[first_digit:]}"
+
+        prefix = parts[0][:first_digit]
+        affixes = [parts[0][first_digit:]] + parts[1:]
+
+        def negate(val: str) -> str:
+            return val[1:] if val.startswith("-") else f"-{val}"
+
+        if affix_index is None:
+            affixes = [negate(a) for a in affixes]
+        else:
+            try:
+                affixes[affix_index] = negate(affixes[affix_index])
+            except IndexError:
+                if len(affixes) == 1:
+                    affixes[0] = negate(affixes[0])
+
+        return prefix + "_".join(affixes)
 
     rename_point_attr(geo, "id", filtrate, rename)
 
@@ -107,7 +132,7 @@ def find_quad_polyextrude_splits(
                 for point in primitive_points
                 if point not in common_points
             ]
-            assert len(opposite_points) == 2, f"Could not determine opposite edge of primitive {primitive.number()}"
+            assert len(opposite_points) == 2, f"Could not determine opposite edge of primitive {primitive.number()}\""
 
             edge = geo.findEdge(opposite_points[0],  opposite_points[1])
             assert edge is not None, f"Expected opposite points of primitive {primitive.number()} to form an edge"

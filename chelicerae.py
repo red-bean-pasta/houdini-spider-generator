@@ -1,4 +1,5 @@
 from typing import Callable
+from functools import partial
 from dataclasses import dataclass
 from enum import StrEnum, auto
 
@@ -23,8 +24,8 @@ from helper import (
     affix_id,
     deduplicate_id_attr,
     points_by_id,
-    set_point_id,
     rename_left_ids,
+    set_point_id,
     set_points_id,
 )
 from utilities.identifying import attribute_after_inset
@@ -40,34 +41,35 @@ from utilities.topology import interpolate_elliptical
 
 
 class ID(StrEnum):
-    CHELICERAEUPPER = auto()
+    CHELICERAEMEMBRANEUPPER = auto()
     CHELICERAESTART = auto()
-    CHELICERAEUPPERMIDDLE = auto()
     CHELICERAEMIDDLE = auto()
-    CHELICERAELOWERMIDDLE = auto()
     CHELICERAEEND = auto()
-    CHELICERAERETO = auto()
 
-def cheliceraeupper(*i: int | str) -> str:
-    return affix_id(ID.CHELICERAEUPPER, *i)
-
+def cheliceraemembraneupper(*i: int | str) -> str:
+    return affix_id(ID.CHELICERAEMEMBRANEUPPER, *i)
 def cheliceraestart(*i: int | str) -> str:
     return affix_id(ID.CHELICERAESTART, *i)
-
-def cheliceraeuppermiddle(*i: int | str) -> str:
-    return affix_id(ID.CHELICERAEUPPERMIDDLE, *i)
-
 def cheliceraemiddle(*i: int | str) -> str:
     return affix_id(ID.CHELICERAEMIDDLE, *i)
-
-def cheliceraelowermiddle(*i: int | str) -> str:
-    return affix_id(ID.CHELICERAELOWERMIDDLE, *i)
-
 def cheliceraeend(*i: int | str) -> str:
     return affix_id(ID.CHELICERAEEND, *i)
 
-def cheliceraereto(*i: int | str) -> str:
-    return affix_id(ID.CHELICERAERETO, *i)
+def _section_middle(ratio: float, *i: int | str) -> str:
+    return affix_id("tmpsection", ratio, *i)
+
+def _tmp_membrane_inner_upper(*i: int | str) -> str:
+    return affix_id("tmpmembraneinnerupper", *i)
+def _tmp_membrane_inner_lower(*i: int | str) -> str:
+    return affix_id("tmpmembraneinnerlower", *i)
+def _retopo(*i: int | str) -> str:
+    return affix_id("tmpretopo", *i)
+def _retopo_float(*i: int | str) -> str:
+    return _retopo("float", *i)
+def _retopo_back(*i: int | str) -> str:
+    return _retopo_float("back", *i)
+def _retopo_side(*i: int | str) -> str:
+    return _retopo_float("side", *i)
 
 
 def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
@@ -83,7 +85,8 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
     prepared = sopify(chelicerae, cleanup, _prepare_extrusion)
     end_section = sopify(chelicerae, prepared, _add_end_section)
     middle_section = sopify(chelicerae, end_section, _add_middle_section)
-    upper_middle_section = sopify(chelicerae, middle_section, _add_upper_middle_section)
+    upper_section = sopify(chelicerae, middle_section, _add_upper_section)
+    upper_middle_section = sopify(chelicerae, upper_section, _add_upper_middle_section)
     lower_middle_section = sopify(chelicerae, upper_middle_section, _add_lower_middle_section)
     connected = sopify(chelicerae, lower_middle_section, _connect_sections)
     extrusion = sopify(chelicerae, connected, _extract_extrusion)
@@ -137,7 +140,7 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
         chelicerae,
         "end_section_offset",
         3,
-        (0.25, 3.5, 0.5),
+        (0.2, 3.5, 0.5),
         label="Offset"
     )
     add_float_param(
@@ -206,7 +209,7 @@ def _build_geometry(node: hou.SopNode) -> None:
     upper_points = []
     upper_ids = []
     for index, position in enumerate(base_positions):
-        point_id = cheliceraeupper(index - 2)
+        point_id = cheliceraemembraneupper(index - 2)
         point = geo.createPoint()
         point.setPosition(position + height_offset)
         upper_points.append(point)
@@ -237,7 +240,7 @@ def _identify_inset_split(node: hou.SopNode) -> None:
 
     points = points_by_id(geo)
     lower_id = base_sops.basesternum(0)
-    upper_id = cheliceraeupper(0)
+    upper_id = cheliceraemembraneupper(0)
     lower = points.get(lower_id)
     upper = points.get(upper_id)
     assert lower is not None and upper is not None, f"Expected chelicerae points {lower_id!r} and {upper_id!r}"
@@ -275,19 +278,19 @@ def _classify_after_inset(node: hou.SopNode) -> None:
             for pt in prim.points():
                 pts_dict[pt.number()] = pt
     points = list(pts_dict.values())
-    points.sort(key=lambda pt: (pt.position().x(), pt.position().y()))
+    points.sort(key=lambda pt: (round(pt.position().x(), 2), pt.position().y()))
 
     target_ids = (
         cheliceraestart(-4),
         cheliceraestart(-3),
-        "cheliceramiddlelower-1",
-        "cheliceramiddleupper-1",
+        _tmp_membrane_inner_lower(-1),
+        _tmp_membrane_inner_upper(-1),
         cheliceraestart(-1),
         cheliceraestart(-2),
         cheliceraestart(1),
         cheliceraestart(2),
-        "cheliceramiddlelower1",
-        "cheliceramiddleupper1",
+        _tmp_membrane_inner_lower(1),
+        _tmp_membrane_inner_upper(1),
         cheliceraestart(4),
         cheliceraestart(3),
     )
@@ -303,7 +306,7 @@ def _cleanup_inset_flaps(node: hou.SopNode) -> None:
 
 def _prepare_extrusion(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-    socket_prims: list[hou.Prim] = [\
+    socket_prims: list[hou.Prim] = [
         prim for prim in geo.prims()
         if prim.stringAttribValue("region").startswith("chelicerasocket")
     ]
@@ -339,6 +342,9 @@ def _add_end_section(node: hou.SopNode) -> None:
         end_surface_normal,
     )
 
+    for pos in c3_positions:
+        assert pos.x() >= 0.0, f"End section loop point crossed symmetry plane (x={pos.x():.4f} < 0.0). Adjust parameters."
+
     c3_pts = [geo.createPoint() for _ in range(4)]
     for pt, pos in zip(c3_pts, c3_positions):
         pt.setPosition(pos)
@@ -354,12 +360,16 @@ def _add_middle_section(node: hou.SopNode) -> None:
     _add_intermediate_section(node, 0.5, cheliceraemiddle)
 
 
+def _add_upper_section(node: hou.SopNode) -> None:
+    _add_intermediate_section(node, 0.1, partial(_section_middle, 0.1))
+
+
 def _add_upper_middle_section(node: hou.SopNode) -> None:
-    _add_intermediate_section(node, 0.25, cheliceraeuppermiddle)
+    _add_intermediate_section(node, 0.25, partial(_section_middle, 0.25))
 
 
 def _add_lower_middle_section(node: hou.SopNode) -> None:
-    _add_intermediate_section(node, 0.75, cheliceraelowermiddle)
+    _add_intermediate_section(node, 0.75, partial(_section_middle, 0.75))
 
 
 def _connect_sections(node: hou.SopNode) -> None:
@@ -367,7 +377,7 @@ def _connect_sections(node: hou.SopNode) -> None:
 
     middle_prims = [
         prim for prim in geo.prims()
-        if any(pt.stringAttribValue("id").startswith((ID.CHELICERAEMIDDLE, ID.CHELICERAEUPPERMIDDLE, ID.CHELICERAELOWERMIDDLE)) for pt in prim.points())
+        if any(pt.stringAttribValue("id").startswith((cheliceraemiddle(), "tmpsection")) for pt in prim.points())
         and prim.stringAttribValue("region") != "fang"
     ]
     geo.deletePrims(middle_prims, keep_points=True)
@@ -375,9 +385,10 @@ def _connect_sections(node: hou.SopNode) -> None:
     id_points = points_by_id(geo)
     loops = [
         [id_points[cheliceraestart(j)] for j in range(1, 5)],
-        [id_points[cheliceraeuppermiddle(j)] for j in range(1, 5)],
+        [id_points[_section_middle(0.1, j)] for j in range(1, 5)],
+        [id_points[_section_middle(0.25, j)] for j in range(1, 5)],
         [id_points[cheliceraemiddle(j)] for j in range(1, 5)],
-        [id_points[cheliceraelowermiddle(j)] for j in range(1, 5)],
+        [id_points[_section_middle(0.75, j)] for j in range(1, 5)],
         [id_points[cheliceraeend(j)] for j in range(1, 5)],
     ]
 
@@ -404,18 +415,18 @@ def _extract_extrusion(node: hou.SopNode) -> None:
 
 
 def _rename_left_ids(node: hou.SopNode) -> None:
-    rename_left_ids(node.geometry())
+    rename_left_ids(node.geometry(), affix_index=1)
 
 
 def _remove_retopology_faces(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     target_face_points = [
-        {cheliceraeuppermiddle(4), cheliceraeuppermiddle(1), cheliceraestart(1), cheliceraestart(4)},
-        {cheliceraeuppermiddle(1), cheliceraeuppermiddle(2), cheliceraestart(2), cheliceraestart(1)},
-        {cheliceraeupper(0), base_sops.basesternum(0), cheliceraestart(1), cheliceraestart(2)},
-        {base_sops.basesternum(0), cheliceraeupper(0), cheliceraestart(-2), cheliceraestart(-1)},
-        {cheliceraeuppermiddle(-1), cheliceraestart(-1), cheliceraestart(-2), cheliceraeuppermiddle(-2)},
-        {cheliceraeuppermiddle(-4), cheliceraestart(-4), cheliceraestart(-1), cheliceraeuppermiddle(-1)},
+        {_section_middle(0.1, 4), _section_middle(0.1, 1), cheliceraestart(1), cheliceraestart(4)},
+        {_section_middle(0.1, 1), _section_middle(0.1, 2), cheliceraestart(2), cheliceraestart(1)},
+        {cheliceraemembraneupper(0), base_sops.basesternum(0), cheliceraestart(1), cheliceraestart(2)},
+        {base_sops.basesternum(0), cheliceraemembraneupper(0), cheliceraestart(-2), cheliceraestart(-1)},
+        {_section_middle(0.1, -1), cheliceraestart(-1), cheliceraestart(-2), _section_middle(0.1, -2)},
+        {_section_middle(0.1, -4), cheliceraestart(-4), cheliceraestart(-1), _section_middle(0.1, -1)},
     ]
     to_delete = [
         prim for prim in geo.prims()
@@ -430,50 +441,40 @@ def _add_retopology_points(node: hou.SopNode) -> None:
     id_points = points_by_id(geo)
 
     p_r1 = geo.createPoint()
-    p_r1.setPosition((id_points[cheliceraestart(1)].position() + id_points[cheliceraeuppermiddle(1)].position()) * 0.5)
-    set_point_id(p_r1, cheliceraereto(1))
+    p_r1.setPosition((id_points[cheliceraestart(1)].position() + id_points[_section_middle(0.1, 1)].position()) * 0.5)
+    set_point_id(p_r1, _retopo(1))
 
     p_l1 = geo.createPoint()
-    p_l1.setPosition((id_points[cheliceraestart(-1)].position() + id_points[cheliceraeuppermiddle(-1)].position()) * 0.5)
-    set_point_id(p_l1, cheliceraereto(-1))
-
-    if "cheliceramiddlelower1" not in id_points:
-        p_r4 = geo.createPoint()
-        p_r4.setPosition((id_points[cheliceraestart(1)].position() + id_points[cheliceraestart(4)].position()) * 0.5)
-        set_point_id(p_r4, "cheliceramiddlelower1")
-
-    if "cheliceramiddlelower-1" not in id_points:
-        p_l4 = geo.createPoint()
-        p_l4.setPosition((id_points[cheliceraestart(-1)].position() + id_points[cheliceraestart(-4)].position()) * 0.5)
-        set_point_id(p_l4, "cheliceramiddlelower-1")
+    p_l1.setPosition((id_points[cheliceraestart(-1)].position() + id_points[_section_middle(0.1, -1)].position()) * 0.5)
+    set_point_id(p_l1, _retopo(-1))
 
     p_mid0 = geo.createPoint()
-    p_mid0.setPosition((id_points[cheliceraeupper(0)].position() + id_points[base_sops.basesternum(0)].position()) * 0.5)
-    set_point_id(p_mid0, cheliceraereto(0))
+    p_mid0.setPosition((id_points[cheliceraemembraneupper(0)].position() + id_points[base_sops.basesternum(0)].position()) * 0.5)
+    set_point_id(p_mid0, _retopo(0))
 
     p_r2 = geo.createPoint()
     p_r2.setPosition((id_points[cheliceraestart(1)].position() + id_points[cheliceraestart(2)].position()) * 0.5)
-    set_point_id(p_r2, cheliceraereto(2))
+    set_point_id(p_r2, _retopo(2))
 
     p_l2 = geo.createPoint()
     p_l2.setPosition((id_points[cheliceraestart(-1)].position() + id_points[cheliceraestart(-2)].position()) * 0.5)
-    set_point_id(p_l2, cheliceraereto(-2))
+    set_point_id(p_l2, _retopo(-2))
 
     f_back_r = geo.createPoint()
-    f_back_r.setPosition((p_r1.position() + id_points[cheliceraeuppermiddle(4)].position() + id_points["cheliceramiddlelower1"].position() + id_points[cheliceraestart(4)].position()) * 0.25)
-    set_point_id(f_back_r, "cheliceraeretofloat_back1")
+    f_back_r.setPosition((p_r1.position() + id_points[_section_middle(0.1, 4)].position() + id_points[_tmp_membrane_inner_lower(1)].position() + id_points[cheliceraestart(4)].position()) * 0.25)
+    set_point_id(f_back_r, _retopo_back(1))
 
     f_side_r = geo.createPoint()
-    f_side_r.setPosition((p_r1.position() + id_points[cheliceraeuppermiddle(2)].position() + p_r2.position() + id_points[cheliceraestart(2)].position()) * 0.25)
-    set_point_id(f_side_r, "cheliceraeretofloat_side1")
+    f_side_r.setPosition((p_r1.position() + id_points[_section_middle(0.1, 2)].position() + p_r2.position() + id_points[cheliceraestart(2)].position()) * 0.25)
+    set_point_id(f_side_r, _retopo_side(1))
 
     f_back_l = geo.createPoint()
-    f_back_l.setPosition((p_l1.position() + id_points[cheliceraeuppermiddle(-4)].position() + id_points["cheliceramiddlelower-1"].position() + id_points[cheliceraestart(-4)].position()) * 0.25)
-    set_point_id(f_back_l, "cheliceraeretofloat_back-1")
+    f_back_l.setPosition((p_l1.position() + id_points[_section_middle(0.1, -4)].position() + id_points[_tmp_membrane_inner_lower(-1)].position() + id_points[cheliceraestart(-4)].position()) * 0.25)
+    set_point_id(f_back_l, _retopo_back(-1))
 
     f_side_l = geo.createPoint()
-    f_side_l.setPosition((p_l1.position() + id_points[cheliceraeuppermiddle(-2)].position() + p_l2.position() + id_points[cheliceraestart(-2)].position()) * 0.25)
-    set_point_id(f_side_l, "cheliceraeretofloat_side-1")
+    f_side_l.setPosition((p_l1.position() + id_points[_section_middle(0.1, -2)].position() + p_l2.position() + id_points[cheliceraestart(-2)].position()) * 0.25)
+    set_point_id(f_side_l, _retopo_side(-1))
 
 
 def _fill_retopology_faces(node: hou.SopNode) -> None:
@@ -481,26 +482,26 @@ def _fill_retopology_faces(node: hou.SopNode) -> None:
     id_points = points_by_id(geo)
 
     quad_ids = [
-        [base_sops.basesternum(0), cheliceraestart(1), cheliceraereto(2), cheliceraereto(0)],
-        [cheliceraereto(0), cheliceraereto(2), cheliceraestart(2), cheliceraeupper(0)],
-        [base_sops.basesternum(0), cheliceraereto(0), cheliceraereto(-2), cheliceraestart(-1)],
-        [cheliceraereto(0), cheliceraeupper(0), cheliceraestart(-2), cheliceraereto(-2)],
+        [base_sops.basesternum(0), cheliceraestart(1), _retopo(2), _retopo(0)],
+        [_retopo(0), _retopo(2), cheliceraestart(2), cheliceraemembraneupper(0)],
+        [base_sops.basesternum(0), _retopo(0), _retopo(-2), cheliceraestart(-1)],
+        [_retopo(0), cheliceraemembraneupper(0), cheliceraestart(-2), _retopo(-2)],
 
-        [cheliceraeuppermiddle(1), cheliceraereto(1), "cheliceraeretofloat_back1", cheliceraeuppermiddle(4)],
-        [cheliceraereto(1), cheliceraestart(1), "cheliceramiddlelower1", "cheliceraeretofloat_back1"],
-        ["cheliceraeretofloat_back1", "cheliceramiddlelower1", cheliceraestart(4), cheliceraeuppermiddle(4)],
+        [_section_middle(0.1, 1), _retopo(1), _retopo_back(1), _section_middle(0.1, 4)],
+        [_retopo(1), cheliceraestart(1), _tmp_membrane_inner_lower(1), _retopo_back(1)],
+        [_retopo_back(1), _tmp_membrane_inner_lower(1), cheliceraestart(4), _section_middle(0.1, 4)],
 
-        [cheliceraeuppermiddle(1), cheliceraeuppermiddle(2), "cheliceraeretofloat_side1", cheliceraereto(1)],
-        [cheliceraereto(1), "cheliceraeretofloat_side1", cheliceraereto(2), cheliceraestart(1)],
-        ["cheliceraeretofloat_side1", cheliceraeuppermiddle(2), cheliceraestart(2), cheliceraereto(2)],
+        [_section_middle(0.1, 1), _section_middle(0.1, 2), _retopo_side(1), _retopo(1)],
+        [_retopo(1), _retopo_side(1), _retopo(2), cheliceraestart(1)],
+        [_retopo_side(1), _section_middle(0.1, 2), cheliceraestart(2), _retopo(2)],
 
-        [cheliceraeuppermiddle(-1), cheliceraeuppermiddle(-4), "cheliceraeretofloat_back-1", cheliceraereto(-1)],
-        [cheliceraereto(-1), "cheliceraeretofloat_back-1", "cheliceramiddlelower-1", cheliceraestart(-1)],
-        ["cheliceraeretofloat_back-1", cheliceraeuppermiddle(-4), cheliceraestart(-4), "cheliceramiddlelower-1"],
+        [_section_middle(0.1, -1), _section_middle(0.1, -4), _retopo_back(-1), _retopo(-1)],
+        [_retopo(-1), _retopo_back(-1), _tmp_membrane_inner_lower(-1), cheliceraestart(-1)],
+        [_retopo_back(-1), _section_middle(0.1, -4), cheliceraestart(-4), _tmp_membrane_inner_lower(-1)],
 
-        [cheliceraeuppermiddle(-1), cheliceraereto(-1), "cheliceraeretofloat_side-1", cheliceraeuppermiddle(-2)],
-        [cheliceraereto(-1), cheliceraestart(-1), cheliceraereto(-2), "cheliceraeretofloat_side-1"],
-        ["cheliceraeretofloat_side-1", cheliceraereto(-2), cheliceraestart(-2), cheliceraeuppermiddle(-2)],
+        [_section_middle(0.1, -1), _retopo(-1), _retopo_side(-1), _section_middle(0.1, -2)],
+        [_retopo(-1), cheliceraestart(-1), _retopo(-2), _retopo_side(-1)],
+        [_retopo_side(-1), _retopo(-2), cheliceraestart(-2), _section_middle(0.1, -2)],
     ]
     for q in quad_ids:
         fill_face(geo, [id_points[pid] for pid in q])
@@ -511,10 +512,10 @@ def _retopology_upper_membrane(node: hou.SopNode) -> None:
     id_points = points_by_id(geo)
 
     target_pt_ids = [
-        cheliceraeupper(1),
-        "cheliceramiddleupper1",
-        cheliceraeupper(-1),
-        "cheliceramiddleupper-1",
+        cheliceraemembraneupper(1),
+        _tmp_membrane_inner_upper(1),
+        cheliceraemembraneupper(-1),
+        _tmp_membrane_inner_upper(-1),
     ]
     to_del_pts = [id_points[name] for name in target_pt_ids if name in id_points]
     to_del_prims = [p for p in geo.prims() if any(pt in to_del_pts for pt in p.points())]
@@ -522,12 +523,12 @@ def _retopology_upper_membrane(node: hou.SopNode) -> None:
     geo.deletePoints(to_del_pts)
 
     id_points = points_by_id(geo)
-    set_point_id(id_points[cheliceraeupper(2)], cheliceraeupper(1))
-    set_point_id(id_points[cheliceraeupper(-2)], cheliceraeupper(-1))
+    set_point_id(id_points[cheliceraemembraneupper(2)], cheliceraemembraneupper(1))
+    set_point_id(id_points[cheliceraemembraneupper(-2)], cheliceraemembraneupper(-1))
 
     id_points = points_by_id(geo)
-    fill_face(geo, [id_points[cheliceraeupper(0)], id_points[cheliceraeupper(1)], id_points[cheliceraestart(3)], id_points[cheliceraestart(2)]], True)
-    fill_face(geo, [id_points[cheliceraeupper(0)], id_points[cheliceraestart(-2)], id_points[cheliceraestart(-3)], id_points[cheliceraeupper(-1)]], True)
+    fill_face(geo, [id_points[cheliceraemembraneupper(0)], id_points[cheliceraemembraneupper(1)], id_points[cheliceraestart(3)], id_points[cheliceraestart(2)]], True)
+    fill_face(geo, [id_points[cheliceraemembraneupper(0)], id_points[cheliceraestart(-2)], id_points[cheliceraestart(-3)], id_points[cheliceraemembraneupper(-1)]], True)
 
 
 @dataclass
@@ -594,7 +595,7 @@ def _construct_section_loop(
 def _add_intermediate_section(
     node: hou.SopNode,
     factor: float,
-    id_factory: Callable[[int], str],
+    id_factory: Callable[[int], str] | None,
 ) -> None:
     geo: hou.Geometry = node.geometry()
     parent = get_parent(node)
@@ -664,10 +665,14 @@ def _add_intermediate_section(
         normal,
     )
 
+    for pos in positions:
+        assert pos.x() >= 0.0, f"Section loop point at factor {factor} crossed symmetry plane (x={pos.x():.4f} < 0.0). Adjust parameters or ratio."
+
     pts = [geo.createPoint() for _ in range(4)]
     for pt, pos in zip(pts, positions):
         pt.setPosition(pos)
-    for j, pt in enumerate(pts, start=1):
-        set_point_id(pt, id_factory(j))
+    if id_factory:
+        for j, pt in enumerate(pts, start=1):
+            set_point_id(pt, id_factory(j))
 
     fill_face(geo, pts, True)

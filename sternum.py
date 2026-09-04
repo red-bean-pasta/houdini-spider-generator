@@ -11,7 +11,6 @@ from helper import (
 )
 from utilities.common import (
     add_float_param,
-    add_point_attr,
     add_prim_attr,
     fill_face,
     get_control,
@@ -19,7 +18,6 @@ from utilities.common import (
     get_params,
     get_parent,
     is_equal_approx,
-    remove_attrs,
 )
 from utilities.identifying import deduplicate_point_attributes
 from utilities.nodes import (
@@ -109,7 +107,7 @@ def _add_parameters(sternum: hou.SopNode) -> None:
         "spine_descend_handle",
         1,
         0.75,
-        (0.0, 1.0),
+        (0.0, None),
     )
     add_float_param(
         sternum,
@@ -391,39 +389,38 @@ def _outset_sternum_loop(node: hou.SopNode) -> None:
     parent = get_parent(node)
     params = get_params(parent, use_tuple=False)
     control_params = get_params(get_control(node), use_tuple=False)
-    dist = 2 * params.membrane_ratio * control_params.half_width
-    dy = params.membrane_ratio * control_params.half_width
 
-    # Loop 1
+    membrane_width = params.membrane_ratio * control_params.half_width
+    support_dist = membrane_width
+    dist = membrane_width
+    dy = membrane_width
+
+    _add_sternum_loop(geo, support_dist)
+    intermediate_points = _add_sternum_loop(geo, dist)
+    _add_sternum_loop(geo, dist)
+
+    _adjust_midpoints_after_outset(geo)
+
+    for pt in intermediate_points:
+        pos = pt.position()
+        pt.setPosition((pos[0], pos[1] + dy, pos[2]))
+
+def _add_sternum_loop(geo: hou.Geometry, dist: float) -> list[hou.Point]:
     outset(list(geo.prims()), dist, use_ratio=False)
     deduplicate_point_attributes(geo, "id", (ID.STERNUMSPINE,), keep_first=True)
     deduplicate_point_attributes(geo, "id", outer_loop_ids(), keep_first=False)
-    _adjust_midpoints_after_outset(geo)
-    add_point_attr(geo, "tmp_intermediate", 0)
-    for pt in geo.points():
-        if pt.attribValue("id").startswith(outer_loop_ids()):
-            pt.setAttribValue("tmp_intermediate", 1)
-
-    # Loop 2
-    outset(list(geo.prims()), dist, use_ratio=False)
-    deduplicate_point_attributes(geo, "id", (ID.STERNUMSPINE,), keep_first=True)
-    deduplicate_point_attributes(geo, "id", outer_loop_ids(), keep_first=False)
-    for pt in geo.points():
-        if pt.attribValue("id").startswith(outer_loop_ids()):
-            pt.setAttribValue("tmp_intermediate", 0)
-    _adjust_midpoints_after_outset(geo)
-
-    # Elevate intermediate loop
-    for pt in geo.points():
-        if pt.attribValue("tmp_intermediate") == 1:
-            pos = pt.position()
-            pt.setPosition((pos[0], pos[1] + dy, pos[2]))
-    remove_attrs(geo, point_attribs="tmp_intermediate")
-
+    return [
+        pt for pt in geo.points()
+        if pt.attribValue("id").startswith(outer_loop_ids())
+    ]
 
 def _adjust_midpoints_after_outset(geo: hou.Geometry) -> None:
     points = points_by_id(geo)
-    points[sternumrim(0)].setPosition((points[sternumrim(1)].position() + points[sternumrim(-1)].position()) / 2.0)
+    p0 = (points[sternumrim(1)].position() + points[sternumrim(-1)].position()) / 2.0
+    points[sternumrim(0)].setPosition(hou.Vector3(0.0, p0[1], p0[2]))
+    if sternumrim(5) in points:
+        p5 = points[sternumrim(5)].position()
+        points[sternumrim(5)].setPosition(hou.Vector3(0.0, p5[1], p5[2]))
     for side in (1, -1):
         for i in range(1, 5):
             start = points[sternumrim(side * i)].position()

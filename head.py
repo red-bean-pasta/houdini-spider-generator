@@ -5,7 +5,7 @@ import hou
 
 import base_sops
 import sternum
-from chelicerae import cheliceraeupper
+from chelicerae import cheliceraemembraneupper
 from helper import (
     add_id_attr,
     affix_id,
@@ -158,11 +158,11 @@ def _extract_work_base(node: hou.SopNode) -> None:
     _extract_points(
         node,
         lambda point_id, position: (
-            position[0] >= 0.0
+            position[0] >= -1e-4
             and point_id not in excluded_ids
             and (
                 point_id.startswith("base")
-                or point_id in (cheliceraeupper(0), cheliceraeupper(1))
+                or point_id in (cheliceraemembraneupper(0), cheliceraemembraneupper(1))
                 or point_id == sternum.sternumrim(0)
             )
         ),
@@ -182,9 +182,9 @@ def _extract_base_rim(node: hou.SopNode) -> None:
             and (
                 point_id.startswith("base")
                 or point_id in (
-                    cheliceraeupper(0),
-                    cheliceraeupper(1),
-                    cheliceraeupper(-1),
+                    cheliceraemembraneupper(0),
+                    cheliceraemembraneupper(1),
+                    cheliceraemembraneupper(-1),
                 )
             )
         ),
@@ -197,7 +197,7 @@ def _add_corners_half(node: hou.SopNode) -> None:
     points = points_by_id(geo)
 
     sternumrim0 = sternum.sternumrim(0)
-    cheliceraeupper0 = cheliceraeupper(0)
+    cheliceraeupper0 = cheliceraemembraneupper(0)
     basesternum0 = base_sops.basesternum(0)
     basesternum1_2 = base_sops.basesternum(1, 2)
     basesternum3 = base_sops.basesternum(3)
@@ -280,13 +280,13 @@ def _fill_back_loop_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
     faces = {
         (
-            cheliceraeupper(0),
+            cheliceraemembraneupper(0),
             headsupport(0),
             headsupport(1),
-            cheliceraeupper(1),
+            cheliceraemembraneupper(1),
         ): True,
         (
-            cheliceraeupper(1),
+            cheliceraemembraneupper(1),
             headsupport(1),
             base_sops.basesternum(1, 2),
             base_sops.basemaxilla(1),
@@ -365,7 +365,7 @@ def _sorted_right_side_points(geo: hou.Geometry) -> list[hou.Point]:
         point
         for point in geo.points()
         if point.stringAttribValue("id").startswith(base_sops.ID.BASESTERNUM)
-        and point.position()[0] > 0.0
+        and point.position()[0] > 1e-4
     ]
     candidates.sort(key=lambda point: -point.position()[2])
 

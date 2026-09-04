@@ -29,7 +29,7 @@ This is a project that tries to model a spider in a biologically topology way in
 ## Agent
 - Dynamically adjust the thinking chain based on task difficulty. If the task is small, bounded or obvious, don't over-think. Balance token efficiency, intelligence and development speed. 
 - For file updating and editing, use ACP tools like `client_edit_file`. DO NOT USE MCP tool like `apply_patch` or `pycharm_execute_terminal_command`, or python `file.write`
-- Do not use `sed` or `head` when the whole document is available for one-time reading, unless you are highly sure you can land all the needed info in one pass, else it's just wasting turns.
+- Do not use `sed` or `head` when the whole document is available for one-time reading, unless you are highly sure you can land all the needed info in one pass, else it's just wasting user's time and turns.
 - Use MCP to read out-of-scope files.
 - No LaTex output. Only Markdown. LaTex is not correctly rendered in PyCharm.
 
@@ -38,3 +38,4 @@ This is a project that tries to model a spider in a biologically topology way in
 - Choose between identifier, position or other pattern based construction based on the task's true nature.
 - DO NOT REVERT USER CHANGES unless requested, broken, problematic or buggy, or if there's a better way. DO NOT MAKE TOO MUCH STRUCTURL CHANGE unless user requested or approved.
 - DO NOT USE MCP or python script to edit files. They are only allowed if ACP tools are rejected due to scope control.
+- DO NOT ABUSE tools.
