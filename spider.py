@@ -6,7 +6,6 @@ import abdomen
 import base_sops
 import head
 import sternum
-from abdomen import build as build_abdomen
 from cephalothorax import build as build_cephalothorax
 from leg import build as build_legs
 from pedicel import build as build_pedicel
@@ -25,10 +24,7 @@ from utilities.nodes import (
     add_reload_button,
     sopify,
 )
-from utilities.topology import (
-    fill_pentagon,
-    fill_pentagon_with_buffer,
-)
+from utilities.topology import fill_pentagon
 
 
 def cephapedicelupper() -> str:
@@ -47,7 +43,7 @@ def build(parent: hou.OpNode) -> hou.SopNode:
     cephalothorax = build_cephalothorax(spider)
     opened_cepha = sopify(spider, cephalothorax, _open_cepha_pedicel)
 
-    abdomen_node = build_abdomen(spider, opened_cepha)
+    abdomen_node = abdomen.build(spider, opened_cepha)
 
     opened_abdomen = sopify(spider, abdomen_node, _open_abdomen_pedicel)
     merged_c_a = add_merge(spider, "merge_cephalothorax_and_abdomen", opened_cepha, opened_abdomen)
@@ -127,6 +123,10 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
 
     baseend0 = points.get(base_sops.baseend(0))
     assert baseend0 is not None, "Expected baseend0 point in cephalothorax"
+    headsupport3 = points.get(head.headsupport(3))
+    assert headsupport3 is not None, "Expected headsupport3 point in cephalothorax"
+    headsupport_minus3 = points.get(head.headsupport(-3))
+    assert headsupport_minus3 is not None, "Expected headsupport-3 point in cephalothorax"
     headsupport4 = points.get(head.headsupport(4))
     assert headsupport4 is not None, "Expected headsupport4 point in cephalothorax"
     sternumrim5 = points.get(sternum.sternumrim(5))
@@ -136,23 +136,64 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
     bs5_2 = points.get(base_sops.basesternum(5, 2))
     assert bs5_2 is not None, "Expected basesternum5_2 point in cephalothorax"
 
-    p_lower, right_inner, left_inner = _identify_pedicel_membrane_points(geo)
-    _adjust_side_coxa_points(bs5_1, bs5_2, right_inner, left_inner)
-    cp_right, cp_left = _add_side_cepha_pedicel_points(geo, baseend0, bs5_1, bs5_2, pedicel_size_ratio_x)
-    cp_upper = _position_vertical_pedicel_points(geo, baseend0, headsupport4, sternumrim5, p_lower, pedicel_size_ratio)
-    _reconnect_sternum_pedicel_loop(
+    d = _get_opening_support_loop_width(bs5_1, bs5_2, pedicel_size_ratio_x)
+
+    cp_outer_lower, right_inner, left_inner = _identify_pedicel_membrane_points(geo)
+    cp_right, cp_left, cp_outer_right, cp_outer_left = _add_side_cepha_pedicel_points(
+        geo, baseend0, bs5_1, bs5_2, pedicel_size_ratio_x, d
+    )
+    cp_upper, cp_lower = _position_vertical_pedicel_points(
+        geo, baseend0, headsupport4, sternumrim5, cp_outer_lower, pedicel_size_ratio, d
+    )
+    _reconnect_lower_sternum_pedicel_loop(
         geo,
-        cp_upper,
+        cp_lower,
+        cp_outer_lower,
         cp_right,
+        cp_outer_right,
         cp_left,
-        p_lower,
+        cp_outer_left,
         left_inner,
         right_inner,
         bs5_1,
         bs5_2,
         sternumrim5,
-        baseend0,
     )
+    p_right, p_left, basesupportend0, basesupportsternum5_1, basesupportsternum5_2 = (
+        _reconnect_upper_sternum_pedicel_loop(
+            geo,
+            baseend0,
+            cp_upper,
+            cp_right,
+            cp_outer_right,
+            cp_left,
+            cp_outer_left,
+            bs5_1,
+            bs5_2,
+            pedicel_size_ratio_x,
+        )
+    )
+    _retopo_head_back_faces(
+        geo,
+        headsupport3,
+        headsupport_minus3,
+        headsupport4,
+        basesupportend0,
+        basesupportsternum5_1,
+        basesupportsternum5_2,
+        p_right,
+        p_left,
+    )
+    _adjust_opening_points_depth(cp_right, cp_left, cp_upper)
+
+
+def _get_opening_support_loop_width(
+    bs5_1: hou.Point,
+    bs5_2: hou.Point,
+    pedicel_size_ratio_x: float,
+) -> float:
+    return bs5_1.position().x() * (1.0 - pedicel_size_ratio_x) * 0.035
+
 
 def _identify_pedicel_membrane_points(geo: hou.Geometry) -> tuple[hou.Point, hou.Point, hou.Point]:
     membrane_prims = [
@@ -171,7 +212,6 @@ def _identify_pedicel_membrane_points(geo: hou.Geometry) -> tuple[hou.Point, hou
             continue
         if abs(pt.position().x()) < 1e-4:
             p_lower = pt
-            pt.setAttribValue("id", cephapedicellower())
         elif pt.position().x() > 0:
             right_inner = pt
         else:
@@ -182,18 +222,6 @@ def _identify_pedicel_membrane_points(geo: hou.Geometry) -> tuple[hou.Point, hou
     assert left_inner is not None, "Expected left inner point in basepedicelmembrane"
     return p_lower, right_inner, left_inner
 
-def _adjust_side_coxa_points(
-    bs5_1: hou.Point,
-    bs5_2: hou.Point,
-    right_inner: hou.Point,
-    left_inner: hou.Point,
-) -> None:
-    for r, c1 in ((bs5_1, right_inner), (bs5_2, left_inner)):
-        offset = r.position() - c1.position()
-        dx, dz = offset.x(), offset.z()
-        len_xz = math.sqrt(dx**2 + dz**2)
-        new_z = c1.position().z() + math.copysign(len_xz, dz)
-        r.setPosition(hou.Vector3(c1.position().x(), r.position().y(), new_z))
 
 def _add_side_cepha_pedicel_points(
     geo: hou.Geometry,
@@ -201,60 +229,85 @@ def _add_side_cepha_pedicel_points(
     bs5_1: hou.Point,
     bs5_2: hou.Point,
     size_ratio_x: float,
-) -> tuple[hou.Point, hou.Point]:
-    pos_baseend0 = baseend0.position()
+    d: float,
+) -> tuple[hou.Point, hou.Point, hou.Point, hou.Point]:
+    p_end = baseend0.position()
     pos_bs5_1 = bs5_1.position()
     pos_bs5_2 = bs5_2.position()
 
-    pos_right = pos_bs5_1 * size_ratio_x + pos_baseend0 * (1 - size_ratio_x)
-    pos_left = pos_bs5_2 * size_ratio_x + pos_baseend0 * (1 - size_ratio_x)
+    dir_right = (pos_bs5_1 - p_end).normalized()
+    dir_left = (pos_bs5_2 - p_end).normalized()
+
+    pos_right = pos_bs5_1 * size_ratio_x + p_end * (1 - size_ratio_x)
+    pos_outer_right = pos_right + dir_right * d
 
     pt_right = geo.createPoint()
     pt_right.setPosition(pos_right)
     pt_right.setAttribValue("id", cephapedicelright())
 
+    pt_outer_right = geo.createPoint()
+    pt_outer_right.setPosition(pos_outer_right)
+
+    pos_left = pos_bs5_2 * size_ratio_x + p_end * (1 - size_ratio_x)
+    pos_outer_left = pos_left + dir_left * d
+
     pt_left = geo.createPoint()
     pt_left.setPosition(pos_left)
     pt_left.setAttribValue("id", cephapedicelleft())
 
-    return pt_right, pt_left
+    pt_outer_left = geo.createPoint()
+    pt_outer_left.setPosition(pos_outer_left)
+
+    return pt_right, pt_left, pt_outer_right, pt_outer_left
+
 
 def _position_vertical_pedicel_points(
     geo: hou.Geometry,
     baseend0: hou.Point,
     headsupport4: hou.Point,
     sternumrim5: hou.Point,
-    lower: hou.Point,
+    cp_outer_lower: hou.Point,
     pedicel_size_ratio: tuple[float, float],
-) -> hou.Point:
+    d: float,
+) -> tuple[hou.Point, hou.Point]:
     ratio_x, ratio_y = pedicel_size_ratio
 
     p_end = baseend0.position()
     p_head = headsupport4.position()
     p_sternum = sternumrim5.position()
 
-    p_lower = p_sternum * ratio_y + p_end * (1 - ratio_y)
-    lower.setPosition(p_lower)
+    dir_upper = (p_head - p_end).normalized()
 
-    target_height = p_end.y() - p_lower.y()
+    pos_cp_lower = p_sternum * ratio_y + p_end * (1 - ratio_y)
+    pos_cp_outer_lower = p_sternum * 1/3 + pos_cp_lower * 2/3
+    cp_outer_lower.setPosition(pos_cp_outer_lower)
+
+    cp_lower = geo.createPoint()
+    cp_lower.setPosition(pos_cp_lower)
+    cp_lower.setAttribValue("id", cephapedicellower())
+
+    target_height = p_end.y() - pos_cp_lower.y()
     dy = p_head.y() - p_end.y()
     assert abs(dy) > 1e-6, "Expected non-zero y delta between baseend0 and headback0"
     t = target_height / dy
     offset = t * (p_head - p_end)
     new_end = p_end + offset
 
-    baseend0.setPosition(new_end)
-
-    support_end = _find_head_support_end_point(baseend0)
-    if support_end is not None:
-        support_end.setPosition((p_head + new_end) * 0.5)
-
     p_upper = new_end * (1 - ratio_x) + p_end * ratio_x
-    upper = geo.createPoint()
-    upper.setPosition(p_upper)
-    upper.setAttribValue("id", cephapedicelupper())
+    pos_baseend0 = p_upper + dir_upper * d
+    baseend0_offset = pos_baseend0 - p_end
 
-    return upper
+    cp_upper = geo.createPoint()
+    cp_upper.setPosition(p_upper)
+    cp_upper.setAttribValue("id", cephapedicelupper())
+
+    basesupportend0 = _find_head_support_end_point(baseend0)
+    baseend0.setPosition(pos_baseend0)
+    if basesupportend0 is not None:
+        basesupportend0.setPosition(basesupportend0.position() + baseend0_offset)
+
+    return cp_upper, cp_lower
+
 
 def _find_head_support_end_point(baseend0: hou.Point) -> hou.Point | None:
     for prim in baseend0.prims():
@@ -264,54 +317,131 @@ def _find_head_support_end_point(baseend0: hou.Point) -> hou.Point | None:
                     return pt
     return None
 
-def _reconnect_sternum_pedicel_loop(
+
+def _reconnect_lower_sternum_pedicel_loop(
     geo: hou.Geometry,
-    cp_upper: hou.Point,
-    cp_right: hou.Point,
-    cp_left: hou.Point,
     cp_lower: hou.Point,
+    cp_outer_lower: hou.Point,
+    cp_right: hou.Point,
+    cp_outer_right: hou.Point,
+    cp_left: hou.Point,
+    cp_outer_left: hou.Point,
     left_inner: hou.Point,
     right_inner: hou.Point,
     bs5_1: hou.Point,
     bs5_2: hou.Point,
     s5: hou.Point,
-    baseend0: hou.Point,
 ) -> None:
-    p_prims = list(cp_lower.prims())
+    p_prims = list(cp_outer_lower.prims())
     geo.deletePrims(p_prims, keep_points=True)
 
-    buffer_ratio = 0.035
+    fill_pentagon(geo, [cp_outer_right, bs5_1, right_inner, s5, cp_outer_lower], (cp_outer_lower, s5), reverse=False)
+    fill_pentagon(geo, [cp_outer_left, bs5_2, left_inner, s5, cp_outer_lower], (cp_outer_lower, s5), reverse=True)
 
-    _, _, b_lower, b_right = fill_pentagon_with_buffer(
-        geo,
-        [cp_right, bs5_1, right_inner, s5, cp_lower],
-        (cp_lower, cp_right),
-        buffer_ratio,
-        (cp_lower, s5),
-        reverse=False,
-    )
+    fill_face(geo, [cp_lower, cp_right, cp_outer_right, cp_outer_lower], reverse=False)
+    fill_face(geo, [cp_lower, cp_left, cp_outer_left, cp_outer_lower], reverse=True)
 
-    b_left_pos = cp_left.position() * (1 - buffer_ratio) + bs5_2.position() * buffer_ratio
-    b_left = geo.createPoint()
-    b_left.setPosition(b_left_pos)
 
-    b_upper_pos = cp_upper.position() * (1 - buffer_ratio) + baseend0.position() * buffer_ratio
-    b_upper = geo.createPoint()
-    b_upper.setPosition(b_upper_pos)
+def _reconnect_upper_sternum_pedicel_loop(
+    geo: hou.Geometry,
+    baseend0: hou.Point,
+    cp_upper: hou.Point,
+    cp_right: hou.Point,
+    cp_outer_right: hou.Point,
+    cp_left: hou.Point,
+    cp_outer_left: hou.Point,
+    bs5_1: hou.Point,
+    bs5_2: hou.Point,
+    size_ratio_x: float,
+) -> tuple[hou.Point, hou.Point, hou.Point, hou.Point, hou.Point]:
+    headback_prims = [pr for pr in baseend0.prims() if pr.stringAttribValue("region") == "headback"]
+    assert len(headback_prims) == 2, f"Expected 2 headback prims on baseend0, got {len(headback_prims)}"
 
-    _adjust_opening_points_depth(cp_right, cp_left, cp_upper)
+    basesupportend0 = None
+    basesupportsternum5_1 = None
+    basesupportsternum5_2 = None
 
-    fill_face(geo, [cp_lower, cp_left, b_left, b_lower], reverse=True)
-    fill_pentagon(geo, [b_left, bs5_2, left_inner, s5, b_lower], (b_lower, s5), reverse=True)
+    for pr in headback_prims:
+        pts_list = list(pr.points())
+        if bs5_1 in pts_list:
+            basesupportend0 = [p for p in pts_list if abs(p.position().x()) < 1e-4 and p != baseend0][0]
+            basesupportsternum5_1 = [p for p in pts_list if p not in (baseend0, bs5_1, basesupportend0)][0]
+        elif bs5_2 in pts_list:
+            basesupportend0 = [p for p in pts_list if abs(p.position().x()) < 1e-4 and p != baseend0][0]
+            basesupportsternum5_2 = [p for p in pts_list if p not in (baseend0, bs5_2, basesupportend0)][0]
 
-    fill_face(geo, [cp_upper, cp_right, b_right, b_upper], reverse=True)
-    fill_face(geo, [b_upper, b_right, bs5_1, baseend0], reverse=True)
-    fill_face(geo, [cp_upper, cp_left, b_left, b_upper], reverse=False)
-    fill_face(geo, [b_upper, b_left, bs5_2, baseend0], reverse=False)
+    assert basesupportend0 is not None, "Expected basesupportend0"
+    assert basesupportsternum5_1 is not None, "Expected basesupportsternum5_1"
+    assert basesupportsternum5_2 is not None, "Expected basesupportsternum5_2"
+
+    geo.deletePrims(headback_prims, keep_points=True)
+
+    v_end = basesupportend0.position() - baseend0.position()
+    v_bs1 = basesupportsternum5_1.position() - bs5_1.position()
+    v_bs2 = basesupportsternum5_2.position() - bs5_2.position()
+
+    pos_p_right = cp_outer_right.position() + v_bs1 * size_ratio_x + v_end * (1 - size_ratio_x)
+    pos_p_left = cp_outer_left.position() + v_bs2 * size_ratio_x + v_end * (1 - size_ratio_x)
+
+    p_right = geo.createPoint()
+    p_right.setPosition(pos_p_right)
+
+    p_left = geo.createPoint()
+    p_left.setPosition(pos_p_left)
+
+    f_ur1 = fill_face(geo, [basesupportend0, baseend0, cp_outer_right, p_right], reverse=True)
+    f_ur2 = fill_face(geo, [p_right, cp_outer_right, bs5_1, basesupportsternum5_1], reverse=True)
+    f_ul1 = fill_face(geo, [basesupportend0, baseend0, cp_outer_left, p_left], reverse=False)
+    f_ul2 = fill_face(geo, [p_left, cp_outer_left, bs5_2, basesupportsternum5_2], reverse=False)
+
+    f_buf_ur = fill_face(geo, [cp_upper, cp_right, cp_outer_right, baseend0], reverse=True)
+    f_buf_ul = fill_face(geo, [cp_upper, cp_left, cp_outer_left, baseend0], reverse=False)
+
+    for f in (f_ur1, f_ur2, f_ul1, f_ul2):
+        f.setAttribValue("region", "headback")
 
     for prim in geo.prims():
         if not prim.stringAttribValue("region"):
             prim.setAttribValue("region", base_sops.Region.BASEBUFFERMEMBRANE)
+
+    return p_right, p_left, basesupportend0, basesupportsternum5_1, basesupportsternum5_2
+
+
+def _retopo_head_back_faces(
+    geo: hou.Geometry,
+    headsupport3: hou.Point,
+    headsupport_minus3: hou.Point,
+    headsupport4: hou.Point,
+    basesupportend0: hou.Point,
+    basesupportsternum5_1: hou.Point,
+    basesupportsternum5_2: hou.Point,
+    p_right: hou.Point,
+    p_left: hou.Point,
+) -> None:
+    prims_to_delete = [
+        pr for pr in headsupport4.prims()
+        if pr.stringAttribValue("region") == "headback" and basesupportend0 in pr.points()
+    ]
+    assert len(prims_to_delete) == 2, f"Expected 2 upper headback prims on headsupport4, got {len(prims_to_delete)}"
+    geo.deletePrims(prims_to_delete, keep_points=True)
+
+    fill_pentagon(
+        geo,
+        [headsupport3, headsupport4, basesupportend0, p_right, basesupportsternum5_1],
+        (headsupport4, basesupportend0),
+        reverse=False,
+    )
+    fill_pentagon(
+        geo,
+        [headsupport_minus3, headsupport4, basesupportend0, p_left, basesupportsternum5_2],
+        (headsupport4, basesupportend0),
+        reverse=True,
+    )
+
+    for prim in geo.prims():
+        if not prim.stringAttribValue("region"):
+            prim.setAttribValue("region", "headback")
+
 
 def _adjust_opening_points_depth(
     cp_right: hou.Point,
