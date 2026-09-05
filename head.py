@@ -19,9 +19,12 @@ from utilities.common import (
     add_float_param,
     add_prim_attr,
     fill_face,
+    get_control,
     get_float_parm,
     get_params,
     get_parent,
+    points_by_attr,
+    points_start_with,
 )
 from utilities.nodes import (
     add_fuse,
@@ -42,6 +45,7 @@ class ID(StrEnum):
     HEADSIDEMIDDLE = auto()
     HEADSIDEBACK = auto()
     HEADSUPPORT = auto()
+    HEADCHELICERAEUPPER = auto()
 
 def headfront(*i: int | str) -> str:
     return affix_id(ID.HEADFRONT, *i)
@@ -57,12 +61,20 @@ def headsideback(*i: int | str) -> str:
     return affix_id(ID.HEADSIDEBACK, *i)
 def headsupport(*i: int | str) -> str:
     return affix_id(ID.HEADSUPPORT, *i)
+def headcheliceraeupper(*i: int | str) -> str:
+    return affix_id(ID.HEADCHELICERAEUPPER, *i)
+
+def _lip_upper(*i: int | str) -> str:
+    return affix_id("tmplipupper", *i)
+def _lip_lower(*i: int | str) -> str:
+    return affix_id("tmpliplower", *i)
 
 
 def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
     head = add_reloadable_subnet(cephalothorax, "head")
     head.setInput(0, base)
     _add_parameters(head)
+    _add_controls(head)
 
     source = head.indirectInputs()[0]
     base_rim = sopify(head, source, _extract_base_rim)
@@ -77,8 +89,10 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
 
     merged = add_merge(head, "merge_base_rim", base_rim, faces)
     fused = add_fuse(head, "fuse_base_rim", merged)
-    outset_geo = sopify(head, fused, _inset_base_loop)
-    cleaned = sopify(head, outset_geo, _cleanup)
+    inset_support = sopify(head, fused, _inset_base_support_loop)
+    inset_lip = sopify(head, inset_support, _inset_lip_support_loop)
+    extruded_lip = sopify(head, inset_lip, _extrude_lips)
+    cleaned = sopify(head, extruded_lip, _cleanup)
     add_output(head, "OUT_HEAD", cleaned)
     head.layoutChildren()
     return head
@@ -104,8 +118,7 @@ def _add_parameters(head: hou.SopNode) -> None:
         "top_support_loop_ratio",
         2,
         (0.2, 0.5),
-        (0.0, 1.0),
-        hou.parmNamingScheme.Base1,
+        naming_scheme=hou.parmNamingScheme.Base1,
         help="Affects how sharp or boxy the head looks; the first is for front ratio and the second for behind",
     )
     add_float_param(
@@ -115,6 +128,20 @@ def _add_parameters(head: hou.SopNode) -> None:
         0.035,
         (0.0, None),
     )
+
+
+def _add_controls(head: hou.SopNode) -> hou.SopNode:
+    control = head.createNode("null", "CONTROL")
+    add_float_param(
+        control,
+        "lip_extrusion_ratio",
+        2,
+        (5.0, 1.0),
+        (-10.0, 10.0),
+        naming_scheme=hou.parmNamingScheme.XYZW,
+        help="Lip refers to the touching line between chelicerae and head, and the ratio is relative to the base support loop (membrane) height",
+    )
+    return control
 
 
 def _add_points(
@@ -483,24 +510,108 @@ def _rename_left_ids(node: hou.SopNode) -> None:
     rename_left_ids(node.geometry())
 
 
-def _inset_base_loop(node: hou.SopNode) -> None:
+def _inset_base_support_loop(node: hou.SopNode) -> None:
     geo = node.geometry()
+    _inset_base(geo, _get_membrane_ratio(node))
+    _attribute_points_between_head_chelicerae(geo, headcheliceraeupper)
+    deduplicate_id_attr(geo, None, keep_first=True)
+
+
+def _inset_lip_support_loop(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    for pair in ((2/3, _lip_upper), (1/3, _lip_lower)):
+        ratio, factory = pair
+        _inset_base(geo, _get_membrane_ratio(node) * ratio)
+        _attribute_points_between_head_chelicerae(geo, factory)
+        deduplicate_id_attr(geo, None, keep_first=True)
+
+
+def _extrude_lips(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    points = points_by_id(geo)
+    control_params = get_params(get_control(node), use_tuple=False)
+    ratio = control_params.lip_extrusion_ratio
+
+    headcheliceraeupper0 = points.get(headcheliceraeupper(0))
+    cheliceraemembraneupper0 = points.get(cheliceraemembraneupper(0))
+    lip_lower0 = points.get(_lip_lower(0))
+    lip_upper0 = points.get(_lip_upper(0))
+    assert (
+        headcheliceraeupper0 is not None
+        and cheliceraemembraneupper0 is not None
+        and lip_lower0 is not None
+        and lip_upper0 is not None
+    ), "Expected chelicerae lip reference points"
+
+    lower_dist = (lip_lower0.position() - cheliceraemembraneupper0.position()).length()
+    upper_dist = (headcheliceraeupper0.position() - lip_upper0.position()).length()
+
+    base = headcheliceraeupper0.position().y() - cheliceraemembraneupper0.position().y()
+    offset_z = base * ratio.x()
+    offset_y = base * ratio.y()
+
+    for i in (-1, 0, 1):
+        for f in (headcheliceraeupper, headsupport, headfront):
+            point = points.get(f(i))
+            assert point is not None, f"Expected point {f(i)!r}"
+            pos = point.position()
+            point.setPosition(hou.Vector3(pos.x(), pos.y() - offset_y, pos.z() - offset_z))
+
+    for i in (-1, 0, 1):
+        target_lower = points.get(cheliceraemembraneupper(i))
+        target_upper = points.get(headcheliceraeupper(i))
+        lower_point = points.get(_lip_lower(i))
+        upper_point = points.get(_lip_upper(i))
+        assert (
+            target_lower is not None
+            and target_upper is not None
+            and lower_point is not None
+            and upper_point is not None
+        ), f"Expected lip support points for index {i}"
+
+        p_lower = target_lower.position()
+        p_upper = target_upper.position()
+        direction = (p_upper - p_lower).normalized()
+
+        lower_point.setPosition(p_lower + direction * lower_dist)
+        upper_point.setPosition(p_upper - direction * upper_dist)
+
+
+def _cleanup(node: hou.SopNode) -> None:
+    geo = node.geometry()
+
+    unused = [p for p in geo.points() if not p.prims()]
+    if unused:
+        geo.deletePoints(unused)
+
+    tmp = points_start_with(geo, "id", (_lip_lower(), _lip_upper()))
+    for p in tmp:
+        set_point_id(p, "")
+
+
+def _get_membrane_ratio(node: hou.SopNode) -> float:
     parent = get_parent(node)
+    return get_float_parm(parent, "membrane_ratio")
+
+def _inset_base(geo: hou.Geometry, ratio: float) -> None:
     points = points_by_id(geo)
     headfront0 = points.get(headfront(0))
     baseend0 = points.get(base_sops.baseend(0))
     if headfront0 is None or baseend0 is None:
         return
     height = headfront0.position().y() - baseend0.position().y()
-    membrane_ratio = get_float_parm(parent, "membrane_ratio")
-    dist = membrane_ratio * height
+    dist = ratio * height
 
     inset(list(geo.prims()), dist, use_ratio=False)
-    deduplicate_id_attr(geo, None, keep_first=True)
 
-
-def _cleanup(node: hou.SopNode) -> None:
-    geo = node.geometry()
-    unused = [p for p in geo.points() if not p.prims()]
-    if unused:
-        geo.deletePoints(unused)
+def _attribute_points_between_head_chelicerae(
+        geo: hou.Geometry,
+        attributer: Callable
+) -> None:
+    points = points_by_attr(geo, "id", True)
+    for i in (-1, 0, 1):
+        membrane_id = cheliceraemembraneupper(i)
+        matching = points[membrane_id]
+        assert len(matching) == 2, f"Expected 2 points with id {membrane_id!r}"
+        inset_pt = max(matching, key=lambda pt: pt.number())
+        set_point_id(inset_pt, attributer(i))

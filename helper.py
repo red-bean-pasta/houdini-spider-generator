@@ -19,7 +19,7 @@ from utilities.identifying import (
 )
 
 
-def affix_id(prefix: str, *affixes: int | str) -> str:
+def affix_id(prefix: str, *affixes: int | str | float) -> str:
     return affix_attribute_value(prefix, *affixes)
 
 
