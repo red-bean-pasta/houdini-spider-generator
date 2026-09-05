@@ -532,16 +532,10 @@ def _extrude_lips(node: hou.SopNode) -> None:
     control_params = get_params(get_control(node), use_tuple=False)
     ratio = control_params.lip_extrusion_ratio
 
-    headcheliceraeupper0 = points.get(headcheliceraeupper(0))
-    cheliceraemembraneupper0 = points.get(cheliceraemembraneupper(0))
-    lip_lower0 = points.get(_lip_lower(0))
-    lip_upper0 = points.get(_lip_upper(0))
-    assert (
-        headcheliceraeupper0 is not None
-        and cheliceraemembraneupper0 is not None
-        and lip_lower0 is not None
-        and lip_upper0 is not None
-    ), "Expected chelicerae lip reference points"
+    headcheliceraeupper0 = points[headcheliceraeupper(0)]
+    cheliceraemembraneupper0 = points[cheliceraemembraneupper(0)]
+    lip_lower0 = points[_lip_lower(0)]
+    lip_upper0 = points[_lip_upper(0)]
 
     lower_dist = (lip_lower0.position() - cheliceraemembraneupper0.position()).length()
     upper_dist = (headcheliceraeupper0.position() - lip_upper0.position()).length()
@@ -558,16 +552,10 @@ def _extrude_lips(node: hou.SopNode) -> None:
             point.setPosition(hou.Vector3(pos.x(), pos.y() - offset_y, pos.z() - offset_z))
 
     for i in (-1, 0, 1):
-        target_lower = points.get(cheliceraemembraneupper(i))
-        target_upper = points.get(headcheliceraeupper(i))
-        lower_point = points.get(_lip_lower(i))
-        upper_point = points.get(_lip_upper(i))
-        assert (
-            target_lower is not None
-            and target_upper is not None
-            and lower_point is not None
-            and upper_point is not None
-        ), f"Expected lip support points for index {i}"
+        target_lower = points[cheliceraemembraneupper(i)]
+        target_upper = points[headcheliceraeupper(i)]
+        lower_point = points[_lip_lower(i)]
+        upper_point = points[_lip_upper(i)]
 
         p_lower = target_lower.position()
         p_upper = target_upper.position()
@@ -575,6 +563,11 @@ def _extrude_lips(node: hou.SopNode) -> None:
 
         lower_point.setPosition(p_lower + direction * lower_dist)
         upper_point.setPosition(p_upper - direction * upper_dist)
+
+    for i in (-1, 0, 1):
+        point = points[headcheliceraeupper(i)]
+        point.setPosition(point.position() + hou.Vector3(0.0, upper_dist, 0.0))
+
 
 
 def _cleanup(node: hou.SopNode) -> None:
