@@ -163,7 +163,6 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
         _reconnect_upper_sternum_pedicel_loop(
             geo,
             baseend0,
-            headsupport4,
             cp_upper,
             cp_right,
             cp_outer_right,
@@ -197,7 +196,7 @@ def _get_opening_support_loop_width(
 
 
 def _identify_pedicel_membrane_points(geo: hou.Geometry) -> tuple[hou.Point, hou.Point, hou.Point]:
-    membrane_prims = [
+    membrane_prims = [\
         prim for prim in geo.prims()
         if prim.stringAttribValue("region") == "basepedicelmembrane"
     ]
@@ -302,26 +301,21 @@ def _position_vertical_pedicel_points(
     cp_upper.setPosition(p_upper)
     cp_upper.setAttribValue("id", cephapedicelupper())
 
-    buffer_points = _find_head_support_end_points(geo, baseend0, headsupport4)
+    basesupportend0 = _find_head_support_end_point(baseend0)
     baseend0.setPosition(pos_baseend0)
-    for pt in buffer_points:
-        pt.setPosition(pt.position() + baseend0_offset)
+    if basesupportend0 is not None:
+        basesupportend0.setPosition(basesupportend0.position() + baseend0_offset)
 
     return cp_upper, cp_lower
 
 
-def _find_head_support_end_points(
-    geo: hou.Geometry,
-    baseend0: hou.Point,
-    headsupport4: hou.Point,
-) -> list[hou.Point]:
-    buffer_points = []
-    for prim in geo.prims():
+def _find_head_support_end_point(baseend0: hou.Point) -> hou.Point | None:
+    for prim in baseend0.prims():
         if prim.stringAttribValue("region") == "headback":
             for pt in prim.points():
-                if abs(pt.position().x()) < 1e-4 and pt not in (baseend0, headsupport4) and pt not in buffer_points:
-                    buffer_points.append(pt)
-    return buffer_points
+                if pt != baseend0 and abs(pt.position().x()) < 1e-4:
+                    return pt
+    return None
 
 
 def _reconnect_lower_sternum_pedicel_loop(
@@ -351,7 +345,6 @@ def _reconnect_lower_sternum_pedicel_loop(
 def _reconnect_upper_sternum_pedicel_loop(
     geo: hou.Geometry,
     baseend0: hou.Point,
-    headsupport4: hou.Point,
     cp_upper: hou.Point,
     cp_right: hou.Point,
     cp_outer_right: hou.Point,
@@ -361,71 +354,56 @@ def _reconnect_upper_sternum_pedicel_loop(
     bs5_2: hou.Point,
     size_ratio_x: float,
 ) -> tuple[hou.Point, hou.Point, hou.Point, hou.Point, hou.Point]:
+    headback_prims = [pr for pr in baseend0.prims() if pr.stringAttribValue("region") == "headback"]
+    assert len(headback_prims) == 2, f"Expected 2 headback prims on baseend0, got {len(headback_prims)}"
+
+    basesupportend0 = None
+    basesupportsternum5_1 = None
+    basesupportsternum5_2 = None
+
+    for pr in headback_prims:
+        pts_list = list(pr.points())
+        if bs5_1 in pts_list:
+            basesupportend0 = [p for p in pts_list if abs(p.position().x()) < 1e-4 and p != baseend0][0]
+            basesupportsternum5_1 = [p for p in pts_list if p not in (baseend0, bs5_1, basesupportend0)][0]
+        elif bs5_2 in pts_list:
+            basesupportend0 = [p for p in pts_list if abs(p.position().x()) < 1e-4 and p != baseend0][0]
+            basesupportsternum5_2 = [p for p in pts_list if p not in (baseend0, bs5_2, basesupportend0)][0]
+
+    assert basesupportend0 is not None, "Expected basesupportend0"
+    assert basesupportsternum5_1 is not None, "Expected basesupportsternum5_1"
+    assert basesupportsternum5_2 is not None, "Expected basesupportsternum5_2"
+
+    geo.deletePrims(headback_prims, keep_points=True)
+
+    v_end = basesupportend0.position() - baseend0.position()
+    v_bs1 = basesupportsternum5_1.position() - bs5_1.position()
+    v_bs2 = basesupportsternum5_2.position() - bs5_2.position()
+
+    pos_p_right = cp_outer_right.position() + v_bs1 * size_ratio_x + v_end * (1 - size_ratio_x)
+    pos_p_left = cp_outer_left.position() + v_bs2 * size_ratio_x + v_end * (1 - size_ratio_x)
+
+    p_right = geo.createPoint()
+    p_right.setPosition(pos_p_right)
+
+    p_left = geo.createPoint()
+    p_left.setPosition(pos_p_left)
+
+    f_ur1 = fill_face(geo, [basesupportend0, baseend0, cp_outer_right, p_right], reverse=True)
+    f_ur2 = fill_face(geo, [p_right, cp_outer_right, bs5_1, basesupportsternum5_1], reverse=True)
+    f_ul1 = fill_face(geo, [basesupportend0, baseend0, cp_outer_left, p_left], reverse=False)
+    f_ul2 = fill_face(geo, [p_left, cp_outer_left, bs5_2, basesupportsternum5_2], reverse=False)
+
     f_buf_ur = fill_face(geo, [cp_upper, cp_right, cp_outer_right, baseend0], reverse=True)
     f_buf_ul = fill_face(geo, [cp_upper, cp_left, cp_outer_left, baseend0], reverse=False)
     f_buf_ur.setAttribValue("region", base_sops.Region.BASEBUFFERMEMBRANE)
     f_buf_ul.setAttribValue("region", base_sops.Region.BASEBUFFERMEMBRANE)
 
-    b_end, b_bs1, b_bs2 = baseend0, bs5_1, bs5_2
-    p_r, p_l = cp_outer_right, cp_outer_left
+    for f in (f_ur1, f_ur2, f_ul1, f_ul2):
+        f.setAttribValue("region", "headback")
 
-    while True:
-        quad_r, quad_l, next_end, next_bs1, next_bs2 = _find_next_headback_rung(b_end, b_bs1, b_bs2)
-        if next_end == headsupport4:
-            break
+    return p_right, p_left, basesupportend0, basesupportsternum5_1, basesupportsternum5_2
 
-        next_p_r = _interpolate_support_p(geo, cp_outer_right, baseend0, bs5_1, next_end, next_bs1, size_ratio_x)
-        next_p_l = _interpolate_support_p(geo, cp_outer_left, baseend0, bs5_2, next_end, next_bs2, size_ratio_x)
-
-        geo.deletePrims([quad_r, quad_l], keep_points=True)
-
-        f_r1 = fill_face(geo, [next_end, b_end, p_r, next_p_r], reverse=True)
-        f_r2 = fill_face(geo, [next_p_r, p_r, b_bs1, next_bs1], reverse=True)
-        f_l1 = fill_face(geo, [next_end, b_end, p_l, next_p_l], reverse=False)
-        f_l2 = fill_face(geo, [next_p_l, p_l, b_bs2, next_bs2], reverse=False)
-
-        for f in (f_r1, f_r2, f_l1, f_l2):
-            f.setAttribValue("region", "headback")
-
-        b_end, b_bs1, b_bs2 = next_end, next_bs1, next_bs2
-        p_r, p_l = next_p_r, next_p_l
-
-    return p_r, p_l, b_end, b_bs1, b_bs2
-
-def _find_next_headback_rung(
-    b_end: hou.Point,
-    b_bs1: hou.Point,
-    b_bs2: hou.Point,
-) -> tuple[hou.Prim, hou.Prim, hou.Point, hou.Point, hou.Point]:
-    pr_r = [pr for pr in b_end.prims() if pr.stringAttribValue("region") == "headback" and b_bs1 in pr.points()]
-    pr_l = [pr for pr in b_end.prims() if pr.stringAttribValue("region") == "headback" and b_bs2 in pr.points()]
-    assert len(pr_r) == 1 and len(pr_l) == 1, "Expected 1 headback prim on each side of headback rung"
-
-    quad_r, quad_l = pr_r[0], pr_l[0]
-    pts_r = list(quad_r.points())
-    pts_l = list(quad_l.points())
-
-    next_b_end = [p for p in pts_r if abs(p.position().x()) < 1e-4 and p != b_end][0]
-    next_b_bs1 = [p for p in pts_r if p not in (b_end, b_bs1, next_b_end)][0]
-    next_b_bs2 = [p for p in pts_l if p not in (b_end, b_bs2, next_b_end)][0]
-
-    return quad_r, quad_l, next_b_end, next_b_bs1, next_b_bs2
-
-def _interpolate_support_p(
-    geo: hou.Geometry,
-    cp_outer: hou.Point,
-    base_end: hou.Point,
-    base_bs: hou.Point,
-    next_end: hou.Point,
-    next_bs: hou.Point,
-    ratio_x: float,
-) -> hou.Point:
-    v_end = next_end.position() - base_end.position()
-    v_bs = next_bs.position() - base_bs.position()
-    pos = cp_outer.position() + v_bs * ratio_x + v_end * (1.0 - ratio_x)
-    pt = geo.createPoint()
-    pt.setPosition(pos)
-    return pt
 
 def _retopo_head_back_faces(
     geo: hou.Geometry,
