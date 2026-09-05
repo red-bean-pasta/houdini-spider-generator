@@ -32,10 +32,11 @@ This is a project that tries to model a spider in a biologically topology way in
 - Do not use `sed` or `head` when the whole document is available for one-time reading, unless you are highly sure you can land all the needed info in one pass, else it's just wasting user's time and turns.
 - Use MCP to read out-of-scope files.
 - No LaTex output. Only Markdown. LaTex is not correctly rendered in PyCharm.
+- You can stash or commit current unstaged changes, branch out, make direct changes, test and fix, then try merging, rather than keep using tools. Selectively use tools when code is directly understandable and inspectable. Tool uses capacity is limited, and excessive tool uses will be rejected by user. 
 
 ## Reiterate
-- No newline abusing
-- Choose between identifier, position or other pattern based construction based on the task's true nature.
-- DO NOT REVERT USER CHANGES unless requested, broken, problematic or buggy, or if there's a better way. DO NOT MAKE TOO MUCH STRUCTURL CHANGE unless user requested or approved.
-- DO NOT USE MCP or python script to edit files. They are only allowed if ACP tools are rejected due to scope control.
-- DO NOT ABUSE tools.
+- No newline abusing.
+- DO NOT MAKE STRUCTURL CHANGE unless requested.
+- Edit files with ACP tools.
+- DO NOT ABUSE TOOLS.
+
