@@ -25,3 +25,4 @@ to do that, we can add points manually. but it may be better to extend the exisi
 - in `lip.py`, add a sopify method `_add_loops`, then call loop_cut five times, passing only the two faces as scope. however, due to each loop cut will change the prim and edge, we need to calculate the delta distance beforehand and then pass in distance. 
 
 we don't do retopology for now. 
+bug: using distance will result the two other edges, (cheliceraemembraneupper1, headcheliceraeupper1) to be out of proportion, because distance is fixed. we should use delta ratio then.

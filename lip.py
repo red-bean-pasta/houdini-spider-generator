@@ -57,26 +57,25 @@ def _add_loops(node: hou.SopNode) -> None:
         if h0 in p.points() and c_neg1 in p.points() and h_neg1 in p.points()
     )
 
-    ratios = (0.2, 0.5, 0.7, 0.85)
-    total_dist = (h0.position() - c0.position()).length()
-    target_distances = [total_dist * r for r in ratios]
-    delta_distances = [target_distances[0]] + [
-        target_distances[i] - target_distances[i - 1]
-        for i in range(1, len(target_distances))
+    ratios = (1/6, 2/6, 3/6, 5/6)
+    delta_ratios = [
+        ratios[i]
+        if i < 1 else
+        (ratios[i] - ratios[i - 1]) / (1 - (ratios[i - 1]))
+        for i in range(len(ratios))
     ]
 
-    curr_start = c0
+    current_start = h0
     scope = [prim_right, prim_left]
-
-    for delta in delta_distances:
+    for delta in delta_ratios:
         prim_to_cut = scope[0]
         added_pts, _ = loop_cut(
             prim_to_cut,
-            curr_start,
-            h0,
+            current_start,
+            c0,
             delta,
-            use_ratio=False,
+            use_ratio=True,
             scope=scope,
         )
-        curr_start = next(pt for pt in added_pts if abs(pt.position().x()) < 1e-4)
-        scope = [p for p in curr_start.prims() if h0 in p.points()]
+        current_start = next(pt for pt in added_pts if abs(pt.position().x()) < 1e-4)
+        scope = [p for p in current_start.prims() if c0 in p.points()]
