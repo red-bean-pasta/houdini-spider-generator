@@ -67,7 +67,6 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
     head = add_reloadable_subnet(cephalothorax, "head")
     head.setInput(0, base)
     _add_parameters(head)
-    _add_controls(head)
 
     source = head.indirectInputs()[0]
     base_rim = sopify(head, source, _extract_base_rim)
@@ -119,20 +118,6 @@ def _add_parameters(head: hou.SopNode) -> None:
         0.035,
         (0.0, None),
     )
-
-
-def _add_controls(head: hou.SopNode) -> hou.SopNode:
-    control = head.createNode("null", "CONTROL")
-    add_float_param(
-        control,
-        "lip_extrusion_ratio",
-        2,
-        (5.0, 1.0),
-        (-10.0, 10.0),
-        naming_scheme=hou.parmNamingScheme.XYZW,
-        help="Lip refers to the touching line between chelicerae and head, and the ratio is relative to the base support loop (membrane) height",
-    )
-    return control
 
 
 def _add_points(
