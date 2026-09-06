@@ -1,4 +1,4 @@
-** read rules under `.aiassistant/rules/` **
+** always read rules under `.aiassistant/rules/` **
 
 ## Task 1
 > finished
@@ -78,3 +78,33 @@ the same rules apply to the left side. so it can be generalized into one helper 
 
 
 ## Task 5
+> finished
+
+extrude lip
+
+#### Steps
+- add a method before _retopo_faces called _extrude_lip
+- read extrusion_ratio
+- get baseline = headsupport_cheliceraemembraneupper0.y() - cheliceraemembraneupper0.y()
+- get z_offset = -baseline * extrusion_ratiox
+- get y_offset = -baseline * extrusion_ratioy
+- offset suppor loop 2 by (0, y_offset, z_offset)
+- align loop 3 and 4 to the line of (loop2_i, cheliceraemembraneupper_i)
+
+* loop 3 should keep the same distance to loop 2, not same ratio; loop 4 should keep same distance to cheliceraemembraneupper. that's what support loop mean.
+* fix: move loop1, headbasesupport_cheliceraemembraneupper[0|1|-1], headfront[0|1|-1] and headsupport[0|1|1] by (0, y_offset, z_offset) as well
+
+
+## Task 6
+> finished
+
+give smoother transition between loop1-loop2-loop3. 
+
+#### Steps
+- add float parameter `lip_width_ratio`. add help message indicating it's evaluated against the height of head support loop.
+- add a new sopify method after `_extrude_lip` called "_adjust_lip_width". 
+- in `_adjust_lip_width`:
+    - baseline, aka head support loop height, is easy to calculate: headsupport_basemaxilla1.y() - basemaxilla1.y()
+    - calculate existing_width, which is loop1_0.y() - loop2_0.y()
+    - move headbasesupport_cheliceraemembraneupper* and headsupport1_* up by `lip_width_ratio * baseline - exsiting_width`
+    note that headsupport1_1 and -1, and headbasesupport_cheliceraemembraneupper1 and -1, should be moved along their original line, instead of just +y
