@@ -18,9 +18,9 @@ This is a project that tries to model a spider in a biologically topology way in
 
 ## Code style
 - No code nesting like r'''HOM or VEX codes'''. Do not use VEX unless highly necessary. Use `sopify` method under `sop_helper.py`.
-- No over-engineering or speculative future-proofing.
-- No over-defensiveness; prefer assertions or explicit errors for invalid expected topology.
-- Do not hardcode points, names, positions, variables repetitively... Prefer looping, array and array builder. Hardcoding is only acceptable when it highly simplifies the code and avoids over-engineering.
+- No over-engineering or speculative future-proofing. No over-defensiveness; prefer assertions or explicit errors for invalid expected topology.
+- Do not hardcode points, names, positions, variables repetitively... Prefer looping, array and array builder. Hardcoding is only acceptable when it highly simplifies the code and avoids over-engineering. 
+- Do make methods decoupled and modular. Do not write long, repetitive and boilerplate methods. Write logically clear and separaed methods. 
 - Do not do exhaust listing. Prefer extraction, pattern, and positions (if robust). Exhaust listing is only acceptable if the logic is naturally "identifier" based, instead of geometry based.
 - New lines communicate grouping and logical separation; do not use them merely to wrap a short call or expression, especially in one liner methods that holds small significance like `assert` or `raise_error`. Abusing newlines only make navigation harder.
 - prefer `assert` over `NodeError` as assertion is correctly shown in .hip file.
@@ -32,7 +32,7 @@ This is a project that tries to model a spider in a biologically topology way in
 - Do not use `sed` or `head` when the whole document is available for one-time reading, unless you are highly sure you can land all the needed info in one pass, else it's just wasting user's time and turns.
 - Use MCP to read out-of-scope files.
 - No LaTex output. Only Markdown. LaTex is not correctly rendered in PyCharm.
-- You can stash or commit current unstaged changes, branch out, make direct changes, test and fix, then try merging, rather than keep using tools. Selectively use tools when code is directly understandable and inspectable. Do not waste a lot time on calling small tools.
+- You can stash or commit current unstaged changes, branch out, make direct changes, test and fix, then try merging. CODE + TRY + ERROR + DEBUG first. Do not waste forever on tool calling and file inspecting.
 
 ## Reiterate
 - No newline abusing.

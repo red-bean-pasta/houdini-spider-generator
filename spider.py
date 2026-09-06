@@ -123,6 +123,8 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
 
     baseend0 = points.get(base_sops.baseend(0))
     assert baseend0 is not None, "Expected baseend0 point in cephalothorax"
+    basesupportend0 = points.get(head.headbasesupport(base_sops.baseend(0)))
+    assert basesupportend0 is not None, "Expected headbasesupport_baseend0 point in cephalothorax"
     headsupport3 = points.get(head.headsupport(3))
     assert headsupport3 is not None, "Expected headsupport3 point in cephalothorax"
     headsupport_minus3 = points.get(head.headsupport(-3))
@@ -135,6 +137,10 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
     assert bs5_1 is not None, "Expected basesternum5_1 point in cephalothorax"
     bs5_2 = points.get(base_sops.basesternum(5, 2))
     assert bs5_2 is not None, "Expected basesternum5_2 point in cephalothorax"
+    basesupportsternum5_1 = points.get(head.headbasesupport(base_sops.basesternum(5, 1)))
+    assert basesupportsternum5_1 is not None, "Expected headbasesupport_basesternum5_1 point in cephalothorax"
+    basesupportsternum5_2 = points.get(head.headbasesupport(base_sops.basesternum(5, 2)))
+    assert basesupportsternum5_2 is not None, "Expected headbasesupport_basesternum5_2 point in cephalothorax"
 
     d = _get_opening_support_loop_width(bs5_1, bs5_2, pedicel_size_ratio_x)
 
@@ -143,7 +149,7 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
         geo, baseend0, bs5_1, bs5_2, pedicel_size_ratio_x, d
     )
     cp_upper, cp_lower = _position_vertical_pedicel_points(
-        geo, baseend0, headsupport4, sternumrim5, cp_outer_lower, pedicel_size_ratio, d
+        geo, baseend0, basesupportend0, headsupport4, sternumrim5, cp_outer_lower, pedicel_size_ratio, d
     )
     _reconnect_lower_sternum_pedicel_loop(
         geo,
@@ -159,19 +165,20 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
         bs5_2,
         sternumrim5,
     )
-    p_right, p_left, basesupportend0, basesupportsternum5_1, basesupportsternum5_2 = (
-        _reconnect_upper_sternum_pedicel_loop(
-            geo,
-            baseend0,
-            cp_upper,
-            cp_right,
-            cp_outer_right,
-            cp_left,
-            cp_outer_left,
-            bs5_1,
-            bs5_2,
-            pedicel_size_ratio_x,
-        )
+    p_right, p_left = _reconnect_upper_sternum_pedicel_loop(
+        geo,
+        baseend0,
+        basesupportend0,
+        basesupportsternum5_1,
+        basesupportsternum5_2,
+        cp_upper,
+        cp_right,
+        cp_outer_right,
+        cp_left,
+        cp_outer_left,
+        bs5_1,
+        bs5_2,
+        pedicel_size_ratio_x,
     )
     _retopo_head_back_faces(
         geo,
@@ -196,7 +203,7 @@ def _get_opening_support_loop_width(
 
 
 def _identify_pedicel_membrane_points(geo: hou.Geometry) -> tuple[hou.Point, hou.Point, hou.Point]:
-    membrane_prims = [\
+    membrane_prims = [
         prim for prim in geo.prims()
         if prim.stringAttribValue("region") == "basepedicelmembrane"
     ]
@@ -264,6 +271,7 @@ def _add_side_cepha_pedicel_points(
 def _position_vertical_pedicel_points(
     geo: hou.Geometry,
     baseend0: hou.Point,
+    basesupportend0: hou.Point,
     headsupport4: hou.Point,
     sternumrim5: hou.Point,
     cp_outer_lower: hou.Point,
@@ -301,21 +309,10 @@ def _position_vertical_pedicel_points(
     cp_upper.setPosition(p_upper)
     cp_upper.setAttribValue("id", cephapedicelupper())
 
-    basesupportend0 = _find_head_support_end_point(baseend0)
     baseend0.setPosition(pos_baseend0)
-    if basesupportend0 is not None:
-        basesupportend0.setPosition(basesupportend0.position() + baseend0_offset)
+    basesupportend0.setPosition(basesupportend0.position() + baseend0_offset)
 
     return cp_upper, cp_lower
-
-
-def _find_head_support_end_point(baseend0: hou.Point) -> hou.Point | None:
-    for prim in baseend0.prims():
-        if prim.stringAttribValue("region") == "headback":
-            for pt in prim.points():
-                if pt != baseend0 and abs(pt.position().x()) < 1e-4:
-                    return pt
-    return None
 
 
 def _reconnect_lower_sternum_pedicel_loop(
@@ -345,6 +342,9 @@ def _reconnect_lower_sternum_pedicel_loop(
 def _reconnect_upper_sternum_pedicel_loop(
     geo: hou.Geometry,
     baseend0: hou.Point,
+    basesupportend0: hou.Point,
+    basesupportsternum5_1: hou.Point,
+    basesupportsternum5_2: hou.Point,
     cp_upper: hou.Point,
     cp_right: hou.Point,
     cp_outer_right: hou.Point,
@@ -353,26 +353,9 @@ def _reconnect_upper_sternum_pedicel_loop(
     bs5_1: hou.Point,
     bs5_2: hou.Point,
     size_ratio_x: float,
-) -> tuple[hou.Point, hou.Point, hou.Point, hou.Point, hou.Point]:
+) -> tuple[hou.Point, hou.Point]:
     headback_prims = [pr for pr in baseend0.prims() if pr.stringAttribValue("region") == "headback"]
     assert len(headback_prims) == 2, f"Expected 2 headback prims on baseend0, got {len(headback_prims)}"
-
-    basesupportend0 = None
-    basesupportsternum5_1 = None
-    basesupportsternum5_2 = None
-
-    for pr in headback_prims:
-        pts_list = list(pr.points())
-        if bs5_1 in pts_list:
-            basesupportend0 = [p for p in pts_list if abs(p.position().x()) < 1e-4 and p != baseend0][0]
-            basesupportsternum5_1 = [p for p in pts_list if p not in (baseend0, bs5_1, basesupportend0)][0]
-        elif bs5_2 in pts_list:
-            basesupportend0 = [p for p in pts_list if abs(p.position().x()) < 1e-4 and p != baseend0][0]
-            basesupportsternum5_2 = [p for p in pts_list if p not in (baseend0, bs5_2, basesupportend0)][0]
-
-    assert basesupportend0 is not None, "Expected basesupportend0"
-    assert basesupportsternum5_1 is not None, "Expected basesupportsternum5_1"
-    assert basesupportsternum5_2 is not None, "Expected basesupportsternum5_2"
 
     geo.deletePrims(headback_prims, keep_points=True)
 
@@ -402,7 +385,7 @@ def _reconnect_upper_sternum_pedicel_loop(
     for f in (f_ur1, f_ur2, f_ul1, f_ul2):
         f.setAttribValue("region", "headback")
 
-    return p_right, p_left, basesupportend0, basesupportsternum5_1, basesupportsternum5_2
+    return p_right, p_left
 
 
 def _retopo_head_back_faces(

@@ -43,7 +43,7 @@ class ID(StrEnum):
     HEADSIDEMIDDLE = auto()
     HEADSIDEBACK = auto()
     HEADSUPPORT = auto()
-    HEADCHELICERAEUPPER = auto()
+    HEADBASESUPPORT = auto()
 
 def headfront(*i: int | str) -> str:
     return affix_id(ID.HEADFRONT, *i)
@@ -59,8 +59,8 @@ def headsideback(*i: int | str) -> str:
     return affix_id(ID.HEADSIDEBACK, *i)
 def headsupport(*i: int | str) -> str:
     return affix_id(ID.HEADSUPPORT, *i)
-def headcheliceraeupper(*i: int | str) -> str:
-    return affix_id(ID.HEADCHELICERAEUPPER, *i)
+def headbasesupport(*i: int | str) -> str:
+    return affix_id(f"{ID.HEADBASESUPPORT}_", *i)
 
 
 def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
@@ -489,7 +489,7 @@ def _rename_left_ids(node: hou.SopNode) -> None:
 def _inset_base_support_loop(node: hou.SopNode) -> None:
     geo = node.geometry()
     _inset_base(geo, _get_membrane_ratio(node))
-    _attribute_points_between_head_chelicerae(geo, headcheliceraeupper)
+    _attribute_inset_points(geo)
     deduplicate_id_attr(geo, None, keep_first=True)
 
 
@@ -515,14 +515,10 @@ def _inset_base(geo: hou.Geometry, ratio: float) -> None:
 
     inset(list(geo.prims()), dist, use_ratio=False)
 
-def _attribute_points_between_head_chelicerae(
-        geo: hou.Geometry,
-        attributer: Callable
-) -> None:
+def _attribute_inset_points(geo: hou.Geometry) -> None:
     points = points_by_attr(geo, "id", True)
-    for i in (-1, 0, 1):
-        membrane_id = cheliceraemembraneupper(i)
-        matching = points[membrane_id]
-        assert len(matching) == 2, f"Expected 2 points with id {membrane_id!r}"
+    for point_id, matching in points.items():
+        if not point_id or len(matching) != 2:
+            continue
         inset_pt = max(matching, key=lambda pt: pt.number())
-        set_point_id(inset_pt, attributer(i))
+        set_point_id(inset_pt, headbasesupport(point_id))

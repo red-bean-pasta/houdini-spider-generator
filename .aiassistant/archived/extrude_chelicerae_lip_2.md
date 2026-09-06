@@ -1,4 +1,8 @@
+** read rules under `.aiassistant/rules/` **
+
 ## Task 1
+> finished
+
 prepare the topology for lip (head and chelicerae membrane area).
 
 #### Background
@@ -16,6 +20,8 @@ The retopology is simple. but we'll talk about it later.
 
 
 ## Task 2
+> finished
+
 add the 4 loops on two faces: (cheliceraemembraneupper0, headcheliceraeupper0, cheliceraemembraneupper1, headcheliceraeupper1) and -1 side.
 to do that, we can add points manually. but it may be better to extend the exisiting `loop_cut` method in `utilities.topology.py`. We can extend an optional argument "scope: list[hou.Prim] | None = None". it can then check if the continous loop is in the scope, if not, that side is discontinued. this is an useful extension.
 
@@ -26,3 +32,49 @@ to do that, we can add points manually. but it may be better to extend the exisi
 
 we don't do retopology for now. 
 bug: using distance will result the two other edges, (cheliceraemembraneupper1, headcheliceraeupper1) to be out of proportion, because distance is fixed. we should use delta ratio then.
+
+
+## Task 3
+> finished
+
+refactor `head.py` so that the support loop does add public attributes instead of private ones. 
+I've already added wrapper method:
+```
+def headbasesupport(*i: int | str) -> str:
+    return affix_id(ID.HEADBASESUPPORT, *i)
+```
+you need to refactor `_attribute_inset_points` so that it attributes everything instead of just the original `headcheliceraeupper*` attributes. `headcheliceraeupper*` is already deleted.
+the attribute is simple. if the original point is baseend0, then the inset point should be attributed as `headbasesupport("baseend0")`, returnning `headbasesupport_baseend0`
+
+This method will disrupt serveral downstream nodes: `lip.py` and `spider.py`. for example, `lip.py` uses `headcheliceraeupper` and `spider.py` doesn't utilize the new introduction of `headbasesupport_baseend0`. fix them.
+
+
+## Task 4
+> finished
+
+remove the two faces that need retopology and retopo them.
+
+#### Steps
+1. refactor the script:
+- add ID enum 
+- add item LIPSUPPORT
+- add wrapper method `lip_support(*i)`
+
+you can reference similar designs at `head.py`
+
+- refactor `_add_loops` to attribute added points. first loop is attributed as `lipsupport1_[1|0|-1]`
+
+2. remove the faces: (cheliceraemembraneupper1, headsupport_cheliceraemembraneupper1, basemaxilla1, headsupport_basemaxilla1), and its left sibling.
+make this its own sopify node
+
+3. retopology these two faces:
+(cheliceraemembraneupper1, basemaxilla1, headsupport_basemaxilla1) forms an triangle angle. we can get the formula of its middle line, the line that evenly divide this angle. the we can get the y offset, given the x offset of lipsupport4_1, let's attributed it as i4. (i4, basemaxilla1, cheliceraemembraneupper1, lipsupport4_1) therefore forms a quad. same rule apply to (i4, i3, lipsupport3_1, lipsupport4_1).
+The same rules apply to the other side: the (headsupport_cheliceraemembraneupper1, headsupport_basemaxilla1, basemaxilla1). then, two quads can be formed: (i1, headsupport_basemaxilla1, headsupport_cheliceraemembraneupper1, lipsupport1_1), (i2, i1, lipsupport1_1, lip_suppor2_1).
+then we can fill the rest quads: (i4, i1, headsupport_basemaxilla1, basemaxilla1), (i4, i1, i2, i3), (i3, i2, lipsupport2_1, lipsupport3_1)
+i may order or name them wrong. but you know the shape i'm describing.
+you can write working method first, verify them, then refactor the code to avoid excessive hardcoding and too long boilerplate, with hlper submethods.
+
+the same rules apply to the left side. so it can be generalized into one helper method. 
+
+
+## Task 5
