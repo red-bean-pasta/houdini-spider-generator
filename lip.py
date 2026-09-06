@@ -2,7 +2,7 @@ from enum import StrEnum, auto
 
 import hou
 
-from base_sops import basemaxilla
+from base_sops import basemaxilla, basesternum
 from chelicerae import cheliceraemembraneupper
 from head import headbasesupport, headfront, headsupport
 from helper import affix_id, points_by_id, set_point_id
@@ -31,10 +31,13 @@ TRANSITION_UVS = (
 
 class ID(StrEnum):
     LIPSUPPORT = auto()
+    LIPBASESUPPORT = auto()
     I = auto()
 
 def lip_support(*i: int | str) -> str:
     return affix_id(ID.LIPSUPPORT, *i)
+def lip_base_support(*i: int | str) -> str:
+    return affix_id(ID.LIPBASESUPPORT, *i)
 def lip_intermediate(*i: int | str) -> str:
     return affix_id(ID.I, *i)
 
@@ -86,6 +89,10 @@ def _add_loops(node: hou.SopNode) -> None:
     h1 = points[headbasesupport(cheliceraemembraneupper(1))]
     c_neg1 = points[cheliceraemembraneupper(-1)]
     h_neg1 = points[headbasesupport(cheliceraemembraneupper(-1))]
+    b1 = points[basemaxilla(1)]
+    hb1 = points[headbasesupport(basemaxilla(1))]
+    b_neg1 = points[basemaxilla(-1)]
+    hb_neg1 = points[headbasesupport(basemaxilla(-1))]
 
     prim_right = next(
         p for p in c0.prims()
@@ -94,6 +101,14 @@ def _add_loops(node: hou.SopNode) -> None:
     prim_left = next(
         p for p in c0.prims()
         if h0 in p.points() and c_neg1 in p.points() and h_neg1 in p.points()
+    )
+    cheek_right = next(
+        p for p in c1.prims()
+        if h1 in p.points() and b1 in p.points() and hb1 in p.points()
+    )
+    cheek_left = next(
+        p for p in c_neg1.prims()
+        if h_neg1 in p.points() and b_neg1 in p.points() and hb_neg1 in p.points()
     )
 
     ratios = LOOP_RATIOS
@@ -105,9 +120,17 @@ def _add_loops(node: hou.SopNode) -> None:
     ]
 
     current_start = h0
-    scope = [prim_right, prim_left]
-    for loop_idx, delta in enumerate(delta_ratios, start=1):
-        prim_to_cut = scope[0]
+    scope = [prim_right, prim_left, cheek_right, cheek_left]
+    end_points = {c0, c1, c_neg1, b1, b_neg1}
+    reference_edges = (
+        (lip_support, 0, h0, c0),
+        (lip_support, 1, h1, c1),
+        (lip_support, -1, h_neg1, c_neg1),
+        (lip_base_support, 1, hb1, b1),
+        (lip_base_support, -1, hb_neg1, b_neg1),
+    )
+    for loop_idx, (ratio, delta) in enumerate(zip(LOOP_RATIOS, delta_ratios), start=1):
+        prim_to_cut = next(p for p in current_start.prims() if c0 in p.points())
         added_pts, _ = loop_cut(
             prim_to_cut,
             current_start,
@@ -116,13 +139,24 @@ def _add_loops(node: hou.SopNode) -> None:
             use_ratio=True,
             scope=scope,
         )
-        for pt in added_pts:
-            x = pt.position().x()
-            side = 1 if x > 1e-4 else (-1 if x < -1e-4 else 0)
-            set_point_id(pt, lip_support(loop_idx, side))
+        assert len(added_pts) == len(reference_edges), "Expected cuts across the center and both cheek faces"
 
-        current_start = next(pt for pt in added_pts if abs(pt.position().x()) < 1e-4)
-        scope = [p for p in current_start.prims() if c0 in p.points()]
+        unmatched = set(added_pts)
+        for id_builder, side, start, end in reference_edges:
+            expected = start.position() * (1.0 - ratio) + end.position() * ratio
+            point = min(unmatched, key=lambda pt: pt.position().distanceTo(expected))
+            assert point.position().distanceTo(expected) < 1e-4, "Expected loop point on reference edge"
+            set_point_id(point, id_builder(loop_idx, side))
+            unmatched.remove(point)
+
+        current_start = points_by_id(geo)[lip_support(loop_idx, 0)]
+        cut_points = set(added_pts)
+        scope = [
+            prim
+            for prim in geo.prims()
+            if len(cut_points.intersection(prim.points())) == 2
+            and any(point in end_points for point in prim.points())
+        ]
 
 
 def _remove_faces(node: hou.SopNode) -> None:
@@ -131,13 +165,13 @@ def _remove_faces(node: hou.SopNode) -> None:
 
     prims_to_delete = []
     for side in (1, -1):
-        c = points[cheliceraemembraneupper(side)]
-        hc = points[headbasesupport(cheliceraemembraneupper(side))]
         b = points[basemaxilla(side)]
         hb = points[headbasesupport(basemaxilla(side))]
-        face_pts = {c, hc, b, hb}
+        s = points[basesternum(side, 2)]
+        hs = points[headbasesupport(basesternum(side, 2))]
+        face_pts = {b, hb, s, hs}
 
-        prim = next(p for p in c.prims() if face_pts.issubset(set(p.points())))
+        prim = next(p for p in b.prims() if face_pts.issubset(set(p.points())))
         prims_to_delete.append(prim)
 
     geo.deletePrims(prims_to_delete, keep_points=True)
@@ -218,16 +252,16 @@ def _retopo_faces(node: hou.SopNode) -> None:
 
 def _retopo_side(geo: hou.Geometry, points: dict[str, hou.Point], side: int) -> None:
     b = points[basemaxilla(side)]
-    c = points[cheliceraemembraneupper(side)]
     hb = points[headbasesupport(basemaxilla(side))]
-    hc = points[headbasesupport(cheliceraemembraneupper(side))]
+    s = points[basesternum(side, 2)]
+    hs = points[headbasesupport(basesternum(side, 2))]
 
-    lip1 = points[lip_support(1, side)]
-    lip2 = points[lip_support(2, side)]
-    lip3 = points[lip_support(3, side)]
-    lip4 = points[lip_support(4, side)]
+    lip1 = points[lip_base_support(1, side)]
+    lip2 = points[lip_base_support(2, side)]
+    lip3 = points[lip_base_support(3, side)]
+    lip4 = points[lip_base_support(4, side)]
 
-    corners = tuple(point.position() for point in (b, hb, c, hc))
+    corners = tuple(point.position() for point in (s, hs, b, hb))
     intermediates = [
         _add_named_point(
             geo,
@@ -239,12 +273,12 @@ def _retopo_side(geo: hou.Geometry, points: dict[str, hou.Point], side: int) -> 
     i1, i2, i3, i4 = intermediates
 
     quads = [
-        [c, b, i4, lip4],
+        [b, s, i4, lip4],
         [lip4, i4, i3, lip3],
         [lip3, i3, i2, lip2],
         [lip2, i2, i1, lip1],
-        [lip1, i1, hb, hc],
-        [b, hb, i1, i4],
+        [lip1, i1, hs, hb],
+        [s, hs, i1, i4],
         [i4, i1, i2, i3],
     ]
     for quad in quads:

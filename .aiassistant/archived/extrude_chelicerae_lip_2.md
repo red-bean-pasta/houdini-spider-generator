@@ -108,3 +108,10 @@ give smoother transition between loop1-loop2-loop3.
     - calculate existing_width, which is loop1_0.y() - loop2_0.y()
     - move headbasesupport_cheliceraemembraneupper* and headsupport1_* up by `lip_width_ratio * baseline - exsiting_width`
     note that headsupport1_1 and -1, and headbasesupport_cheliceraemembraneupper1 and -1, should be moved along their original line, instead of just +y
+    
+    
+## Task 7
+the retopo in Task 5 is too "croweded" at the basemaxilla1 and headsupport_basemaxilla1 side. the subdivision would therefore look very weird.
+help me identify how to improve the topology flow.
+you can be wild on this one.
+

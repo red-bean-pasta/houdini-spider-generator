@@ -33,6 +33,7 @@ This is a project that tries to model a spider in a biologically topology way in
 - Use MCP to read out-of-scope files.
 - No LaTex output. Only Markdown. LaTex is not correctly rendered in PyCharm.
 - You can stash or commit current unstaged changes, branch out, make direct changes, test and fix, then try merging. CODE + TRY + ERROR + DEBUG first. Do not waste forever on tool calling and file inspecting.
+- You can always ask for clarification and option choices using ACP tools, or simply stop and ask.  
 
 ## Reiterate
 - No newline abusing.
