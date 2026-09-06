@@ -21,6 +21,12 @@ from utilities.topology import loop_cut
 
 
 LOOP_RATIOS = (1/6, 2/6, 3/6, 5/6)
+TRANSITION_UVS = (
+    (0.77, 0.045),
+    (0.59, 0.07),
+    (0.40, 0.07),
+    (0.24, 0.045),
+)
 
 
 class ID(StrEnum):
@@ -221,48 +227,40 @@ def _retopo_side(geo: hou.Geometry, points: dict[str, hou.Point], side: int) -> 
     lip3 = points[lip_support(3, side)]
     lip4 = points[lip_support(4, side)]
 
-    dir_b = _calculate_bisector_ray(b.position(), c.position(), hb.position())
-    dir_hb = _calculate_bisector_ray(hb.position(), hc.position(), b.position())
-
-    pos_i4 = _point_on_bisector(b.position(), dir_b, lip4.position().x())
-    pos_i3 = _point_on_bisector(b.position(), dir_b, lip3.position().x())
-    pos_i2 = _point_on_bisector(hb.position(), dir_hb, lip2.position().x())
-    pos_i1 = _point_on_bisector(hb.position(), dir_hb, lip1.position().x())
-
-    i1 = _add_named_point(geo, pos_i1, lip_intermediate(1, side))
-    i2 = _add_named_point(geo, pos_i2, lip_intermediate(2, side))
-    i3 = _add_named_point(geo, pos_i3, lip_intermediate(3, side))
-    i4 = _add_named_point(geo, pos_i4, lip_intermediate(4, side))
+    corners = tuple(point.position() for point in (b, hb, c, hc))
+    intermediates = [
+        _add_named_point(
+            geo,
+            _position_in_quad(*corners, u, v),
+            lip_intermediate(index, side),
+        )
+        for index, (u, v) in enumerate(TRANSITION_UVS, start=1)
+    ]
+    i1, i2, i3, i4 = intermediates
 
     quads = [
-        [i4, b, c, lip4],
-        [i4, i3, lip3, lip4],
-        [i3, i2, lip2, lip3],
-        [i2, i1, lip1, lip2],
-        [i1, hb, hc, lip1],
-        [i4, i1, hb, b],
+        [c, b, i4, lip4],
+        [lip4, i4, i3, lip3],
+        [lip3, i3, i2, lip2],
+        [lip2, i2, i1, lip1],
+        [lip1, i1, hb, hc],
+        [b, hb, i1, i4],
         [i4, i1, i2, i3],
     ]
     for quad in quads:
-        _add_quad(geo, quad)
+        _add_quad(geo, quad if side > 0 else list(reversed(quad)))
 
-def _calculate_bisector_ray(
-    origin: hou.Vector3,
-    arm1: hou.Vector3,
-    arm2: hou.Vector3,
+def _position_in_quad(
+    bottom_left: hou.Vector3,
+    bottom_right: hou.Vector3,
+    top_left: hou.Vector3,
+    top_right: hou.Vector3,
+    u: float,
+    v: float,
 ) -> hou.Vector3:
-    v1 = (arm1 - origin).normalized()
-    v2 = (arm2 - origin).normalized()
-    return (v1 + v2).normalized()
-
-def _point_on_bisector(
-    origin: hou.Vector3,
-    direction: hou.Vector3,
-    target_x: float,
-) -> hou.Vector3:
-    assert abs(direction.x()) > 1e-6, "Bisector direction is perpendicular to X axis"
-    t = (target_x - origin.x()) / direction.x()
-    return origin + direction * t
+    bottom = bottom_left * (1.0 - u) + bottom_right * u
+    top = top_left * (1.0 - u) + top_right * u
+    return bottom * (1.0 - v) + top * v
 
 def _add_named_point(
     geo: hou.Geometry,
