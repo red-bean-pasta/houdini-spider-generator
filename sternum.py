@@ -40,16 +40,10 @@ class ID(StrEnum):
 
 def sternumrim(*i: int | str) -> str:
     return affix_id(ID.STERNUMRIM, *i)
-
-
 def sternummiddle(*i: int | str) -> str:
     return affix_id(ID.STERNUMMIDDLE, *i)
-
-
 def sternumspine(*i: int | str) -> str:
     return affix_id(ID.STERNUMSPINE, *i)
-
-
 def outer_loop_ids() -> tuple[str, str]:
     return ID.STERNUMRIM, ID.STERNUMMIDDLE
 
@@ -145,10 +139,6 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
     return control
 
 
-def _ordered_points(points: list[hou.Point]) -> list[hou.Point]:
-    return sorted(points, key=lambda point: (point.position()[2], point.position()[0]))
-
-
 def _left_half(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
@@ -238,6 +228,9 @@ def _add_point_ids(node: hou.SopNode) -> None:
         )
         set_points_id([point], [point_id])
 
+def _ordered_points(points: list[hou.Point]) -> list[hou.Point]:
+    return sorted(points, key=lambda point: (point.position()[2], point.position()[0]))
+
 
 def _add_center_spine(node: hou.SopNode) -> None:
     input_node = node.inputs()[0]; assert input_node is not None
@@ -294,7 +287,6 @@ def _descend_sternum_spine(node: hou.SopNode) -> None:
             y = _get_eased_depth(position[2], bottom[2], middle[2], 0.0, -depth, power)
         point.setPosition((position[0], y, position[2]))
 
-
 def _get_eased_depth(
     x: float,
     x0: float,
@@ -325,7 +317,6 @@ def _build_sternum_faces(node: hou.SopNode) -> None:
     else:
         _build_subdivided_spine_faces(geo, center, right, left, t)
 
-
 def _build_base_faces(
     geo: hou.Geometry,
     center: list[hou.Point],
@@ -336,7 +327,6 @@ def _build_base_faces(
         fill_face(geo, [center[index], right[index], right[index + 1], center[index + 1]], True)
         fill_face(geo, [center[index], center[index + 1], left[index + 1], left[index]], True)
     fill_face(geo, [center[-2], right[-1], center[-1], left[-1]], True)
-
 
 def _build_subdivided_spine_faces(
     geo: hou.Geometry,

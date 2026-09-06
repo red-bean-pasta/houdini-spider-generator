@@ -4,6 +4,13 @@ from enum import StrEnum, auto
 import hou
 
 import spider
+from helper import (
+    add_id_attr,
+    affix_id,
+    point_from_geo,
+    points_by_id,
+    rename_left_ids,
+)
 from utilities.common import (
     add_float_param,
     add_global_attr,
@@ -13,13 +20,6 @@ from utilities.common import (
     get_params,
     get_parent,
     remove_attrs,
-)
-from helper import (
-    add_id_attr,
-    affix_id,
-    point_from_geo,
-    points_by_id,
-    rename_left_ids,
 )
 from utilities.nodes import (
     add_fuse,
@@ -40,6 +40,11 @@ class ID(StrEnum):
     ABDOMENVERTICALRIM = auto()
     ABDOMENSIDEUPPER = auto()
     ABDOMENSIDELOWER = auto()
+
+
+class Region(StrEnum):
+    ABDOMEN = auto()
+
 
 def abdomenorigin() -> str:
     return affix_id(ID.ABDOMENORIGIN)
@@ -257,6 +262,13 @@ def _add_height_frame(node: hou.SopNode) -> None:
         point.setAttribValue("id", point_id)
 
 
+def _add_upper_middle_frame(node: hou.SopNode) -> None:
+    _add_middle_frame(node, negative=False)
+
+
+def _add_lower_middle_frame(node: hou.SopNode) -> None:
+    _add_middle_frame(node, negative=True)
+
 def _add_middle_frame(node: hou.SopNode, negative: bool = False) -> None:
     geo = node.geometry()
 
@@ -291,17 +303,11 @@ def _add_middle_frame(node: hou.SopNode, negative: bool = False) -> None:
         point.setPosition(pos)
         point.setAttribValue("id", side_attr(i))
 
-def _add_upper_middle_frame(node: hou.SopNode) -> None:
-    _add_middle_frame(node, negative=False)
-
-def _add_lower_middle_frame(node: hou.SopNode) -> None:
-    _add_middle_frame(node, negative=True)
-
 
 def _fill_right_side_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
     points = points_by_id(geo)
-    add_prim_attr(geo, "region", "abdomen")
+    add_prim_attr(geo, "region", "")
 
     o, e = point_from_geo(geo, abdomenorigin(), abdomenend())
     v = lambda i: points[abdomenverticalrim(i)]
@@ -321,17 +327,6 @@ def _fill_right_side_faces(node: hou.SopNode) -> None:
 
     fill_face(geo, [e, h(4), su(4), v(4)])
     fill_face(geo, [e, vn(4), sl(4), h(4)])
-
-
-def _rename_left_ids(node: hou.SopNode) -> None:
-    rename_left_ids(node.geometry())
-
-
-def _add_regions(node: hou.SopNode) -> None:
-    geo = node.geometry()
-    add_prim_attr(geo, "region", "abdomen")
-    for prim in geo.prims():
-        prim.setAttribValue("region", "abdomen")
 
 
 def _connect_frames_tmp(node: hou.SopNode) -> None:
@@ -355,6 +350,17 @@ def _connect_frames_tmp(node: hou.SopNode) -> None:
             point = points.get(point_id)
             assert point is not None, f"Expected point {point_id!r}"
             poly.addVertex(point)
+
+
+def _rename_left_ids(node: hou.SopNode) -> None:
+    rename_left_ids(node.geometry())
+
+
+def _add_regions(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    add_prim_attr(geo, "region", "")
+    for prim in geo.prims():
+        prim.setAttribValue("region", Region.ABDOMEN)
 
 
 def _cleanup_temp_attributes(node: hou.SopNode) -> None:

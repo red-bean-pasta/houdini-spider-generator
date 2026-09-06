@@ -6,6 +6,7 @@ import hou
 import base_sops
 from utilities.common import (
     add_float_param,
+    add_heading,
     add_prim_attr,
     fill_face,
     get_control,
@@ -13,9 +14,8 @@ from utilities.common import (
     get_params,
     get_parent,
     points_to_positions,
-    rotation_to,
-    add_heading,
     remove_attrs,
+    rotation_to,
     MessagedResult,
 )
 from utilities.nodes import (
@@ -35,8 +35,8 @@ class Region(StrEnum):
 
 
 def build(
-        spider: hou.SopNode,
-        base: hou.SopNode,
+    spider: hou.SopNode,
+    base: hou.SopNode,
 ) -> hou.SopNode:
     legs = add_reloadable_subnet(spider, "legs")
     legs.setInput(0, base)
@@ -196,7 +196,7 @@ def _extract_right_coxa(node: hou.SopNode) -> None:
     geo.setGlobalAttribValue("tmp_coxa_midpoints", flat_midpoint_nums)
 
 def _get_right_coxa_socket_points(
-        node: hou.SopNode,
+    node: hou.SopNode,
 ) -> tuple[list[list[hou.Point]], list[list[hou.Point]]]:
     geo = node.geometry()
     prims = sorted(geo.prims(), key=lambda p: p.boundingBox().center().z())
@@ -234,12 +234,8 @@ def _get_right_coxa_socket_points(
     return corner_result, midpoint_result
 
 
-def _remove_tmp_attributes(node: hou.SopNode) -> None:
-    remove_attrs(node.geometry(), global_attribs=("tmp_coxa_corners", "tmp_coxa_midpoints"))
-
-
 def _extrude_legs(
-        node: hou.SopNode,
+    node: hou.SopNode,
 ) -> None:
     geo = node.geometry()
     corners = geo.attribValue("tmp_coxa_corners")
@@ -251,6 +247,7 @@ def _extrude_legs(
         mid_pt_nums = midpoints[i * 2:(i + 1) * 2]
         mid_pts = [geo.iterPoints()[p] for p in mid_pt_nums]
 
+        # sz: small Z, bz: big Z
         pos_top_sz, pos_top_bz, pos_btm_sz, pos_btm_bz = points_to_positions(pts)
 
         top_mid = (pos_top_sz + pos_top_bz) / 2.0
@@ -266,100 +263,9 @@ def _extrude_legs(
 
         _adjust_coxa(node, pts, mid_pts, seg_pts[:16])
 
-
-def _adjust_coxa(
-        node: hou.SopNode,
-        socket_points: list[hou.Point],
-        socket_midpoints: list[hou.Point],
-        coxa_points: list[hou.Point],
-) -> None:
-    assert len(coxa_points) == 16, f"Expected 16 coxa points, got {len(coxa_points)}"
-    assert len(socket_points) == 4, f"Expected 4 socket points, got {len(socket_points)}"
-    assert len(socket_midpoints) == 2, f"Expected 2 socket midpoints, got {len(socket_midpoints)}"
-
-    geo = node.geometry()
-    add_prim_attr(geo, "region", "")
-
-    su1, su2, sb1, sb2 = socket_points
-    pos_su1, pos_su2, pos_sb1, pos_sb2 = points_to_positions(socket_points)
-    s_mu, s_mb = socket_midpoints
-
-    coxa_start_pts = coxa_points[:4]
-    coxa_start_support_pts = coxa_points[4:8]
-    coxa_end_pts = coxa_points[12:16]
-
-    pos_bu2, pos_bu1, pos_bb2, pos_bb1 = points_to_positions(coxa_end_pts)
-
-    y_d1 = abs(pos_sb1.y() - pos_bb1.y())
-    xz_d1 = math.sqrt((pos_bb1.x() - pos_sb1.x()) ** 2 + (pos_bb1.z() - pos_sb1.z()) ** 2)
-    ratio1 = (y_d1 / xz_d1) if xz_d1 > 1e-6 else 0.5
-    pos_ab1 = hou.Vector3(
-        pos_sb1.x() + (pos_bb1.x() - pos_sb1.x()) * ratio1,
-        pos_bb1.y(),
-        pos_sb1.z() + (pos_bb1.z() - pos_sb1.z()) * ratio1,
-    )
-    y_d2 = abs(pos_sb2.y() - pos_bb2.y())
-    xz_d2 = math.sqrt((pos_bb2.x() - pos_sb2.x()) ** 2 + (pos_bb2.z() - pos_sb2.z()) ** 2)
-    ratio2 = (y_d2 / xz_d2) if xz_d2 > 1e-6 else 0.5
-    pos_ab2 = hou.Vector3(
-        pos_sb2.x() + (pos_bb2.x() - pos_sb2.x()) * ratio2,
-        pos_bb2.y(),
-        pos_sb2.z() + (pos_bb2.z() - pos_sb2.z()) * ratio2,
-    )
-    pos_au1 = (pos_su1 + pos_bu1) * 0.5
-    pos_au2 = (pos_su2 + pos_bu2) * 0.5
-
-    coxa_start_support_pts[0].setPosition(pos_au2)
-    coxa_start_support_pts[1].setPosition(pos_au1)
-    coxa_start_support_pts[2].setPosition(pos_ab2)
-    coxa_start_support_pts[3].setPosition(pos_ab1)
-
-    eu2 = coxa_start_support_pts[0]
-    eu1 = coxa_start_support_pts[1]
-    eb2 = coxa_start_support_pts[2]
-    eb1 = coxa_start_support_pts[3]
-
-    support_loop_ratio = get_float_parm(get_control(node), "support_loop_ratio")
-
-    coxa_width = coxa_start_pts[0].position().distanceTo(coxa_start_pts[1].position())
-    cut_length = coxa_width * support_loop_ratio
-    pos_su_mid = (pos_su1 + pos_su2) * 0.5
-    pos_au_mid = (pos_au1 + pos_au2) * 0.5
-    dist_socket_to_support = pos_su_mid.distanceTo(pos_au_mid)
-    buffer_ratio = 1.0 - cut_length / dist_socket_to_support
-
-    # Upper pentagon: su1, s_mu, su2, eu2, eu1
-    mid_u, _, b_eu2, b_eu1 = fill_pentagon_with_buffer(
-        geo,
-        [su1, s_mu, su2, eu2, eu1],
-        (eu2, eu1),
-        buffer_ratio,
-        (su1, eu1),
-    )
-    # Bottom pentagon: sb2, s_mb, sb1, eb1, eb2
-    mid_b, _, b_eb1, b_eb2 = fill_pentagon_with_buffer(
-        geo,
-        [sb2, s_mb, sb1, eb1, eb2],
-        (eb1, eb2),
-        buffer_ratio,
-        (sb1, eb1),
-    )
-
-    # Back side (+Z): split into 2 quads by (b_eu2, b_eb2)
-    fill_face(geo, [sb2, su2, b_eu2, b_eb2])
-    fill_face(geo, [b_eb2, b_eu2, eu2, eb2])
-
-    # Front side (-Z): split into 3 quads by (mid_u, mid_b) and (b_eu1, b_eu1)
-    fill_face(geo, [su1, sb1, mid_b, mid_u])
-    fill_face(geo, [mid_u, mid_b, b_eb1, b_eu1])
-    fill_face(geo, [b_eu1, b_eb1, eb1, eu1])
-
-    geo.deletePoints(coxa_start_pts)
-
-
 def _build_leg(
-        node: hou.SopNode,
-        leg_index: int,
+    node: hou.SopNode,
+    leg_index: int,
 ) -> tuple[list[hou.Point], list[hou.Point], list[hou.Point]]:
     geo = node.geometry()
     add_prim_attr(geo, "region", "")
@@ -369,14 +275,14 @@ def _build_leg(
         node.addWarning(w)
     thickness_pts = _add_segment_thickness(node, seg_pts)
     all_seg_pts = _add_segment_loop_cuts(node, seg_pts)
-    mem_pts = _fill_mebranes(thickness_pts)
+    mem_pts = _fill_membranes(thickness_pts)
     all_mem_pts = _add_membrane_loop_cuts(node, seg_pts, thickness_pts, mem_pts)
     _close_tarsus(node, all_seg_pts)
     return all_seg_pts, thickness_pts, all_mem_pts
 
 def _build_segment_tubes(
-        node: hou.SopNode,
-        leg_index: int,
+    node: hou.SopNode,
+    leg_index: int,
 ) -> MessagedResult[list[hou.Point]]:
     assert 0 <= leg_index <= 3
     geo = node.geometry()
@@ -444,259 +350,6 @@ def _build_segment_tubes(
 
     return MessagedResult(seg_pts, messages)
 
-def _add_segment_thickness(
-        node: hou.SopNode,
-        seg_pts: list[hou.Point],
-) -> list[hou.Point]:
-    assert len(seg_pts) % 8 == 0, f"Expected seg_pts length to be a multiple of 8, got {len(seg_pts)}"
-    geo = node.geometry()
-    support_loop_ratio = get_float_parm(get_control(node), "support_loop_ratio")
-    coxa_width = seg_pts[0].position().distanceTo(seg_pts[1].position())
-    cut_length = coxa_width * support_loop_ratio
-
-    num_segs = len(seg_pts) // 8
-    thickness_pts: list[hou.Point] = []
-
-    for i in range(num_segs - 1):
-        former_end = seg_pts[i * 8 + 4:(i + 1) * 8]
-        latter_start = seg_pts[(i + 1) * 8:(i + 1) * 8 + 4]
-
-        former_inset = _inset_loop(geo, former_end, cut_length)
-        latter_inset = _inset_loop(geo, latter_start, cut_length)
-
-        e_loop = [former_end[0], former_end[1], former_end[3], former_end[2]]
-        ie_loop = [former_inset[0], former_inset[1], former_inset[3], former_inset[2]]
-        for j in range(4):
-            next_j = (j + 1) % 4
-            prim = fill_face(geo, [
-                e_loop[next_j],
-                e_loop[j],
-                ie_loop[j],
-                ie_loop[next_j],
-            ])
-            prim.setAttribValue("region", Region.LEGSEGMENT)
-
-        s_loop = [latter_start[0], latter_start[1], latter_start[3], latter_start[2]]
-        is_loop = [latter_inset[0], latter_inset[1], latter_inset[3], latter_inset[2]]
-        for j in range(4):
-            next_j = (j + 1) % 4
-            prim = fill_face(geo, [
-                s_loop[j],
-                s_loop[next_j],
-                is_loop[next_j],
-                is_loop[j],
-            ])
-            prim.setAttribValue("region", Region.LEGSEGMENT)
-
-        thickness_pts.extend([*former_inset, *latter_inset])
-
-    return thickness_pts
-
-def _inset_loop(
-        geo: hou.Geometry,
-        pts: list[hou.Point],
-        cut_length: float,
-) -> list[hou.Point]:
-    assert len(pts) == 4
-    pos0, pos1, pos2, pos3 = points_to_positions(pts)
-    v_down = pos2 - pos0
-    dir_down = v_down.normalized()
-
-    pos_in0 = pos0 + hou.Vector3(-cut_length, 0, 0) + dir_down * cut_length
-    pos_in1 = pos1 + hou.Vector3(cut_length, 0, 0) + dir_down * cut_length
-    pos_in2 = pos2 + hou.Vector3(-cut_length, 0, 0) - dir_down * cut_length
-    pos_in3 = pos3 + hou.Vector3(cut_length, 0, 0) - dir_down * cut_length
-
-    p_in = [geo.createPoint() for _ in range(4)]
-    for p, pos in zip(p_in, (pos_in0, pos_in1, pos_in2, pos_in3)):
-        p.setPosition(pos)
-    return p_in
-
-def _add_segment_loop_cuts(
-        node: hou.SopNode,
-        seg_pts: list[hou.Point],
-) -> list[hou.Point]:
-    assert len(seg_pts) % 8 == 0, f"Expected seg_pts length to be a multiple of 8, got {len(seg_pts)}"
-    geo = node.geometry()
-    support_loop_ratio = get_float_parm(get_control(node), "support_loop_ratio")
-
-    coxa_width = seg_pts[0].position().distanceTo(seg_pts[1].position())
-    cut_length = coxa_width * support_loop_ratio
-
-    num_segs = len(seg_pts) // 8
-    all_seg_pts: list[hou.Point] = []
-
-    for i in range(num_segs):
-        cur_pts = seg_pts[i * 8:(i + 1) * 8]
-        start_pts = cur_pts[:4]
-        end_pts = cur_pts[4:]
-
-        start_cut = _add_tube_loop_cut(geo, start_pts, end_pts, cut_length)
-        end_cut = _add_tube_loop_cut(geo, end_pts, start_cut, cut_length)
-
-        all_seg_pts.extend([
-            *start_pts,
-            *start_cut,
-            *end_cut,
-            *end_pts,
-        ])
-
-    return all_seg_pts
-
-def _add_membrane_loop_cuts(
-        node: hou.SopNode,
-        seg_pts: list[hou.Point],
-        thickness_pts: list[hou.Point],
-        mem_pts: list[hou.Point],
-) -> list[hou.Point]:
-    assert len(thickness_pts) % 8 == 0, f"Expected thickness_pts length to be a multiple of 8, got {len(thickness_pts)}"
-    geo = node.geometry()
-    support_loop_ratio = get_float_parm(get_control(node), "support_loop_ratio")
-
-    coxa_width = seg_pts[0].position().distanceTo(seg_pts[1].position())
-    cut_length = coxa_width * support_loop_ratio
-
-    num_joints = len(thickness_pts) // 8
-    all_mem_pts: list[hou.Point] = []
-
-    for i in range(num_joints):
-        former_end = thickness_pts[i * 8:i * 8 + 4]
-        latter_start = thickness_pts[i * 8 + 4:(i + 1) * 8]
-        mid_pts = mem_pts[i * 4:(i + 1) * 4]
-
-        fu1 = former_end[0]
-        lu1 = latter_start[0]
-        half_width = fu1.position().distanceTo(lu1.position()) * 0.5
-        if cut_length >= half_width:
-            all_mem_pts.extend(mid_pts)
-            continue
-
-        former_cut = _add_tube_loop_cut(geo, former_end, mid_pts, cut_length)
-        latter_cut = _add_tube_loop_cut(geo, latter_start, mid_pts, cut_length)
-        all_mem_pts.extend([
-            *former_cut,
-            *mid_pts,
-            *latter_cut,
-        ])
-
-    return all_mem_pts
-
-def _close_tarsus(
-        node: hou.SopNode,
-        seg_pts: list[hou.Point],
-) -> None:
-    assert len(seg_pts) >= 4, f"Expected at least 4 seg_pts, got {len(seg_pts)}"
-    geo = seg_pts[0].geometry()
-    p4, p5, p6, p7 = seg_pts[-4:]
-    prim = fill_face(geo, [p4, p6, p7, p5])
-    prim.setAttribValue("region", Region.LEGSEGMENT)
-
-    tarsus_wedge_angle = get_float_parm(get_control(node), "tarsus_wedge_angle")
-
-    pos4, pos5, pos6, pos7 = points_to_positions([p4, p5, p6, p7])
-    offset_y = pos4.y() - pos6.y()
-    offset_z = offset_y * math.tan(math.radians(tarsus_wedge_angle))
-
-    p6.setPosition(hou.Vector3(pos6.x(), pos6.y(), pos6.z() - offset_z))
-    p7.setPosition(hou.Vector3(pos7.x(), pos7.y(), pos7.z() - offset_z))
-
-def _add_tube_loop_cut(
-        geo: hou.Geometry,
-        start_pts: list[hou.Point],
-        end_pts: list[hou.Point],
-        cut_length: float,
-) -> list[hou.Point]:
-    s0, s1, s2, s3 = start_pts
-    e0, e1, e2, e3 = end_pts
-
-    edge = geo.findEdge(s0, e0)
-    assert edge is not None, f"Expected edge between {s0} and {e0}"
-    prim = [p for p in edge.prims() if s1 in p.points()][0]
-    cut_pts, _ = loop_cut(
-        prim,
-        s0,
-        e0,
-        cut_length,
-        use_ratio=False,
-    )
-    m0, m1, m3, m2 = cut_pts
-    return [m0, m1, m2, m3]
-
-def _fill_mebranes(
-        thickness_pts: list[hou.Point],
-) -> list[hou.Point]:
-    if not thickness_pts:
-        return []
-
-    geo = thickness_pts[0].geometry()
-    add_prim_attr(geo, "region", "")
-    assert len(thickness_pts) % 8 == 0, f"Expected thickness_pts length to be a multiple of 8, got {len(thickness_pts)}"
-
-    membrane_points: list[hou.Point] = []
-    num_joints = len(thickness_pts) // 8
-    for i in range(num_joints):
-        former_end = thickness_pts[i * 8:i * 8 + 4]
-        latter_start = thickness_pts[i * 8 + 4:(i + 1) * 8]
-        fu1, fu2, fb1, fb2 = former_end
-        lu1, lu2, lb1, lb2 = latter_start
-
-        (
-            pos_fu1,
-            pos_fu2,
-            pos_fb1,
-            pos_fb2,
-            pos_lu1,
-            pos_lu2,
-            pos_lb1,
-            pos_lb2,
-        ) = points_to_positions(former_end + latter_start)
-
-        lf = pos_fu1.distanceTo(pos_fb1)
-        ll = pos_lu1.distanceTo(pos_lb1)
-        membrane_length = (lf + ll) * 0.5
-
-        pos_mu1 = (pos_fu1 + pos_lu1) * 0.5
-        pos_mu2 = (pos_fu2 + pos_lu2) * 0.5
-        pos_mb1 = (pos_fb1 + pos_lb1) * 0.5
-        pos_mb2 = (pos_fb2 + pos_lb2) * 0.5
-        pos_mb1[1] = (pos_mb1.y() + (pos_mu1.y() - membrane_length)) * 0.5
-        pos_mb2[1] = (pos_mb2.y() + (pos_mu2.y() - membrane_length)) * 0.5
-
-        mu1 = geo.createPoint()
-        mu2 = geo.createPoint()
-        mb1 = geo.createPoint()
-        mb2 = geo.createPoint()
-
-        mu1.setPosition(pos_mu1)
-        mu2.setPosition(pos_mu2)
-        mb1.setPosition(pos_mb1)
-        mb2.setPosition(pos_mb2)
-
-        membrane_points.extend([mu1, mu2, mb1, mb2])
-
-        former_loop = [fu1, fu2, fb2, fb1]
-        mid_loop = [mu1, mu2, mb2, mb1]
-        latter_loop = [lu1, lu2, lb2, lb1]
-
-        for j in range(4):
-            next_j = (j + 1) % 4
-            prim1 = fill_face(geo, [
-                former_loop[j],
-                former_loop[next_j],
-                mid_loop[next_j],
-                mid_loop[j],
-            ])
-            prim1.setAttribValue("region", Region.LEGMEMBRANE)
-            prim2 = fill_face(geo, [
-                mid_loop[j],
-                mid_loop[next_j],
-                latter_loop[next_j],
-                latter_loop[j],
-            ])
-            prim2.setAttribValue("region", Region.LEGMEMBRANE)
-
-    return membrane_points
-
 def _get_front_coxa_socket_size(geo: hou.Geometry) -> tuple[float, float]:
     corners = geo.attribValue("tmp_coxa_corners")
     pts = [geo.iterPoints()[p] for p in corners[:4]]
@@ -711,13 +364,13 @@ def _get_front_coxa_socket_size(geo: hou.Geometry) -> tuple[float, float]:
     return width, height
 
 def _get_leg_points(
-        coxa_size: tuple[float, float, float],
-        segment_height_ratio: float,
-        section_shrink_ratios: tuple[float, float],
-        length_ratios: list[float],
-        spine_ratio: float,
-        segment_specs: tuple[tuple[float, float], ...],
-        minimum_membrane: tuple[float, float],
+    coxa_size: tuple[float, float, float],
+    segment_height_ratio: float,
+    section_shrink_ratios: tuple[float, float],
+    length_ratios: list[float],
+    spine_ratio: float,
+    segment_specs: tuple[tuple[float, float], ...],
+    minimum_membrane: tuple[float, float],
 ) -> MessagedResult[list[list[hou.Vector3]]]:
     assert len(segment_specs) == len(length_ratios) == 6  # TROCHANTER, FEMUR, PATELLA, TIBIA, METATARSUS, TARSUS
 
@@ -764,16 +417,15 @@ def _get_leg_points(
     assert len(segments) == 7
     return MessagedResult(segments, messages)
 
-
 def _append_segment(
-        former_positions: list[hou.Vector3],
-        height_ratio: float,
-        section_shrink_ratios: tuple[float, float],
-        length_ratio: float,
-        spine_ratio: float,
-        max_yaw: float,
-        min_flex: float,
-        minimum_membrane: tuple[float, float],
+    former_positions: list[hou.Vector3],
+    height_ratio: float,
+    section_shrink_ratios: tuple[float, float],
+    length_ratio: float,
+    spine_ratio: float,
+    max_yaw: float,
+    min_flex: float,
+    minimum_membrane: tuple[float, float],
 ) -> MessagedResult[tuple[list[hou.Vector3], list[hou.Vector3]]]:
     assert len(former_positions) == 8, f"Expected 8 positions for former segment, got {len(former_positions)}"
 
@@ -846,13 +498,12 @@ def _append_segment(
 
     return MessagedResult((former_positions_list, latter_segment), messages)
 
-
 def _calc_segment_offset_and_wedge(
-        max_yaw: float,
-        min_flex: float,
-        spine_ratio: float,
-        segment_size: tuple[tuple[float, float], tuple[float, float]],
-        minimum_membrane: tuple[float, float],
+    max_yaw: float,
+    min_flex: float,
+    spine_ratio: float,
+    segment_size: tuple[tuple[float, float], tuple[float, float]],
+    minimum_membrane: tuple[float, float],
 ) -> MessagedResult[tuple[hou.Vector2, float]]:
     (former_width, former_height), (latter_width, latter_height) = segment_size
 
@@ -868,14 +519,13 @@ def _calc_segment_offset_and_wedge(
 
     return MessagedResult((hou.Vector2(offset_x, offset_y), wedge_angle), messages)
 
-
 def _calc_membrane_spec(
-        max_yaw_deg: float,
-        min_flex_deg: float,
-        segment_sections: tuple[tuple[float, float], tuple[float, float]],
-        min_return: tuple[float, float],
-        max_wedge_deg: float = 45,
-        max_distance_ratio: float = 1.0,
+    max_yaw_deg: float,
+    min_flex_deg: float,
+    segment_sections: tuple[tuple[float, float], tuple[float, float]],
+    min_return: tuple[float, float],
+    max_wedge_deg: float = 45,
+    max_distance_ratio: float = 1.0,
 ) -> MessagedResult[tuple[float, float]]:
     max_yaw_deg = abs(max_yaw_deg)
     assert min_flex_deg > 0
@@ -925,13 +575,12 @@ def _calc_membrane_spec(
 
     return MessagedResult((distance, angle), messages)
 
-
 def _solve_membrane_wedge_deg(
-        min_flex: float,
-        membrane_thickness: float,
-        min_height: float,
-        tolerance: float = 1e-5,
-        iterations: int = 50,
+    min_flex: float,
+    membrane_thickness: float,
+    min_height: float,
+    tolerance: float = 1e-5,
+    iterations: int = 50,
 ) -> MessagedResult[float]:
     wedge_rad, messages = _solve_membrane_wedge_rad(
         math.radians(min_flex),
@@ -942,13 +591,12 @@ def _solve_membrane_wedge_deg(
     )
     return MessagedResult(math.degrees(wedge_rad), messages)
 
-
 def _solve_membrane_wedge_rad(
-        min_flex: float,
-        membrane_thickness: float,
-        min_height: float,
-        tolerance: float = 1e-5,
-        iterations: int = 50,
+    min_flex: float,
+    membrane_thickness: float,
+    min_height: float,
+    tolerance: float = 1e-5,
+    iterations: int = 50,
 ) -> MessagedResult[float]:
     remain_rad, messages = _solve_membrane_wedge_remain_rad(
         min_flex,
@@ -959,22 +607,21 @@ def _solve_membrane_wedge_rad(
     )
     return MessagedResult(math.pi / 2 - remain_rad, messages)
 
-
 def _solve_membrane_wedge_remain_rad(
-        min_flex: float,
-        membrane_thickness: float,
-        min_height: float,
-        tolerance: float = 1e-5,
-        iterations: int = 50,
+    min_flex: float,
+    membrane_thickness: float,
+    min_height: float,
+    tolerance: float = 1e-5,
+    iterations: int = 50,
 ) -> MessagedResult[float]:
     """
-        :solve:
-            u: pi / 2 - wedge_angle
-            w: max rotate angle introduced by membrane thickness
-            2u - w = min_flex
-            tan(w) = d / (h / sin(u))
-        :return: in radians
-        """
+    :solve:
+        u: pi / 2 - wedge_angle
+        w: max rotate angle introduced by membrane thickness
+        2u - w = min_flex
+        tan(w) = d / (h / sin(u))
+    :return: in radians
+    """
     assert min_height > 0 and membrane_thickness > 0
 
     k = membrane_thickness / min_height
@@ -1000,11 +647,10 @@ def _solve_membrane_wedge_remain_rad(
     )
     return MessagedResult(u, [msg])
 
-
 def _solve_membrane_thickness_deg(
-        needed_angle: float,
-        min_height: float,
-        wedge_angle: float,
+    needed_angle: float,
+    min_height: float,
+    wedge_angle: float,
 ) -> float:
     return _solve_membrane_thickness_rad(
         math.radians(needed_angle),
@@ -1013,9 +659,9 @@ def _solve_membrane_thickness_deg(
     )
 
 def _solve_membrane_thickness_rad(
-        needed_angle: float,
-        min_height: float,
-        wedge_angle: float,
+    needed_angle: float,
+    min_height: float,
+    wedge_angle: float,
 ) -> float:
     """
     :param needed_angle: in radians
@@ -1025,3 +671,357 @@ def _solve_membrane_thickness_rad(
     """
     # d / tan(needed_angle) = l = min_height / cos(wedge_angle)
     return min_height / math.cos(wedge_angle) * math.tan(needed_angle)
+
+def _add_segment_thickness(
+    node: hou.SopNode,
+    seg_pts: list[hou.Point],
+) -> list[hou.Point]:
+    assert len(seg_pts) % 8 == 0, f"Expected seg_pts length to be a multiple of 8, got {len(seg_pts)}"
+    geo = node.geometry()
+    support_loop_ratio = get_float_parm(get_control(node), "support_loop_ratio")
+    coxa_width = seg_pts[0].position().distanceTo(seg_pts[1].position())
+    cut_length = coxa_width * support_loop_ratio
+
+    num_segs = len(seg_pts) // 8
+    thickness_pts: list[hou.Point] = []
+
+    for i in range(num_segs - 1):
+        former_end = seg_pts[i * 8 + 4:(i + 1) * 8]
+        latter_start = seg_pts[(i + 1) * 8:(i + 1) * 8 + 4]
+
+        former_inset = _inset_loop(geo, former_end, cut_length)
+        latter_inset = _inset_loop(geo, latter_start, cut_length)
+
+        e_loop = [former_end[0], former_end[1], former_end[3], former_end[2]]
+        ie_loop = [former_inset[0], former_inset[1], former_inset[3], former_inset[2]]
+        for j in range(4):
+            next_j = (j + 1) % 4
+            prim = fill_face(geo, [
+                e_loop[next_j],
+                e_loop[j],
+                ie_loop[j],
+                ie_loop[next_j],
+            ])
+            prim.setAttribValue("region", Region.LEGSEGMENT)
+
+        s_loop = [latter_start[0], latter_start[1], latter_start[3], latter_start[2]]
+        is_loop = [latter_inset[0], latter_inset[1], latter_inset[3], latter_inset[2]]
+        for j in range(4):
+            next_j = (j + 1) % 4
+            prim = fill_face(geo, [
+                s_loop[j],
+                s_loop[next_j],
+                is_loop[next_j],
+                is_loop[j],
+            ])
+            prim.setAttribValue("region", Region.LEGSEGMENT)
+
+        thickness_pts.extend([*former_inset, *latter_inset])
+
+    return thickness_pts
+
+def _inset_loop(
+    geo: hou.Geometry,
+    pts: list[hou.Point],
+    cut_length: float,
+) -> list[hou.Point]:
+    assert len(pts) == 4
+    pos0, pos1, pos2, pos3 = points_to_positions(pts)
+    v_down = pos2 - pos0
+    dir_down = v_down.normalized()
+
+    pos_in0 = pos0 + hou.Vector3(-cut_length, 0, 0) + dir_down * cut_length
+    pos_in1 = pos1 + hou.Vector3(cut_length, 0, 0) + dir_down * cut_length
+    pos_in2 = pos2 + hou.Vector3(-cut_length, 0, 0) - dir_down * cut_length
+    pos_in3 = pos3 + hou.Vector3(cut_length, 0, 0) - dir_down * cut_length
+
+    p_in = [geo.createPoint() for _ in range(4)]
+    for p, pos in zip(p_in, (pos_in0, pos_in1, pos_in2, pos_in3)):
+        p.setPosition(pos)
+    return p_in
+
+def _add_segment_loop_cuts(
+    node: hou.SopNode,
+    seg_pts: list[hou.Point],
+) -> list[hou.Point]:
+    assert len(seg_pts) % 8 == 0, f"Expected seg_pts length to be a multiple of 8, got {len(seg_pts)}"
+    geo = node.geometry()
+    support_loop_ratio = get_float_parm(get_control(node), "support_loop_ratio")
+
+    coxa_width = seg_pts[0].position().distanceTo(seg_pts[1].position())
+    cut_length = coxa_width * support_loop_ratio
+
+    num_segs = len(seg_pts) // 8
+    all_seg_pts: list[hou.Point] = []
+
+    for i in range(num_segs):
+        cur_pts = seg_pts[i * 8:(i + 1) * 8]
+        start_pts = cur_pts[:4]
+        end_pts = cur_pts[4:]
+
+        start_cut = _add_tube_loop_cut(geo, start_pts, end_pts, cut_length)
+        end_cut = _add_tube_loop_cut(geo, end_pts, start_cut, cut_length)
+
+        all_seg_pts.extend([
+            *start_pts,
+            *start_cut,
+            *end_cut,
+            *end_pts,
+        ])
+
+    return all_seg_pts
+
+def _add_membrane_loop_cuts(
+    node: hou.SopNode,
+    seg_pts: list[hou.Point],
+    thickness_pts: list[hou.Point],
+    mem_pts: list[hou.Point],
+) -> list[hou.Point]:
+    assert len(thickness_pts) % 8 == 0, f"Expected thickness_pts length to be a multiple of 8, got {len(thickness_pts)}"
+    geo = node.geometry()
+    support_loop_ratio = get_float_parm(get_control(node), "support_loop_ratio")
+
+    coxa_width = seg_pts[0].position().distanceTo(seg_pts[1].position())
+    cut_length = coxa_width * support_loop_ratio
+
+    num_joints = len(thickness_pts) // 8
+    all_mem_pts: list[hou.Point] = []
+
+    for i in range(num_joints):
+        former_end = thickness_pts[i * 8:i * 8 + 4]
+        latter_start = thickness_pts[i * 8 + 4:(i + 1) * 8]
+        mid_pts = mem_pts[i * 4:(i + 1) * 4]
+
+        # fu: former upper, lu: latter upper
+        fu1 = former_end[0]
+        lu1 = latter_start[0]
+        half_width = fu1.position().distanceTo(lu1.position()) * 0.5
+        if cut_length >= half_width:
+            all_mem_pts.extend(mid_pts)
+            continue
+
+        former_cut = _add_tube_loop_cut(geo, former_end, mid_pts, cut_length)
+        latter_cut = _add_tube_loop_cut(geo, latter_start, mid_pts, cut_length)
+        all_mem_pts.extend([
+            *former_cut,
+            *mid_pts,
+            *latter_cut,
+        ])
+
+    return all_mem_pts
+
+def _close_tarsus(
+    node: hou.SopNode,
+    seg_pts: list[hou.Point],
+) -> None:
+    assert len(seg_pts) >= 4, f"Expected at least 4 seg_pts, got {len(seg_pts)}"
+    geo = seg_pts[0].geometry()
+    p4, p5, p6, p7 = seg_pts[-4:]
+    prim = fill_face(geo, [p4, p6, p7, p5])
+    prim.setAttribValue("region", Region.LEGSEGMENT)
+
+    tarsus_wedge_angle = get_float_parm(get_control(node), "tarsus_wedge_angle")
+
+    pos4, pos5, pos6, pos7 = points_to_positions([p4, p5, p6, p7])
+    offset_y = pos4.y() - pos6.y()
+    offset_z = offset_y * math.tan(math.radians(tarsus_wedge_angle))
+
+    p6.setPosition(hou.Vector3(pos6.x(), pos6.y(), pos6.z() - offset_z))
+    p7.setPosition(hou.Vector3(pos7.x(), pos7.y(), pos7.z() - offset_z))
+
+def _add_tube_loop_cut(
+    geo: hou.Geometry,
+    start_pts: list[hou.Point],
+    end_pts: list[hou.Point],
+    cut_length: float,
+) -> list[hou.Point]:
+    s0, s1, s2, s3 = start_pts
+    e0, e1, e2, e3 = end_pts
+
+    edge = geo.findEdge(s0, e0)
+    assert edge is not None, f"Expected edge between {s0} and {e0}"
+    prim = [p for p in edge.prims() if s1 in p.points()][0]
+    cut_pts, _ = loop_cut(
+        prim,
+        s0,
+        e0,
+        cut_length,
+        use_ratio=False,
+    )
+    m0, m1, m3, m2 = cut_pts
+    return [m0, m1, m2, m3]
+
+def _fill_membranes(
+    thickness_pts: list[hou.Point],
+) -> list[hou.Point]:
+    if not thickness_pts:
+        return []
+
+    geo = thickness_pts[0].geometry()
+    add_prim_attr(geo, "region", "")
+    assert len(thickness_pts) % 8 == 0, f"Expected thickness_pts length to be a multiple of 8, got {len(thickness_pts)}"
+
+    membrane_points: list[hou.Point] = []
+    num_joints = len(thickness_pts) // 8
+    for i in range(num_joints):
+        former_end = thickness_pts[i * 8:i * 8 + 4]
+        latter_start = thickness_pts[i * 8 + 4:(i + 1) * 8]
+        # fu: former upper, fb: former bottom, lu: latter upper, lb: latter bottom
+        fu1, fu2, fb1, fb2 = former_end
+        lu1, lu2, lb1, lb2 = latter_start
+
+        (
+            pos_fu1,
+            pos_fu2,
+            pos_fb1,
+            pos_fb2,
+            pos_lu1,
+            pos_lu2,
+            pos_lb1,
+            pos_lb2,
+        ) = points_to_positions(former_end + latter_start)
+
+        lf = pos_fu1.distanceTo(pos_fb1)
+        ll = pos_lu1.distanceTo(pos_lb1)
+        membrane_length = (lf + ll) * 0.5
+
+        # mu: midpoint upper, mb: midpoint bottom
+        pos_mu1 = (pos_fu1 + pos_lu1) * 0.5
+        pos_mu2 = (pos_fu2 + pos_lu2) * 0.5
+        pos_mb1 = (pos_fb1 + pos_lb1) * 0.5
+        pos_mb2 = (pos_fb2 + pos_lb2) * 0.5
+        pos_mb1[1] = (pos_mb1.y() + (pos_mu1.y() - membrane_length)) * 0.5
+        pos_mb2[1] = (pos_mb2.y() + (pos_mu2.y() - membrane_length)) * 0.5
+
+        mu1 = geo.createPoint()
+        mu2 = geo.createPoint()
+        mb1 = geo.createPoint()
+        mb2 = geo.createPoint()
+
+        mu1.setPosition(pos_mu1)
+        mu2.setPosition(pos_mu2)
+        mb1.setPosition(pos_mb1)
+        mb2.setPosition(pos_mb2)
+
+        membrane_points.extend([mu1, mu2, mb1, mb2])
+
+        former_loop = [fu1, fu2, fb2, fb1]
+        mid_loop = [mu1, mu2, mb2, mb1]
+        latter_loop = [lu1, lu2, lb2, lb1]
+
+        for j in range(4):
+            next_j = (j + 1) % 4
+            prim1 = fill_face(geo, [
+                former_loop[j],
+                former_loop[next_j],
+                mid_loop[next_j],
+                mid_loop[j],
+            ])
+            prim1.setAttribValue("region", Region.LEGMEMBRANE)
+            prim2 = fill_face(geo, [
+                mid_loop[j],
+                mid_loop[next_j],
+                latter_loop[next_j],
+                latter_loop[j],
+            ])
+            prim2.setAttribValue("region", Region.LEGMEMBRANE)
+
+    return membrane_points
+
+def _adjust_coxa(
+    node: hou.SopNode,
+    socket_points: list[hou.Point],
+    socket_midpoints: list[hou.Point],
+    coxa_points: list[hou.Point],
+) -> None:
+    assert len(coxa_points) == 16, f"Expected 16 coxa points, got {len(coxa_points)}"
+    assert len(socket_points) == 4, f"Expected 4 socket points, got {len(socket_points)}"
+    assert len(socket_midpoints) == 2, f"Expected 2 socket midpoints, got {len(socket_midpoints)}"
+
+    geo = node.geometry()
+    add_prim_attr(geo, "region", "")
+
+    # su: socket upper, sb: socket bottom
+    su1, su2, sb1, sb2 = socket_points
+    pos_su1, pos_su2, pos_sb1, pos_sb2 = points_to_positions(socket_points)
+    # s_mu, s_mb: socket midpoint upper / bottom
+    s_mu, s_mb = socket_midpoints
+
+    coxa_start_pts = coxa_points[:4]
+    coxa_start_support_pts = coxa_points[4:8]
+    coxa_end_pts = coxa_points[12:16]
+
+    # pos_bu: base upper, pos_bb: base bottom
+    pos_bu2, pos_bu1, pos_bb2, pos_bb1 = points_to_positions(coxa_end_pts)
+
+    y_d1 = abs(pos_sb1.y() - pos_bb1.y())
+    xz_d1 = math.sqrt((pos_bb1.x() - pos_sb1.x()) ** 2 + (pos_bb1.z() - pos_sb1.z()) ** 2)
+    ratio1 = (y_d1 / xz_d1) if xz_d1 > 1e-6 else 0.5
+    # pos_ab: adjusted bottom, pos_au: adjusted upper
+    pos_ab1 = hou.Vector3(
+        pos_sb1.x() + (pos_bb1.x() - pos_sb1.x()) * ratio1,
+        pos_bb1.y(),
+        pos_sb1.z() + (pos_bb1.z() - pos_sb1.z()) * ratio1,
+    )
+    y_d2 = abs(pos_sb2.y() - pos_bb2.y())
+    xz_d2 = math.sqrt((pos_bb2.x() - pos_sb2.x()) ** 2 + (pos_bb2.z() - pos_sb2.z()) ** 2)
+    ratio2 = (y_d2 / xz_d2) if xz_d2 > 1e-6 else 0.5
+    pos_ab2 = hou.Vector3(
+        pos_sb2.x() + (pos_bb2.x() - pos_sb2.x()) * ratio2,
+        pos_bb2.y(),
+        pos_sb2.z() + (pos_bb2.z() - pos_sb2.z()) * ratio2,
+    )
+    pos_au1 = (pos_su1 + pos_bu1) * 0.5
+    pos_au2 = (pos_su2 + pos_bu2) * 0.5
+
+    coxa_start_support_pts[0].setPosition(pos_au2)
+    coxa_start_support_pts[1].setPosition(pos_au1)
+    coxa_start_support_pts[2].setPosition(pos_ab2)
+    coxa_start_support_pts[3].setPosition(pos_ab1)
+
+    # eu: end upper, eb: end bottom
+    eu2 = coxa_start_support_pts[0]
+    eu1 = coxa_start_support_pts[1]
+    eb2 = coxa_start_support_pts[2]
+    eb1 = coxa_start_support_pts[3]
+
+    support_loop_ratio = get_float_parm(get_control(node), "support_loop_ratio")
+
+    coxa_width = coxa_start_pts[0].position().distanceTo(coxa_start_pts[1].position())
+    cut_length = coxa_width * support_loop_ratio
+    pos_su_mid = (pos_su1 + pos_su2) * 0.5
+    pos_au_mid = (pos_au1 + pos_au2) * 0.5
+    dist_socket_to_support = pos_su_mid.distanceTo(pos_au_mid)
+    buffer_ratio = 1.0 - cut_length / dist_socket_to_support
+
+    # Upper pentagon: su1, s_mu, su2, eu2, eu1
+    mid_u, _, b_eu2, b_eu1 = fill_pentagon_with_buffer(
+        geo,
+        [su1, s_mu, su2, eu2, eu1],
+        (eu2, eu1),
+        buffer_ratio,
+        (su1, eu1),
+    )
+    # Bottom pentagon: sb2, s_mb, sb1, eb1, eb2
+    mid_b, _, b_eb1, b_eb2 = fill_pentagon_with_buffer(
+        geo,
+        [sb2, s_mb, sb1, eb1, eb2],
+        (eb1, eb2),
+        buffer_ratio,
+        (sb1, eb1),
+    )
+
+    # Back side (+Z): split into 2 quads by (b_eu2, b_eb2)
+    fill_face(geo, [sb2, su2, b_eu2, b_eb2])
+    fill_face(geo, [b_eb2, b_eu2, eu2, eb2])
+
+    # Front side (-Z): split into 3 quads by (mid_u, mid_b) and (b_eu1, b_eu1)
+    fill_face(geo, [su1, sb1, mid_b, mid_u])
+    fill_face(geo, [mid_u, mid_b, b_eb1, b_eu1])
+    fill_face(geo, [b_eu1, b_eb1, eb1, eu1])
+
+    geo.deletePoints(coxa_start_pts)
+
+
+def _remove_tmp_attributes(node: hou.SopNode) -> None:
+    remove_attrs(node.geometry(), global_attribs=("tmp_coxa_corners", "tmp_coxa_midpoints"))

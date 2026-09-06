@@ -4,13 +4,13 @@ import hou
 
 import abdomen
 import spider
-from utilities.common import add_prim_attr
 from helper import (
     add_id_attr,
     affix_id,
     point_from_geo,
     points_by_id,
 )
+from utilities.common import add_prim_attr
 from utilities.nodes import (
     add_output,
     add_reloadable_subnet,
@@ -23,9 +23,13 @@ class ID(StrEnum):
     PEDICELMIDDLEUPPER = auto()
     PEDICELMIDDLELOWER = auto()
 
+
+class Region(StrEnum):
+    PEDICEL = auto()
+
+
 def pedicelmiddleupper(*i: int | str) -> str:
     return affix_id(ID.PEDICELMIDDLEUPPER, *i)
-
 def pedicelmiddlelower(*i: int | str) -> str:
     return affix_id(ID.PEDICELMIDDLELOWER, *i)
 
@@ -111,55 +115,60 @@ def _connect_pedicel(node: hou.SopNode) -> None:
         abdomen.abdomensidelower(-1),
     )
 
-    ratio = 1 - 0.035
+    ratio = 1.0 - 0.035
     add_prim_attr(geo, "region", "")
 
-    # 1. Upper Right
-    mid_ur, flt_ur, _, _ = fill_pentagon_with_buffer(
-        geo,
-        [upper, abdomenverticalrim1, abdomensideupper1, abdomenhorizontalrim1, right],
-        (upper, right),
-        ratio,
-        (upper, abdomenverticalrim1),
+    quadrant_configs = (
+        # 1. Upper Right
+        (
+            [upper, abdomenverticalrim1, abdomensideupper1, abdomenhorizontalrim1, right],
+            (upper, right),
+            (upper, abdomenverticalrim1),
+            False,
+            pedicelmiddleupper(0),
+            pedicelmiddleupper(1),
+        ),
+        # 2. Upper Left
+        (
+            [upper, left, abdomenhorizontalrim_neg1, abdomensideupper_neg1, abdomenverticalrim1],
+            (upper, left),
+            (upper, abdomenverticalrim1),
+            True,
+            pedicelmiddleupper(0),
+            pedicelmiddleupper(-1),
+        ),
+        # 3. Lower Right
+        (
+            [lower, right, abdomenhorizontalrim1, abdomensidelower1, abdomenverticalrim_neg1],
+            (lower, right),
+            (lower, abdomenverticalrim_neg1),
+            True,
+            pedicelmiddlelower(0),
+            pedicelmiddlelower(1),
+        ),
+        # 4. Lower Left
+        (
+            [lower, abdomenverticalrim_neg1, abdomensidelower_neg1, abdomenhorizontalrim_neg1, left],
+            (lower, left),
+            (lower, abdomenverticalrim_neg1),
+            False,
+            pedicelmiddlelower(0),
+            pedicelmiddlelower(-1),
+        ),
     )
-    mid_ur.setAttribValue("id", pedicelmiddleupper(0))
-    flt_ur.setAttribValue("id", pedicelmiddleupper(1))
 
-    # 2. Upper Left
-    mid_ul, flt_ul, _, _ = fill_pentagon_with_buffer(
-        geo,
-        [upper, left, abdomenhorizontalrim_neg1, abdomensideupper_neg1, abdomenverticalrim1],
-        (upper, left),
-        ratio,
-        (upper, abdomenverticalrim1),
-        True,
-    )
-    mid_ul.setAttribValue("id", pedicelmiddleupper(0))
-    flt_ul.setAttribValue("id", pedicelmiddleupper(-1))
-
-    # 3. Lower Right
-    mid_lr, flt_lr, _, _ = fill_pentagon_with_buffer(
-        geo,
-        [lower, right, abdomenhorizontalrim1, abdomensidelower1, abdomenverticalrim_neg1],
-        (lower, right),
-        ratio,
-        (lower, abdomenverticalrim_neg1),
-        True,
-    )
-    mid_lr.setAttribValue("id", pedicelmiddlelower(0))
-    flt_lr.setAttribValue("id", pedicelmiddlelower(1))
-
-    # 4. Lower Left
-    mid_ll, flt_ll, _, _ = fill_pentagon_with_buffer(
-        geo,
-        [lower, abdomenverticalrim_neg1, abdomensidelower_neg1, abdomenhorizontalrim_neg1, left],
-        (lower, left),
-        ratio,
-        (lower, abdomenverticalrim_neg1),
-    )
-    mid_ll.setAttribValue("id", pedicelmiddlelower(0))
-    flt_ll.setAttribValue("id", pedicelmiddlelower(-1))
+    for points, split_edge, buffer_edge, reverse, mid_id, float_id in quadrant_configs:
+        mid_pt, float_pt, _, _ = fill_pentagon_with_buffer(
+            geo,
+            points,
+            split_edge,
+            ratio,
+            buffer_edge,
+            reverse=reverse,
+        )
+        mid_pt.setAttribValue("id", mid_id)
+        float_pt.setAttribValue("id", float_id)
 
     for prim in geo.prims():
         if not prim.stringAttribValue("region"):
-            prim.setAttribValue("region", "pedicel")
+            prim.setAttribValue("region", Region.PEDICEL)

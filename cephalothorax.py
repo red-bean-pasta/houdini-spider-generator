@@ -20,19 +20,16 @@ def build(spider: hou.OpNode) -> hou.SopNode:
     _add_parameters(cephalothorax)
 
     base = build_base(cephalothorax)
-    propagate_parameters(cephalothorax, base, skip_params="membrane_ratio")
-    base.parm("membrane_ratio").set(cephalothorax.parm("membrane_ratio"))
+    _link_membrane_ratio(cephalothorax, base)
 
     head = build_head(cephalothorax, base)
-    propagate_parameters(cephalothorax, head, skip_params="membrane_ratio")
-    head.parm("membrane_ratio").set(cephalothorax.parm("membrane_ratio"))
+    _link_membrane_ratio(cephalothorax, head)
 
     b_h_merge = add_merge(cephalothorax, "merge_base_and_head", base, head)
     b_h_fuse = add_fuse(cephalothorax, "fuse_base_and_head", b_h_merge)
 
     chelicerae = build_chelicerae(cephalothorax, b_h_fuse)
-    propagate_parameters(cephalothorax, chelicerae, skip_params="membrane_ratio")
-    chelicerae.parm("membrane_ratio").set(cephalothorax.parm("membrane_ratio"))
+    _link_membrane_ratio(cephalothorax, chelicerae)
 
     all_merge = add_merge(cephalothorax, "merge_head_and_chelicerae", b_h_fuse, chelicerae)
     all_fuse = add_fuse(cephalothorax, "fuse_head_and_chelicerae", all_merge)
@@ -56,11 +53,15 @@ def _add_parameters(cephalothorax: hou.SopNode) -> None:
     )
 
 
+def _link_membrane_ratio(parent: hou.SopNode, child: hou.SopNode) -> None:
+    propagate_parameters(parent, child, skip_params="membrane_ratio")
+    child.parm("membrane_ratio").set(parent.parm("membrane_ratio"))
+
+
 def _position_cephalothorax(parent: hou.SopNode, source: hou.SopNode) -> hou.SopNode:
     position = parent.createNode("xform", "position_cephalothorax")
     position.setInput(0, source)
     pattern = f'pointpattern(0, "@id={base_sops.baseend(0)}")'
-    position.parm("tx").setExpression(f'0 - point(0, {pattern}, "P", 0)')
-    position.parm("ty").setExpression(f'0 - point(0, {pattern}, "P", 1)')
-    position.parm("tz").setExpression(f'0 - point(0, {pattern}, "P", 2)')
+    for axis_index, axis_name in enumerate(("tx", "ty", "tz")):
+        position.parm(axis_name).setExpression(f'0 - point(0, {pattern}, "P", {axis_index})')
     return position

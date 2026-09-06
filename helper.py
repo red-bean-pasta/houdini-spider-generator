@@ -138,8 +138,8 @@ def find_quad_polyextrude_splits(
                 for point in primitive_points
                 if point not in common_points
             ]
-            assert len(opposite_points) == 2, f"Could not determine opposite edge of primitive {primitive.number()}\""
+            assert len(opposite_points) == 2, f"Could not determine opposite edge of primitive {primitive.number()}"
 
-            edge = geo.findEdge(opposite_points[0],  opposite_points[1])
+            edge = geo.findEdge(opposite_points[0], opposite_points[1])
             assert edge is not None, f"Expected opposite points of primitive {primitive.number()} to form an edge"
             split_group.add(edge)
