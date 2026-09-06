@@ -11,6 +11,7 @@ from helper import (
     affix_id,
     deduplicate_id_attr,
     fill_face_by_id,
+    point_from_geo,
     points_by_id,
     rename_left_ids,
     set_point_id,
@@ -217,13 +218,22 @@ def _add_corners_half(node: hou.SopNode) -> None:
     )
     assert all(point_id in points for point_id in expected_ids), "Expected head reference points"
 
-    sternumrim0_pos = points[sternumrim0].position()
-    cheliceraeupper0_pos = points[cheliceraeupper0].position()
-    basesternum0_pos = points[basesternum0].position()
-    basesternum1_2_pos = points[basesternum1_2].position()
-    basesternum3_pos = points[basesternum3].position()
-    basesternum5_1_pos = points[basesternum5_1].position()
-    baseend0_pos = points[baseend0].position()
+    (
+        sternumrim0_point,
+        cheliceraeupper0_point,
+        basesternum0_point,
+        basesternum1_2_point,
+        basesternum3_point,
+        basesternum5_1_point,
+        baseend0_point,
+    ) = point_from_geo(geo, *expected_ids)
+    sternumrim0_pos = sternumrim0_point.position()
+    cheliceraeupper0_pos = cheliceraeupper0_point.position()
+    basesternum0_pos = basesternum0_point.position()
+    basesternum1_2_pos = basesternum1_2_point.position()
+    basesternum3_pos = basesternum3_point.position()
+    basesternum5_1_pos = basesternum5_1_point.position()
+    baseend0_pos = baseend0_point.position()
 
     height = baseend0_pos[2] - cheliceraeupper0_pos[2]
     params = get_params(parent)

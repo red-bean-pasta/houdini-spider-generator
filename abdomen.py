@@ -17,6 +17,7 @@ from utilities.common import (
 from helper import (
     add_id_attr,
     affix_id,
+    point_from_geo,
     points_by_id,
     rename_left_ids,
 )
@@ -258,20 +259,30 @@ def _add_height_frame(node: hou.SopNode) -> None:
 
 def _add_middle_frame(node: hou.SopNode, negative: bool = False) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
 
     sign = -1 if negative else 1
     side_attr = abdomensidelower if negative else abdomensideupper
 
-    o = points[abdomenorigin()].position()
-    v1 = points[abdomenverticalrim(sign * 1)].position()
-    h1 = points[abdomenhorizontalrim(1)].position()
+    o, v1, h1 = point_from_geo(
+        geo,
+        abdomenorigin(),
+        abdomenverticalrim(sign * 1),
+        abdomenhorizontalrim(1),
+    )
+    o = o.position()
+    v1 = v1.position()
+    h1 = h1.position()
     s1 = get_point_on_ellipse_2d(o, v1, h1, math.pi / 4)
 
     s_points = [s1]
     for i in range(2, 5):
-        vi = points[abdomenverticalrim(sign * i)].position()
-        hi = points[abdomenhorizontalrim(i)].position()
+        vi, hi = point_from_geo(
+            geo,
+            abdomenverticalrim(sign * i),
+            abdomenhorizontalrim(i),
+        )
+        vi = vi.position()
+        hi = hi.position()
         center = hou.Vector3(0.0, 0.0, vi.z())
         s_points.append(get_point_on_ellipse_2d(center, vi, hi))
 
@@ -292,8 +303,7 @@ def _fill_right_side_faces(node: hou.SopNode) -> None:
     points = points_by_id(geo)
     add_prim_attr(geo, "region", "abdomen")
 
-    o = points[abdomenorigin()]
-    e = points[abdomenend()]
+    o, e = point_from_geo(geo, abdomenorigin(), abdomenend())
     v = lambda i: points[abdomenverticalrim(i)]
     vn = lambda i: points[abdomenverticalrim(-i)]
     h = lambda i: points[abdomenhorizontalrim(i)]

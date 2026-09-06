@@ -20,6 +20,7 @@ from helper import (
     add_id_attr,
     affix_id,
     deduplicate_id_attr,
+    point_from_geo,
     points_by_id,
     rename_left_ids,
     set_point_id,
@@ -175,13 +176,13 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
 def _build_geometry(node: hou.SopNode) -> None:
     geo = node.geometry()
 
-    source_points = points_by_id(geo)
     base_ids = (
         base_sops.basesternum(0),
         base_sops.basesternum(1, 1),
         base_sops.basemaxilla(1),
     )
-    base_positions = [source_points[point_id].position() for point_id in base_ids]
+    source_points = point_from_geo(geo, *base_ids)
+    base_positions = [point.position() for point in source_points]
 
     geo.clear()
     add_id_attr(geo)
@@ -224,9 +225,11 @@ def _inset_flaps(node: hou.SopNode) -> None:
     geo = node.geometry()
     ratio = get_float_parm(get_parent(node), "membrane_ratio")
 
-    points = points_by_id(geo)
-    lower = points[base_sops.basesternum(0)]
-    upper = points[cheliceraemembraneupper(0)]
+    lower, upper = point_from_geo(
+        geo,
+        base_sops.basesternum(0),
+        cheliceraemembraneupper(0),
+    )
     dist = ratio * lower.position().distanceTo(upper.position())
 
     inner = inset(list(geo.prims()), dist, use_ratio=False)
@@ -285,22 +288,34 @@ def _retopology_upper_membrane(node: hou.SopNode) -> None:
     geo.deletePrims(to_del_prims, keep_points=True)
     geo.deletePoints(to_del_pts)
 
-    id_points = points_by_id(geo)
-    set_point_id(id_points[cheliceraemembraneupper(2)], cheliceraemembraneupper(1))
+    (upper2,) = point_from_geo(geo, cheliceraemembraneupper(2))
+    set_point_id(upper2, cheliceraemembraneupper(1))
 
-    id_points = points_by_id(geo)
-    f1 = fill_face(geo, [id_points[cheliceraemembraneupper(0)], id_points[cheliceraemembraneupper(1)], id_points[cheliceraestart(3)], id_points[cheliceraestart(2)]], True)
+    upper0, upper1, start3, start2 = point_from_geo(
+        geo,
+        cheliceraemembraneupper(0),
+        cheliceraemembraneupper(1),
+        cheliceraestart(3),
+        cheliceraestart(2),
+    )
+    f1 = fill_face(geo, [upper0, upper1, start3, start2], True)
     f1.setAttribValue("region", "cheliceramembrane")
 
 
 def _add_start_support_section(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-    id_points = points_by_id(geo)
-
-    dist = id_points[cheliceraemembraneupper(1)].position().y() - id_points[cheliceraestart(2)].position().y()
+    upper1, start2, start1, start3, start4 = point_from_geo(
+        geo,
+        cheliceraemembraneupper(1),
+        cheliceraestart(2),
+        cheliceraestart(1),
+        cheliceraestart(3),
+        cheliceraestart(4),
+    )
+    dist = upper1.position().y() - start2.position().y()
     pts = [geo.createPoint() for _ in range(4)]
-    for j, pt in enumerate(pts, start=1):
-        start_pos = id_points[cheliceraestart(j)].position()
+    for j, (pt, start) in enumerate(zip(pts, (start1, start2, start3, start4)), start=1):
+        start_pos = start.position()
         pt.setPosition(start_pos + hou.Vector3(0.0, 0.0, -dist))
         set_point_id(pt, _support_section(j))
 
@@ -369,16 +384,18 @@ def _add_lower_middle_section(node: hou.SopNode) -> None:
 def _connect_support_section(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
 
-    id_points = points_by_id(geo)
-    st1 = id_points[cheliceraestart(1)]
-    st2 = id_points[cheliceraestart(2)]
-    st3 = id_points[cheliceraestart(3)]
-    st4 = id_points[cheliceraestart(4)]
-    sup1 = id_points[_support_section(1)]
-    sup2 = id_points[_support_section(2)]
-    sup3 = id_points[_support_section(3)]
-    sup4 = id_points[_support_section(4)]
-    mem1 = id_points[_tmp_membrane_inner_lower(1)]
+    st1, st2, st3, st4, sup1, sup2, sup3, sup4, mem1 = point_from_geo(
+        geo,
+        cheliceraestart(1),
+        cheliceraestart(2),
+        cheliceraestart(3),
+        cheliceraestart(4),
+        _support_section(1),
+        _support_section(2),
+        _support_section(3),
+        _support_section(4),
+        _tmp_membrane_inner_lower(1),
+    )
 
     fill_face(geo, [st2, st3, sup3, sup2], True)
     fill_face(geo, [st3, st4, sup4, sup3], True)
@@ -394,12 +411,13 @@ def _connect_support_section(node: hou.SopNode) -> None:
 
 def _retopo_middle_membrane(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-    id_points = points_by_id(geo)
-
-    basesternum_0 = id_points[base_sops.basesternum(0)]
-    cheliceraestart_1 = id_points[cheliceraestart(1)]
-    cheliceraestart_2 = id_points[cheliceraestart(2)]
-    cheliceraemembraneupper_0 = id_points[cheliceraemembraneupper(0)]
+    basesternum_0, cheliceraestart_1, cheliceraestart_2, cheliceraemembraneupper_0 = point_from_geo(
+        geo,
+        base_sops.basesternum(0),
+        cheliceraestart(1),
+        cheliceraestart(2),
+        cheliceraemembraneupper(0),
+    )
 
     # Query midpoint on socket edge (cheliceraestart1 - cheliceraestart2) by position
     target_position = (cheliceraestart_1.position() + cheliceraestart_2.position()) * 0.5
@@ -447,14 +465,13 @@ def _connect_sections(node: hou.SopNode) -> None:
     middle_prims = [prim for prim in geo.prims() if is_cap_face(prim)]
     geo.deletePrims(middle_prims, keep_points=True)
 
-    id_points = points_by_id(geo)
     loops = [
-        [id_points[_support_section(j)] for j in range(1, 5)],
-        [id_points[_middle_section(0.1, j)] for j in range(1, 5)],
-        [id_points[_middle_section(0.25, j)] for j in range(1, 5)],
-        [id_points[cheliceraemiddle(j)] for j in range(1, 5)],
-        [id_points[_middle_section(0.75, j)] for j in range(1, 5)],
-        [id_points[cheliceraeend(j)] for j in range(1, 5)],
+        point_from_geo(geo, *(_support_section(j) for j in range(1, 5))),
+        point_from_geo(geo, *(_middle_section(0.1, j) for j in range(1, 5))),
+        point_from_geo(geo, *(_middle_section(0.25, j) for j in range(1, 5))),
+        point_from_geo(geo, *(cheliceraemiddle(j) for j in range(1, 5))),
+        point_from_geo(geo, *(_middle_section(0.75, j) for j in range(1, 5))),
+        point_from_geo(geo, *(cheliceraeend(j) for j in range(1, 5))),
     ]
 
     for i in range(len(loops) - 1):
@@ -496,11 +513,13 @@ class Section:
         return hou.Vector3(self.width, self.height, self.height)
 
 def _get_start_section_frame(geo: hou.Geometry) -> Section:
-    id_points = points_by_id(geo)
-    c1_1 = id_points[cheliceraestart(1)]
-    c1_2 = id_points[cheliceraestart(2)]
-    c1_3 = id_points[cheliceraestart(3)]
-    c1_4 = id_points[cheliceraestart(4)]
+    c1_1, c1_2, c1_3, c1_4 = point_from_geo(
+        geo,
+        cheliceraestart(1),
+        cheliceraestart(2),
+        cheliceraestart(3),
+        cheliceraestart(4),
+    )
 
     x_min, x_max = c1_1.position().x(), c1_4.position().x()
     y_min, y_max = c1_1.position().y(), c1_2.position().y()

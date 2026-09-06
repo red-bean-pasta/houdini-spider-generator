@@ -5,10 +5,11 @@ import hou
 from base_sops import basemaxilla, basesternum
 from chelicerae import cheliceraemembraneupper
 from head import headbasesupport, headfront, headsupport
-from helper import affix_id, points_by_id, set_point_id
+from helper import affix_id, point_from_geo, set_point_id
 from utilities.common import (
     add_float_param,
     fill_face,
+    find_prim,
     get_params,
     get_parent,
 )
@@ -81,35 +82,36 @@ def _add_parameters(lip: hou.SopNode) -> None:
 
 def _add_loops(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
 
-    c0 = points[cheliceraemembraneupper(0)]
-    h0 = points[headbasesupport(cheliceraemembraneupper(0))]
-    c1 = points[cheliceraemembraneupper(1)]
-    h1 = points[headbasesupport(cheliceraemembraneupper(1))]
-    c_neg1 = points[cheliceraemembraneupper(-1)]
-    h_neg1 = points[headbasesupport(cheliceraemembraneupper(-1))]
-    b1 = points[basemaxilla(1)]
-    hb1 = points[headbasesupport(basemaxilla(1))]
-    b_neg1 = points[basemaxilla(-1)]
-    hb_neg1 = points[headbasesupport(basemaxilla(-1))]
+    (
+        c0,
+        h0,
+        c1,
+        h1,
+        c_neg1,
+        h_neg1,
+        b1,
+        hb1,
+        b_neg1,
+        hb_neg1,
+    ) = point_from_geo(
+        geo,
+        cheliceraemembraneupper(0),
+        headbasesupport(cheliceraemembraneupper(0)),
+        cheliceraemembraneupper(1),
+        headbasesupport(cheliceraemembraneupper(1)),
+        cheliceraemembraneupper(-1),
+        headbasesupport(cheliceraemembraneupper(-1)),
+        basemaxilla(1),
+        headbasesupport(basemaxilla(1)),
+        basemaxilla(-1),
+        headbasesupport(basemaxilla(-1)),
+    )
 
-    prim_right = next(
-        p for p in c0.prims()
-        if h0 in p.points() and c1 in p.points() and h1 in p.points()
-    )
-    prim_left = next(
-        p for p in c0.prims()
-        if h0 in p.points() and c_neg1 in p.points() and h_neg1 in p.points()
-    )
-    cheek_right = next(
-        p for p in c1.prims()
-        if h1 in p.points() and b1 in p.points() and hb1 in p.points()
-    )
-    cheek_left = next(
-        p for p in c_neg1.prims()
-        if h_neg1 in p.points() and b_neg1 in p.points() and hb_neg1 in p.points()
-    )
+    prim_right = find_prim(c0, h0, c1, h1)
+    prim_left = find_prim(c0, h0, c_neg1, h_neg1)
+    cheek_right = find_prim(c1, h1, b1, hb1)
+    cheek_left = find_prim(c_neg1, h_neg1, b_neg1, hb_neg1)
 
     ratios = LOOP_RATIOS
     delta_ratios = [
@@ -130,7 +132,7 @@ def _add_loops(node: hou.SopNode) -> None:
         (lip_base_support, -1, hb_neg1, b_neg1),
     )
     for loop_idx, (ratio, delta) in enumerate(zip(LOOP_RATIOS, delta_ratios), start=1):
-        prim_to_cut = next(p for p in current_start.prims() if c0 in p.points())
+        prim_to_cut = find_prim(current_start, c0)
         added_pts, _ = loop_cut(
             prim_to_cut,
             current_start,
@@ -149,7 +151,7 @@ def _add_loops(node: hou.SopNode) -> None:
             set_point_id(point, id_builder(loop_idx, side))
             unmatched.remove(point)
 
-        current_start = points_by_id(geo)[lip_support(loop_idx, 0)]
+        (current_start,) = point_from_geo(geo, lip_support(loop_idx, 0))
         cut_points = set(added_pts)
         scope = [
             prim
@@ -161,17 +163,17 @@ def _add_loops(node: hou.SopNode) -> None:
 
 def _remove_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
 
     prims_to_delete = []
     for side in (1, -1):
-        b = points[basemaxilla(side)]
-        hb = points[headbasesupport(basemaxilla(side))]
-        s = points[basesternum(side, 2)]
-        hs = points[headbasesupport(basesternum(side, 2))]
-        face_pts = {b, hb, s, hs}
-
-        prim = next(p for p in b.prims() if face_pts.issubset(set(p.points())))
+        b, hb, s, hs = point_from_geo(
+            geo,
+            basemaxilla(side),
+            headbasesupport(basemaxilla(side)),
+            basesternum(side, 2),
+            headbasesupport(basesternum(side, 2)),
+        )
+        prim = find_prim(b, hb, s, hs)
         prims_to_delete.append(prim)
 
     geo.deletePrims(prims_to_delete, keep_points=True)
@@ -179,12 +181,14 @@ def _remove_faces(node: hou.SopNode) -> None:
 
 def _extrude_lip(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
     parent = get_parent(node)
     ratio_x, ratio_y = get_params(parent).extrusion_ratio
 
-    h0 = points[headbasesupport(cheliceraemembraneupper(0))]
-    c0 = points[cheliceraemembraneupper(0)]
+    h0, c0 = point_from_geo(
+        geo,
+        headbasesupport(cheliceraemembraneupper(0)),
+        cheliceraemembraneupper(0),
+    )
     baseline = h0.position().y() - c0.position().y()
 
     z_offset = -baseline * ratio_x
@@ -192,14 +196,17 @@ def _extrude_lip(node: hou.SopNode) -> None:
     offset = hou.Vector3(0.0, y_offset, z_offset)
 
     for side in (0, 1, -1):
-        pt1 = points[lip_support(1, side)]
-        pt2 = points[lip_support(2, side)]
-        pt3 = points[lip_support(3, side)]
-        pt4 = points[lip_support(4, side)]
-        c = points[cheliceraemembraneupper(side)]
-        hb = points[headbasesupport(cheliceraemembraneupper(side))]
-        hf = points[headfront(side)]
-        hs = points[headsupport(side)]
+        pt1, pt2, pt3, pt4, c, hb, hf, hs = point_from_geo(
+            geo,
+            lip_support(1, side),
+            lip_support(2, side),
+            lip_support(3, side),
+            lip_support(4, side),
+            cheliceraemembraneupper(side),
+            headbasesupport(cheliceraemembraneupper(side)),
+            headfront(side),
+            headsupport(side),
+        )
 
         pos2_orig = pt2.position()
         dist_2_3 = (pt3.position() - pos2_orig).length()
@@ -217,24 +224,28 @@ def _extrude_lip(node: hou.SopNode) -> None:
 
 def _adjust_lip_width(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
     parent = get_parent(node)
     lip_width_ratio = get_params(parent).lip_width_ratio
 
-    hb1 = points[headbasesupport(basemaxilla(1))]
-    b1 = points[basemaxilla(1)]
+    hb1, b1 = point_from_geo(
+        geo,
+        headbasesupport(basemaxilla(1)),
+        basemaxilla(1),
+    )
     baseline = hb1.position().y() - b1.position().y()
 
-    loop1_0 = points[lip_support(1, 0)]
-    loop2_0 = points[lip_support(2, 0)]
+    loop1_0, loop2_0 = point_from_geo(geo, lip_support(1, 0), lip_support(2, 0))
     existing_width = loop1_0.position().y() - loop2_0.position().y()
 
     delta_y = lip_width_ratio * baseline - existing_width
 
     for side in (0, 1, -1):
-        pt1 = points[lip_support(1, side)]
-        pt2 = points[lip_support(2, side)]
-        hb = points[headbasesupport(cheliceraemembraneupper(side))]
+        pt1, pt2, hb = point_from_geo(
+            geo,
+            lip_support(1, side),
+            lip_support(2, side),
+            headbasesupport(cheliceraemembraneupper(side)),
+        )
 
         line_dir = pt1.position() - pt2.position()
         assert abs(line_dir.y()) > 1e-6, "Line direction is perpendicular to Y"
@@ -246,20 +257,21 @@ def _adjust_lip_width(node: hou.SopNode) -> None:
 
 def _retopo_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
     for side in (1, -1):
-        _retopo_side(geo, points, side)
+        _retopo_side(geo, side)
 
-def _retopo_side(geo: hou.Geometry, points: dict[str, hou.Point], side: int) -> None:
-    b = points[basemaxilla(side)]
-    hb = points[headbasesupport(basemaxilla(side))]
-    s = points[basesternum(side, 2)]
-    hs = points[headbasesupport(basesternum(side, 2))]
-
-    lip1 = points[lip_base_support(1, side)]
-    lip2 = points[lip_base_support(2, side)]
-    lip3 = points[lip_base_support(3, side)]
-    lip4 = points[lip_base_support(4, side)]
+def _retopo_side(geo: hou.Geometry, side: int) -> None:
+    b, hb, s, hs, lip1, lip2, lip3, lip4 = point_from_geo(
+        geo,
+        basemaxilla(side),
+        headbasesupport(basemaxilla(side)),
+        basesternum(side, 2),
+        headbasesupport(basesternum(side, 2)),
+        lip_base_support(1, side),
+        lip_base_support(2, side),
+        lip_base_support(3, side),
+        lip_base_support(4, side),
+    )
 
     corners = tuple(point.position() for point in (s, hs, b, hb))
     intermediates = [

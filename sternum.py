@@ -6,6 +6,7 @@ import hou
 from helper import (
     add_id_attr,
     affix_id,
+    point_from_geo,
     points_by_id,
     set_points_id,
 )
@@ -270,9 +271,15 @@ def _descend_sternum_spine(node: hou.SopNode) -> None:
     power = params.spine_descend_handle
     points = points_by_id(geo)
 
-    top = points[sternumrim(0)].position()
-    middle = points[sternumrim(3)].position()
-    bottom = points[sternumrim(5)].position()
+    top, middle, bottom = point_from_geo(
+        geo,
+        sternumrim(0),
+        sternumrim(3),
+        sternumrim(5),
+    )
+    top = top.position()
+    middle = middle.position()
+    bottom = bottom.position()
 
     upper_span = abs(middle[2] - top[2])
     lower_span = abs(bottom[2] - middle[2])
@@ -416,14 +423,23 @@ def _add_sternum_loop(geo: hou.Geometry, dist: float) -> list[hou.Point]:
 
 def _adjust_midpoints_after_outset(geo: hou.Geometry) -> None:
     points = points_by_id(geo)
-    p0 = (points[sternumrim(1)].position() + points[sternumrim(-1)].position()) / 2.0
-    points[sternumrim(0)].setPosition(hou.Vector3(0.0, p0[1], p0[2]))
+    rim1, rim_neg1 = point_from_geo(geo, sternumrim(1), sternumrim(-1))
+    p0 = (rim1.position() + rim_neg1.position()) / 2.0
+    (rim0,) = point_from_geo(geo, sternumrim(0))
+    rim0.setPosition(hou.Vector3(0.0, p0[1], p0[2]))
     if sternumrim(5) in points:
-        p5 = points[sternumrim(5)].position()
-        points[sternumrim(5)].setPosition(hou.Vector3(0.0, p5[1], p5[2]))
+        (rim5,) = point_from_geo(geo, sternumrim(5))
+        p5 = rim5.position()
+        rim5.setPosition(hou.Vector3(0.0, p5[1], p5[2]))
     for side in (1, -1):
         for i in range(1, 5):
-            start = points[sternumrim(side * i)].position()
-            end = points[sternumrim(5) if i == 4 else sternumrim(side * (i + 1))].position()
+            start, end = point_from_geo(
+                geo,
+                sternumrim(side * i),
+                sternumrim(5) if i == 4 else sternumrim(side * (i + 1)),
+            )
+            start = start.position()
+            end = end.position()
             midpoint = (start + end) / 2.0
-            points[sternummiddle(side * i)].setPosition(midpoint)
+            (middle_point,) = point_from_geo(geo, sternummiddle(side * i))
+            middle_point.setPosition(midpoint)

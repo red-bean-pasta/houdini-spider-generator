@@ -33,6 +33,12 @@ def points_by_id(
     return points_by_unique_attr(geo, "id")
 
 
+def point_from_geo(geo: hou.Geometry, *point_ids: str) -> tuple[hou.Point, ...]:
+    """Return the geometry points identified by ``point_ids`` in the same order."""
+    points = points_by_id(geo)
+    return tuple(points[point_id] for point_id in point_ids)
+
+
 def set_point_id(point: hou.Point, value: str) -> None:
     set_point_attr(point, "id", value)
 

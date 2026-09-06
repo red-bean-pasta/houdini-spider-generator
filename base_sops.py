@@ -20,6 +20,7 @@ from helper import (
     deduplicate_id_attr,
     find_quad_polyextrude_splits,
     get_id_range,
+    point_from_geo,
     points_by_id,
     set_points_id,
     unique_points_start_with_id,
@@ -160,12 +161,14 @@ def add_flap_regions(node: hou.SopNode) -> None:
 def connect_side_flaps(node: hou.SopNode) -> None:
     geo = node.geometry()
     deduplicate_id_attr(geo, ID.BASESTERNUM, add_affix=True)
-    points = points_by_id(geo)
     count = get_id_range(geo, ID.BASESTERNUM)[1]
     for side in (-1, 1):
         for index in range(2, count):
-            first = points[basesternum(side * index, 1)]
-            second = points[basesternum(side * index, 2)]
+            first, second = point_from_geo(
+                geo,
+                basesternum(side * index, 1),
+                basesternum(side * index, 2),
+            )
             midpoint = (first.position() + second.position()) / 2.0
             first.setPosition(midpoint)
             second.setPosition(midpoint)
@@ -222,19 +225,23 @@ def rotate_coxa_flaps(node: hou.SopNode) -> None:
 
 def adjust_frontest_line(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
-    line_start = points[basesternum(-1, 2)].position()
-    line_end = points[basesternum(1, 2)].position()
+    line_start, line_end = point_from_geo(
+        geo,
+        basesternum(-1, 2),
+        basesternum(1, 2),
+    )
+    line_start = line_start.position()
+    line_end = line_end.position()
     line_direction = line_end - line_start
     line_length_squared = line_direction.dot(line_direction)
     assert line_length_squared > 1e-12, "Expected distinct frontest line endpoints"
 
-    for point_id in (
+    for point in point_from_geo(
+        geo,
         basesternum(0),
         basesternum(1, 1),
         basesternum(-1, 1),
     ):
-        point = points[point_id]
         position = point.position()
         line_parameter = (position - line_start).dot(line_direction) / line_length_squared
         point.setPosition(line_start + line_direction * line_parameter)
@@ -242,23 +249,10 @@ def adjust_frontest_line(node: hou.SopNode) -> None:
 
 def fill_maxilla(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
-    starts = [
-        points[basesternum(1, 1)],
-        points[basesternum(-1, 1)],
-    ]
-    ends = [
-        points[basesternum(1, 2)],
-        points[basesternum(-1, 2)],
-    ]
-    centers = [
-        points[basesternum(0)],
-        points[basesternum(0)],
-    ]
-    pivots = [
-        points[sternumrim(1)],
-        points[sternumrim(-1)],
-    ]
+    starts = point_from_geo(geo, basesternum(1, 1), basesternum(-1, 1))
+    ends = point_from_geo(geo, basesternum(1, 2), basesternum(-1, 2))
+    centers = point_from_geo(geo, basesternum(0), basesternum(0))
+    pivots = point_from_geo(geo, sternumrim(1), sternumrim(-1))
     add_prim_attr(geo, "region", "")
 
     for side, (start, end, center, pivot) in enumerate(zip(starts, ends, centers, pivots)):
@@ -277,10 +271,12 @@ def fill_maxilla(node: hou.SopNode) -> None:
 
 def fill_pedicel_membrane(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
-    p5 = points[sternumrim(5)]
-    e5_1 = points[basesternum(5, 1)]
-    e5_2 = points[basesternum(5, 2)]
+    p5, e5_1, e5_2 = point_from_geo(
+        geo,
+        sternumrim(5),
+        basesternum(5, 1),
+        basesternum(5, 2),
+    )
 
     p5_position = p5.position()
     e5_1_offset = e5_1.position() - p5_position
@@ -379,14 +375,12 @@ def _prepare_membrane_attributes(node: hou.SopNode) -> None:
 
 def _prepare_maxilla_membrane(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
     prims = [
         p
         for p in geo.prims()
         if p.stringAttribValue("region") == "maxilla"
     ]; assert prims is not None and len(prims) == 2
-    pivot = points[sternumrim(1)]
-    outer = points[basesternum(1, 1)]
+    pivot, outer = point_from_geo(geo, sternumrim(1), basesternum(1, 1))
     for pm in prims:
         pm.setAttribValue("tmp_insetscale", (pivot.position() - outer.position()).length())
 

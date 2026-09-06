@@ -8,6 +8,7 @@ from utilities.common import add_prim_attr
 from helper import (
     add_id_attr,
     affix_id,
+    point_from_geo,
     points_by_id,
 )
 from utilities.nodes import (
@@ -80,21 +81,35 @@ def _extract_needed_points(node: hou.SopNode) -> None:
 
 def _connect_pedicel(node: hou.SopNode) -> None:
     geo = node.geometry()
-    points = points_by_id(geo)
 
-    upper = points[spider.cephapedicelupper()]
-    right = points[spider.cephapedicelright()]
-    left = points[spider.cephapedicelleft()]
-    lower = points[spider.cephapedicellower()]
-
-    abdomenverticalrim1 = points[abdomen.abdomenverticalrim(1)]
-    abdomenverticalrim_neg1 = points[abdomen.abdomenverticalrim(-1)]
-    abdomenhorizontalrim1 = points[abdomen.abdomenhorizontalrim(1)]
-    abdomenhorizontalrim_neg1 = points[abdomen.abdomenhorizontalrim(-1)]
-    abdomensideupper1 = points[abdomen.abdomensideupper(1)]
-    abdomensideupper_neg1 = points[abdomen.abdomensideupper(-1)]
-    abdomensidelower1 = points[abdomen.abdomensidelower(1)]
-    abdomensidelower_neg1 = points[abdomen.abdomensidelower(-1)]
+    (
+        upper,
+        right,
+        left,
+        lower,
+        abdomenverticalrim1,
+        abdomenverticalrim_neg1,
+        abdomenhorizontalrim1,
+        abdomenhorizontalrim_neg1,
+        abdomensideupper1,
+        abdomensideupper_neg1,
+        abdomensidelower1,
+        abdomensidelower_neg1,
+    ) = point_from_geo(
+        geo,
+        spider.cephapedicelupper(),
+        spider.cephapedicelright(),
+        spider.cephapedicelleft(),
+        spider.cephapedicellower(),
+        abdomen.abdomenverticalrim(1),
+        abdomen.abdomenverticalrim(-1),
+        abdomen.abdomenhorizontalrim(1),
+        abdomen.abdomenhorizontalrim(-1),
+        abdomen.abdomensideupper(1),
+        abdomen.abdomensideupper(-1),
+        abdomen.abdomensidelower(1),
+        abdomen.abdomensidelower(-1),
+    )
 
     ratio = 1 - 0.035
     add_prim_attr(geo, "region", "")
