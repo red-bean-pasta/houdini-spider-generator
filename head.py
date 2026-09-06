@@ -5,7 +5,6 @@ import hou
 
 import base_sops
 import sternum
-from chelicerae import cheliceraemembraneupper
 from helper import (
     add_id_attr,
     affix_id,
@@ -37,6 +36,7 @@ from utilities.topology import inset
 
 
 class ID(StrEnum):
+    HEADCHELICERAE = auto()
     HEADFRONT = auto()
     HEADBACK = auto()
     HEADTOPMIDDLE = auto()
@@ -46,6 +46,8 @@ class ID(StrEnum):
     HEADSUPPORT = auto()
     HEADBASESUPPORT = auto()
 
+def headchelicerae(*i: int | str) -> str:
+    return affix_id(ID.HEADCHELICERAE, *i)
 def headfront(*i: int | str) -> str:
     return affix_id(ID.HEADFRONT, *i)
 def headback(*i: int | str) -> str:
@@ -93,6 +95,13 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
 def _add_parameters(head: hou.SopNode) -> None:
     add_float_param(
         head,
+        "chelicerae_height_ratio",
+        1,
+        0.35,
+        (0.0, None),
+    )
+    add_float_param(
+        head,
         "height_ratio",
         1,
         0.375,
@@ -124,7 +133,7 @@ def _add_parameters(head: hou.SopNode) -> None:
         head,
         "lip_extrusion_ratio",
         2,
-        (3.0, 1.0),
+        (5.0, 1.0),
         (-10.0, 10.0),
         naming_scheme=hou.parmNamingScheme.XYZW,
         help="Lip refers to the touching line between chelicerae and head, and the ratio is relative to the base support loop (membrane) height",
@@ -166,43 +175,63 @@ def _add_named_point(
 
 
 def _extract_work_base(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    parent = get_parent(node)
+    chelicerae_height_ratio = get_float_parm(parent, "chelicerae_height_ratio")
+
+    basesternum0, basemaxilla1 = point_from_geo(geo, base_sops.basesternum(0), base_sops.basemaxilla(1))
+    height = basemaxilla1.position().distanceTo(basesternum0.position()) * chelicerae_height_ratio
+    height_offset = hou.Vector3(0.0, height, 0.0)
+
+    upper0_pos = basesternum0.position() + height_offset
+    upper1_pos = basemaxilla1.position() + height_offset
+
     excluded_ids = {
         base_sops.basesternum(1, 1),
     }
-    _extract_points(
-        node,
-        lambda point_id, position: (
-            position[0] >= -1e-4
-            and point_id not in excluded_ids
-            and (
-                point_id.startswith("base")
-                or point_id in (cheliceraemembraneupper(0), cheliceraemembraneupper(1))
-                or point_id == sternum.sternumrim(0)
-            )
-        ),
-    )
+    point_data = [
+        (point.stringAttribValue("id"), point.position())
+        for point in geo.points()
+        if point.position()[0] >= -1e-4
+        and point.stringAttribValue("id") not in excluded_ids
+        and (
+            point.stringAttribValue("id").startswith("base")
+            or point.stringAttribValue("id") == sternum.sternumrim(0)
+        )
+    ]
+    point_data.append((headchelicerae(0), upper0_pos))
+    point_data.append((headchelicerae(1), upper1_pos))
+    _add_points(geo, point_data)
 
 
 def _extract_base_rim(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    parent = get_parent(node)
+    chelicerae_height_ratio = get_float_parm(parent, "chelicerae_height_ratio")
+
+    basesternum0, basemaxilla1 = point_from_geo(geo, base_sops.basesternum(0), base_sops.basemaxilla(1))
+    height = basemaxilla1.position().distanceTo(basesternum0.position()) * chelicerae_height_ratio
+    height_offset = hou.Vector3(0.0, height, 0.0)
+
+    upper0_pos = basesternum0.position() + height_offset
+    upper1_pos = basemaxilla1.position() + height_offset
+    upper_neg1_pos = hou.Vector3(-upper1_pos[0], upper1_pos[1], upper1_pos[2])
+
     excluded_ids = {
         base_sops.basesternum(0),
         base_sops.basesternum(1, 1),
         base_sops.basesternum(-1, 1),
     }
-    _extract_points(
-        node,
-        lambda point_id, position: (
-            point_id not in excluded_ids
-            and (
-                point_id.startswith("base")
-                or point_id in (
-                    cheliceraemembraneupper(0),
-                    cheliceraemembraneupper(1),
-                    cheliceraemembraneupper(-1),
-                )
-            )
-        ),
-    )
+    point_data = [
+        (point.stringAttribValue("id"), point.position())
+        for point in geo.points()
+        if point.stringAttribValue("id") not in excluded_ids
+        and point.stringAttribValue("id").startswith("base")
+    ]
+    point_data.append((headchelicerae(0), upper0_pos))
+    point_data.append((headchelicerae(1), upper1_pos))
+    point_data.append((headchelicerae(-1), upper_neg1_pos))
+    _add_points(geo, point_data)
 
 
 def _add_corners_half(node: hou.SopNode) -> None:
@@ -211,7 +240,7 @@ def _add_corners_half(node: hou.SopNode) -> None:
     points = points_by_id(geo)
 
     sternumrim0 = sternum.sternumrim(0)
-    cheliceraeupper0 = cheliceraemembraneupper(0)
+    headchelicerae0 = headchelicerae(0)
     basesternum0 = base_sops.basesternum(0)
     basesternum1_2 = base_sops.basesternum(1, 2)
     basesternum3 = base_sops.basesternum(3)
@@ -219,7 +248,7 @@ def _add_corners_half(node: hou.SopNode) -> None:
     baseend0 = base_sops.baseend(0)
     expected_ids = (
         sternumrim0,
-        cheliceraeupper0,
+        headchelicerae0,
         basesternum0,
         basesternum1_2,
         basesternum3,
@@ -230,7 +259,7 @@ def _add_corners_half(node: hou.SopNode) -> None:
 
     (
         sternumrim0_point,
-        cheliceraeupper0_point,
+        headchelicerae0_point,
         basesternum0_point,
         basesternum1_2_point,
         basesternum3_point,
@@ -238,14 +267,14 @@ def _add_corners_half(node: hou.SopNode) -> None:
         baseend0_point,
     ) = point_from_geo(geo, *expected_ids)
     sternumrim0_pos = sternumrim0_point.position()
-    cheliceraeupper0_pos = cheliceraeupper0_point.position()
+    headchelicerae0_pos = headchelicerae0_point.position()
     basesternum0_pos = basesternum0_point.position()
     basesternum1_2_pos = basesternum1_2_point.position()
     basesternum3_pos = basesternum3_point.position()
     basesternum5_1_pos = basesternum5_1_point.position()
     baseend0_pos = baseend0_point.position()
 
-    height = baseend0_pos[2] - cheliceraeupper0_pos[2]
+    height = baseend0_pos[2] - headchelicerae0_pos[2]
     params = get_params(parent)
     height_ratio = params.height_ratio
     flat_ratio = params.flat_ratio
@@ -261,7 +290,7 @@ def _add_corners_half(node: hou.SopNode) -> None:
             0.0,
         )
 
-    headfront0_pos = align_front(cheliceraeupper0_pos)
+    headfront0_pos = align_front(headchelicerae0_pos)
     headfront1_pos = align_front(basesternum1_2_pos)
     headback0_pos = headfront0_pos + z_offset
     headback1_pos = headfront1_pos + z_offset
@@ -303,13 +332,13 @@ def _fill_back_loop_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
     faces = {
         (
-            cheliceraemembraneupper(0),
+            headchelicerae(0),
             headsupport(0),
             headsupport(1),
-            cheliceraemembraneupper(1),
+            headchelicerae(1),
         ): True,
         (
-            cheliceraemembraneupper(1),
+            headchelicerae(1),
             headsupport(1),
             base_sops.basesternum(1, 2),
             base_sops.basemaxilla(1),
@@ -520,8 +549,8 @@ def _extrude_lip(node: hou.SopNode) -> None:
 
     h0, c0 = point_from_geo(
         geo,
-        headbasesupport(cheliceraemembraneupper(0)),
-        cheliceraemembraneupper(0),
+        headbasesupport(headchelicerae(0)),
+        headchelicerae(0),
     )
     baseline = h0.position().y() - c0.position().y()
 
@@ -532,7 +561,7 @@ def _extrude_lip(node: hou.SopNode) -> None:
     for side in (0, 1, -1):
         hb, hf, hs = point_from_geo(
             geo,
-            headbasesupport(cheliceraemembraneupper(side)),
+            headbasesupport(headchelicerae(side)),
             headfront(side),
             headsupport(side),
         )

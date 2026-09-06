@@ -23,21 +23,21 @@ def build(spider: hou.OpNode) -> hou.SopNode:
     propagate_parameters(cephalothorax, base, skip_params="membrane_ratio")
     base.parm("membrane_ratio").set(cephalothorax.parm("membrane_ratio"))
 
-    chelicerae = build_chelicerae(cephalothorax, base)
-    propagate_parameters(cephalothorax, chelicerae, skip_params="membrane_ratio")
-    chelicerae.parm("membrane_ratio").set(cephalothorax.parm("membrane_ratio"))
-
-    b_c_merge = add_merge(cephalothorax, "merge_base_and_chelicerae", base, chelicerae)
-    b_c_fuse = add_fuse(cephalothorax, "fuse_base_and_chelicerae", b_c_merge)
-
-    head = build_head(cephalothorax, b_c_fuse)
+    head = build_head(cephalothorax, base)
     propagate_parameters(cephalothorax, head, skip_params="membrane_ratio")
     head.parm("membrane_ratio").set(cephalothorax.parm("membrane_ratio"))
 
-    b_h_merge = add_merge(cephalothorax, "merge_base_and_head", b_c_fuse, head)
+    b_h_merge = add_merge(cephalothorax, "merge_base_and_head", base, head)
     b_h_fuse = add_fuse(cephalothorax, "fuse_base_and_head", b_h_merge)
 
-    recalculate = add_outside_recalculation(cephalothorax, "recalculate_normals", b_h_fuse)
+    chelicerae = build_chelicerae(cephalothorax, b_h_fuse)
+    propagate_parameters(cephalothorax, chelicerae, skip_params="membrane_ratio")
+    chelicerae.parm("membrane_ratio").set(cephalothorax.parm("membrane_ratio"))
+
+    all_merge = add_merge(cephalothorax, "merge_head_and_chelicerae", b_h_fuse, chelicerae)
+    all_fuse = add_fuse(cephalothorax, "fuse_head_and_chelicerae", all_merge)
+
+    recalculate = add_outside_recalculation(cephalothorax, "recalculate_normals", all_fuse)
     positioned = _position_cephalothorax(cephalothorax, recalculate)
 
     _ = add_output(cephalothorax, "OUT_CEPHALOTHORAX", positioned)
