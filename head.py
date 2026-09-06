@@ -83,7 +83,8 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
     merged = add_merge(head, "merge_base_rim", base_rim, faces)
     fused = add_fuse(head, "fuse_base_rim", merged)
     inset_support = sopify(head, fused, _inset_base_support_loop)
-    cleaned = sopify(head, inset_support, _cleanup)
+    extruded_lip = sopify(head, inset_support, _extrude_lip)
+    cleaned = sopify(head, extruded_lip, _cleanup)
     add_output(head, "OUT_HEAD", cleaned)
     head.layoutChildren()
     return head
@@ -118,6 +119,15 @@ def _add_parameters(head: hou.SopNode) -> None:
         1,
         0.035,
         (0.0, None),
+    )
+    add_float_param(
+        head,
+        "lip_extrusion_ratio",
+        2,
+        (3.0, 1.0),
+        (-10.0, 10.0),
+        naming_scheme=hou.parmNamingScheme.XYZW,
+        help="Lip refers to the touching line between chelicerae and head, and the ratio is relative to the base support loop (membrane) height",
     )
 
 
@@ -501,6 +511,33 @@ def _inset_base_support_loop(node: hou.SopNode) -> None:
     _inset_base(geo, _get_membrane_ratio(node))
     _attribute_inset_points(geo)
     deduplicate_id_attr(geo, None, keep_first=True)
+
+
+def _extrude_lip(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    parent = get_parent(node)
+    ratio_x, ratio_y = get_params(parent).lip_extrusion_ratio
+
+    h0, c0 = point_from_geo(
+        geo,
+        headbasesupport(cheliceraemembraneupper(0)),
+        cheliceraemembraneupper(0),
+    )
+    baseline = h0.position().y() - c0.position().y()
+
+    z_offset = -baseline * ratio_x
+    y_offset = -baseline * ratio_y
+    offset = hou.Vector3(0.0, y_offset, z_offset)
+
+    for side in (0, 1, -1):
+        hb, hf, hs = point_from_geo(
+            geo,
+            headbasesupport(cheliceraemembraneupper(side)),
+            headfront(side),
+            headsupport(side),
+        )
+        for pt in (hb, hf, hs):
+            pt.setPosition(pt.position() + offset)
 
 
 def _cleanup(node: hou.SopNode) -> None:

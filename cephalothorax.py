@@ -4,7 +4,6 @@ import base_sops
 from base import build as build_base
 from chelicerae import build as build_chelicerae
 from head import build as build_head
-from lip import build as build_lip
 from utilities.common import add_float_param
 from utilities.nodes import (
     add_fuse,
@@ -38,9 +37,7 @@ def build(spider: hou.OpNode) -> hou.SopNode:
     b_h_merge = add_merge(cephalothorax, "merge_base_and_head", b_c_fuse, head)
     b_h_fuse = add_fuse(cephalothorax, "fuse_base_and_head", b_h_merge)
 
-    lip = build_lip(cephalothorax, b_h_fuse)
-
-    recalculate = add_outside_recalculation(cephalothorax, "recalculate_normals", lip)
+    recalculate = add_outside_recalculation(cephalothorax, "recalculate_normals", b_h_fuse)
     positioned = _position_cephalothorax(cephalothorax, recalculate)
 
     _ = add_output(cephalothorax, "OUT_CEPHALOTHORAX", positioned)

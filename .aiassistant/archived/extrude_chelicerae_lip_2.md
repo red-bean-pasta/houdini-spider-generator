@@ -111,7 +111,13 @@ give smoother transition between loop1-loop2-loop3.
     
     
 ## Task 7
+> finished
+
 the retopo in Task 5 is too "croweded" at the basemaxilla1 and headsupport_basemaxilla1 side. the subdivision would therefore look very weird.
 help me identify how to improve the topology flow.
 you can be wild on this one.
+
+
+## Task 8
+refactor @file:lip.py : remove the four loops and the retopology and related logic. simply extrude headsupport_cheliceraemembraneupper* by the offset
 
