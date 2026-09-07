@@ -31,7 +31,7 @@ from utilities.nodes import (
     add_reloadable_subnet,
     sopify,
 )
-from utilities.topology import inset
+from utilities.topology import fill_pentagon, inset
 
 
 class ID(StrEnum):
@@ -44,6 +44,8 @@ class ID(StrEnum):
     HEADSIDEBACK = auto()
     HEADSUPPORT = auto()
     HEADBASESUPPORT = auto()
+    HEADFRONTFLOAT = auto()
+    HEADFRONTMID = auto()
 
 
 class Region(StrEnum):
@@ -72,6 +74,10 @@ def headsupport(*i: int | str) -> str:
     return affix_id(ID.HEADSUPPORT, *i)
 def headbasesupport(*i: int | str) -> str:
     return affix_id(f"{ID.HEADBASESUPPORT}_", *i)
+def headfrontfloat(*i: int | str) -> str:
+    return affix_id(ID.HEADFRONTFLOAT, *i)
+def headfrontmid(*i: int | str) -> str:
+    return affix_id(ID.HEADFRONTMID, *i)
 
 
 def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
@@ -83,7 +89,9 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
     base_rim = sopify(head, source, _extract_base_rim)
     base_points = sopify(head, source, _extract_work_base)
     corners = sopify(head, base_points, _add_corners_half)
-    back_faces = sopify(head, corners, _fill_back_loop_faces)
+    dent = sopify(head, corners, _add_head_dent)
+    curved_lip = sopify(head, dent, _curve_lip)
+    back_faces = sopify(head, curved_lip, _fill_back_loop_faces)
     support_faces = sopify(head, back_faces, _fill_support_loop_faces)
     right_half = sopify(head, support_faces, _fill_side_faces)
     regions = sopify(head, right_half, _add_side_regions)
@@ -150,10 +158,6 @@ def _add_parameters(head: hou.SopNode) -> None:
 
 def _extract_base_rim(node: hou.SopNode) -> None:
     geo = node.geometry()
-    parent = get_parent(node)
-    upper0_pos, upper1_pos = _get_chelicerae_upper_positions(geo, parent)
-    upper_neg1_pos = hou.Vector3(-upper1_pos[0], upper1_pos[1], upper1_pos[2])
-
     excluded_ids = {
         base_sops.basesternum(0),
         base_sops.basesternum(1, 1),
@@ -165,16 +169,13 @@ def _extract_base_rim(node: hou.SopNode) -> None:
         if point.stringAttribValue("id") not in excluded_ids
         and point.stringAttribValue("id").startswith("base")
     ]
-    point_data.append((headchelicerae(0), upper0_pos))
-    point_data.append((headchelicerae(1), upper1_pos))
-    point_data.append((headchelicerae(-1), upper_neg1_pos))
     _add_points(geo, point_data)
 
 
 def _extract_work_base(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
-    upper0_pos, upper1_pos = _get_chelicerae_upper_positions(geo, parent)
+    upper0_pos, upper1_pos, upper2_pos = _get_chelicerae_upper_positions(geo, parent)
 
     excluded_ids = {
         base_sops.basesternum(1, 1),
@@ -191,17 +192,21 @@ def _extract_work_base(node: hou.SopNode) -> None:
     ]
     point_data.append((headchelicerae(0), upper0_pos))
     point_data.append((headchelicerae(1), upper1_pos))
+    point_data.append((headchelicerae(2), upper2_pos))
     _add_points(geo, point_data)
 
-def _get_chelicerae_upper_positions(geo: hou.Geometry, parent: hou.OpNode) -> tuple[hou.Vector3, hou.Vector3]:
+
+def _get_chelicerae_upper_positions(geo: hou.Geometry, parent: hou.OpNode) -> tuple[hou.Vector3, hou.Vector3, hou.Vector3]:
     chelicerae_height_ratio = get_float_parm(parent, "chelicerae_height_ratio")
     basesternum0, basemaxilla1 = point_from_geo(geo, base_sops.basesternum(0), base_sops.basemaxilla(1))
     height = basemaxilla1.position().distanceTo(basesternum0.position()) * chelicerae_height_ratio
     height_offset = hou.Vector3(0.0, height, 0.0)
 
     upper0_pos = basesternum0.position() + height_offset
-    upper1_pos = basemaxilla1.position() + height_offset
-    return upper0_pos, upper1_pos
+    upper2_pos = basemaxilla1.position() + height_offset
+    upper1_pos = (upper0_pos + upper2_pos) / 2.0
+    return upper0_pos, upper1_pos, upper2_pos
+
 
 def _add_points(
     geo: hou.Geometry,
@@ -283,10 +288,11 @@ def _add_corners_half(node: hou.SopNode) -> None:
     r_mid = top_support_loop_ratio_mid
 
     headsupport0_pos = headfront0_pos * (1.0 - r1) + basesternum0_pos * r1
-    headsupport1_pos = headfront1_pos * (1.0 - r1) + basesternum1_2_pos * r1
-    headsupport2_pos = headtopmiddle1_pos * (1.0 - r_mid) + basesternum3_pos * r_mid
-    headsupport3_pos = headback1_pos * (1.0 - r2) + basesternum5_1_pos * r2
-    headsupport4_pos = headback0_pos * (1.0 - r2) + baseend0_pos * r2
+    headsupport2_pos = headfront1_pos * (1.0 - r1) + basesternum1_2_pos * r1
+    headsupport1_pos = (headsupport0_pos + headsupport2_pos) / 2.0
+    headsupport3_pos = headtopmiddle1_pos * (1.0 - r_mid) + basesternum3_pos * r_mid
+    headsupport4_pos = headback1_pos * (1.0 - r2) + basesternum5_1_pos * r2
+    headsupport5_pos = headback0_pos * (1.0 - r2) + baseend0_pos * r2
 
     point_data = [
         (point_id, point.position())
@@ -305,70 +311,118 @@ def _add_corners_half(node: hou.SopNode) -> None:
         (headsupport(2), headsupport2_pos),
         (headsupport(3), headsupport3_pos),
         (headsupport(4), headsupport4_pos),
+        (headsupport(5), headsupport5_pos),
     ]
     _add_points(geo, point_data + new_points)
 
 
+def _add_head_dent(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    headfront0, headsupport0 = point_from_geo(geo, headfront(0), headsupport(0))
+    dist = headfront0.position().distanceTo(headsupport0.position())
+    headfront0.setPosition(headfront0.position() - hou.Vector3(0.0, dist * (1.0 / 3.0), 0.0))
+
+
+def _curve_lip(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    dist = get_head_base_loop_width(node)
+    headchelicerae1, headsupport1 = point_from_geo(geo, headchelicerae(1), headsupport(1))
+    offset = hou.Vector3(0.0, dist * 0.5, 0.0)
+    headchelicerae1.setPosition(headchelicerae1.position() + offset)
+    headsupport1.setPosition(headsupport1.position() + offset)
+
+
 def _fill_back_loop_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
-    faces = {
+    add_prim_attr(geo, "region", "")
+
+    f_main1 = fill_face_by_id(
+        geo,
         (
             headchelicerae(0),
             headsupport(0),
             headsupport(1),
             headchelicerae(1),
-        ): True,
+        ),
+        True,
+    )
+    f_main1.setAttribValue("region", Region.HEADFRONTMAIN)
+
+    f_main2 = fill_face_by_id(
+        geo,
         (
             headchelicerae(1),
             headsupport(1),
+            headsupport(2),
+            headchelicerae(2),
+        ),
+        True,
+    )
+    f_main2.setAttribValue("region", Region.HEADFRONTMAIN)
+
+    f_cheek = fill_face_by_id(
+        geo,
+        (
+            headchelicerae(2),
+            headsupport(2),
             base_sops.basesternum(1, 2),
             base_sops.basemaxilla(1),
-        ): True,
-        (
-            headfront(0),
-            headfront(1),
-            headsupport(1),
-            headsupport(0),
-        ): True,
+        ),
+        True,
+    )
+    f_cheek.setAttribValue("region", Region.HEADFRONTCHEEK)
+
+    hf0, hf1, hs2, hs1, hs0 = point_from_geo(
+        geo,
+        headfront(0),
+        headfront(1),
+        headsupport(2),
+        headsupport(1),
+        headsupport(0),
+    )
+    midpoint, floatpoint = fill_pentagon(
+        geo,
+        [hf0, hf1, hs2, hs1, hs0],
+        (hf0, hs0),
+        reverse=True,
+    )
+    set_point_id(midpoint, headfrontmid(0))
+    set_point_id(floatpoint, headfrontfloat(1))
+
+    faces = {
         (
             headfront(0),
             headfront(1),
             headtopmiddle(1),
             headtopmiddle(0),
-        ): False,
+        ): (False, Region.HEADTOP),
         (
             headtopmiddle(0),
             headtopmiddle(1),
             headback(1),
             headback(0),
-        ): False,
+        ): (False, Region.HEADTOP),
         (
             headback(1),
             headback(0),
+            headsupport(5),
             headsupport(4),
-            headsupport(3),
-        ): True,
+        ): (True, Region.HEADTOP),
         (
-            headsupport(3),
             headsupport(4),
+            headsupport(5),
             base_sops.baseend(0),
             base_sops.basesternum(5, 1),
-        ): True,
+        ): (True, Region.HEADBACK),
     }
-    regions = (
-        Region.HEADFRONTMAIN,
-        Region.HEADFRONTCHEEK,
-        Region.HEADTOP,
-        Region.HEADTOP,
-        Region.HEADTOP,
-        Region.HEADTOP,
-        Region.HEADBACK,
-    )
 
-    add_prim_attr(geo, "region", "")
-    for i, (face, reverse) in enumerate(faces.items()):
+    for face, (reverse, region) in faces.items():
         prim = fill_face_by_id(geo, face, reverse)
-        prim.setAttribValue("region", regions[i])
+        prim.setAttribValue("region", region)
+
+    for prim in geo.prims():
+        if not prim.stringAttribValue("region"):
+            prim.setAttribValue("region", Region.HEADTOP)
 
 
 def _fill_support_loop_faces(node: hou.SopNode) -> None:
@@ -377,14 +431,14 @@ def _fill_support_loop_faces(node: hou.SopNode) -> None:
         (
             headfront(1),
             headtopmiddle(1),
+            headsupport(3),
             headsupport(2),
-            headsupport(1),
         ): True,
         (
             headtopmiddle(1),
             headback(1),
+            headsupport(4),
             headsupport(3),
-            headsupport(2),
         ): True,
     }
     regions = (Region.HEADTOP, Region.HEADTOP)
@@ -422,9 +476,9 @@ def _fill_side_faces(node: hou.SopNode) -> None:
         for offset in back_offsets[1:]
     ]
 
-    headfront_point = points.get(headsupport(1))
-    headmiddle_point = points.get(headsupport(2))
-    headback_point = points.get(headsupport(3))
+    headfront_point = points.get(headsupport(2))
+    headmiddle_point = points.get(headsupport(3))
+    headback_point = points.get(headsupport(4))
     assert (
         headfront_point is not None
         and headmiddle_point is not None
@@ -530,24 +584,24 @@ def _rename_left_ids(node: hou.SopNode) -> None:
 
 def _inset_base_support_loop(node: hou.SopNode) -> None:
     geo = node.geometry()
-    _inset_base(geo, _get_membrane_ratio(node))
+    dist = get_head_base_loop_width(node)
+    inset(list(geo.prims()), dist, use_ratio=False)
     _attribute_inset_points(geo)
     deduplicate_id_attr(geo, None, keep_first=True)
+
+
+def get_head_base_loop_width(node: hou.SopNode) -> float:
+    geo = node.geometry()
+    ratio = _get_membrane_ratio(node)
+    headfront0, baseend0 = point_from_geo(geo, headfront(0), base_sops.baseend(0))
+    height = headfront0.position().y() - baseend0.position().y()
+    return ratio * height
+
 
 def _get_membrane_ratio(node: hou.SopNode) -> float:
     parent = get_parent(node)
     return get_float_parm(parent, "membrane_ratio")
 
-def _inset_base(geo: hou.Geometry, ratio: float) -> None:
-    points = points_by_id(geo)
-    headfront0 = points.get(headfront(0))
-    baseend0 = points.get(base_sops.baseend(0))
-    if headfront0 is None or baseend0 is None:
-        return
-    height = headfront0.position().y() - baseend0.position().y()
-    dist = ratio * height
-
-    inset(list(geo.prims()), dist, use_ratio=False)
 
 def _attribute_inset_points(geo: hou.Geometry) -> None:
     points = points_by_attr(geo, "id", True)
@@ -575,17 +629,27 @@ def _extrude_lip(node: hou.SopNode) -> None:
     y_offset = -baseline * ratio_y
     offset = hou.Vector3(0.0, y_offset, z_offset)
 
-    for side in (0, 1, -1):
-        # hc: headchelicerae, hb: headbasesupport, hf: headfront, hs: headsupport
-        hc, hb, hf, hs = point_from_geo(
+    for side in (0, 1, 2, -1, -2):
+        # hc: headchelicerae, hb: headbasesupport, hs: headsupport
+        hc, hb, hs = point_from_geo(
             geo,
             headchelicerae(side),
             headbasesupport(headchelicerae(side)),
-            headfront(side),
             headsupport(side),
         )
-        for pt in (hc, hb, hf, hs):
+        for pt in (hc, hb, hs):
             pt.setPosition(pt.position() + offset)
+
+    for side in (0, 1, -1):
+        (hf,) = point_from_geo(geo, headfront(side))
+        hf.setPosition(hf.position() + offset)
+
+    for side in (1, -1):
+        (hff,) = point_from_geo(geo, headfrontfloat(side))
+        hff.setPosition(hff.position() + offset)
+
+    (hfm,) = point_from_geo(geo, headfrontmid(0))
+    hfm.setPosition(hfm.position() + offset)
 
 
 def _cleanup(node: hou.SopNode) -> None:

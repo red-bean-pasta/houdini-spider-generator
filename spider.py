@@ -63,6 +63,7 @@ def build(parent: hou.OpNode) -> hou.SopNode:
     merged_all = add_merge(spider, "merge_main_and_legs", removed_sockets, legs)
     fused = add_fuse(spider, "fuse_main_and_legs", merged_all)
     recalculated = add_outside_recalculation(spider, "recalculate_normals", fused)
+    _add_subdivide(spider, "subdivision", recalculated, depth=3)
 
     recalculated.setDisplayFlag(True)
     recalculated.setRenderFlag(True)
@@ -97,6 +98,18 @@ def _add_parameters(spider: hou.OpNode) -> None:
     )
 
 
+def _add_subdivide(
+    parent: hou.OpNode,
+    name: str,
+    p_input: hou.SopNode,
+    depth: int = 1,
+) -> hou.SopNode:
+    subdivide = parent.createNode("subdivide", name)
+    subdivide.setInput(0, p_input)
+    subdivide.parm("iterations").set(depth)
+    return subdivide
+
+
 def _open_cepha_pedicel(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     parent = get_parent(node)
@@ -107,9 +120,9 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
     (
         baseend0,
         basesupportend0,
-        headsupport3,
-        headsupport_minus3,
         headsupport4,
+        headsupport_minus4,
+        headsupport5,
         sternumrim5,
         bs5_1,
         bs5_2,
@@ -119,9 +132,9 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
         geo,
         base_sops.baseend(0),
         head.headbasesupport(base_sops.baseend(0)),
-        head.headsupport(3),
-        head.headsupport(-3),
         head.headsupport(4),
+        head.headsupport(-4),
+        head.headsupport(5),
         sternum.sternumrim(5),
         base_sops.basesternum(5, 1),
         base_sops.basesternum(5, 2),
@@ -136,7 +149,7 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
         geo, baseend0, bs5_1, bs5_2, pedicel_size_ratio_x, support_loop_width
     )
     cp_upper, cp_lower = _position_vertical_pedicel_points(
-        geo, baseend0, basesupportend0, headsupport4, sternumrim5, cp_outer_lower, pedicel_size_ratio, support_loop_width
+        geo, baseend0, basesupportend0, headsupport5, sternumrim5, cp_outer_lower, pedicel_size_ratio, support_loop_width
     )
     _reconnect_lower_sternum_pedicel_loop(
         geo,
@@ -169,9 +182,9 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
     )
     _retopo_head_back_faces(
         geo,
-        headsupport3,
-        headsupport_minus3,
         headsupport4,
+        headsupport_minus4,
+        headsupport5,
         basesupportend0,
         basesupportsternum5_1,
         basesupportsternum5_2,
@@ -259,7 +272,7 @@ def _position_vertical_pedicel_points(
     geo: hou.Geometry,
     baseend0: hou.Point,
     basesupportend0: hou.Point,
-    headsupport4: hou.Point,
+    headsupport5: hou.Point,
     sternumrim5: hou.Point,
     cp_outer_lower: hou.Point,
     pedicel_size_ratio: tuple[float, float],
@@ -268,7 +281,7 @@ def _position_vertical_pedicel_points(
     ratio_x, ratio_y = pedicel_size_ratio
 
     p_end = baseend0.position()
-    p_head = headsupport4.position()
+    p_head = headsupport5.position()
     p_sternum = sternumrim5.position()
 
     dir_upper = (p_head - p_end).normalized()
@@ -378,9 +391,9 @@ def _reconnect_upper_sternum_pedicel_loop(
 
 def _retopo_head_back_faces(
     geo: hou.Geometry,
-    headsupport3: hou.Point,
-    headsupport_minus3: hou.Point,
     headsupport4: hou.Point,
+    headsupport_minus4: hou.Point,
+    headsupport5: hou.Point,
     basesupportend0: hou.Point,
     basesupportsternum5_1: hou.Point,
     basesupportsternum5_2: hou.Point,
@@ -388,22 +401,22 @@ def _retopo_head_back_faces(
     p_left: hou.Point,
 ) -> None:
     prims_to_delete = [
-        pr for pr in headsupport4.prims()
+        pr for pr in headsupport5.prims()
         if pr.stringAttribValue("region") == head.Region.HEADBACK and basesupportend0 in pr.points()
     ]
-    assert len(prims_to_delete) == 2, f"Expected 2 upper headback prims on headsupport4, got {len(prims_to_delete)}"
+    assert len(prims_to_delete) == 2, f"Expected 2 upper headback prims on headsupport5, got {len(prims_to_delete)}"
     geo.deletePrims(prims_to_delete, keep_points=True)
 
     fill_pentagon(
         geo,
-        [headsupport3, headsupport4, basesupportend0, p_right, basesupportsternum5_1],
-        (headsupport4, basesupportend0),
+        [headsupport4, headsupport5, basesupportend0, p_right, basesupportsternum5_1],
+        (headsupport5, basesupportend0),
         reverse=False,
     )
     fill_pentagon(
         geo,
-        [headsupport_minus3, headsupport4, basesupportend0, p_left, basesupportsternum5_2],
-        (headsupport4, basesupportend0),
+        [headsupport_minus4, headsupport5, basesupportend0, p_left, basesupportsternum5_2],
+        (headsupport5, basesupportend0),
         reverse=True,
     )
 
