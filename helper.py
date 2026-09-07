@@ -89,13 +89,18 @@ def rename_left_ids(geo: hou.Geometry, affix_index: int | None = 0) -> None:
             (index for index, character in enumerate(parts[0]) if character.isdigit() or character == "-"),
             None,
         )
-        if first_digit is None:
+        if first_digit is not None:
+            prefix = parts[0][:first_digit]
+            affixes = [parts[0][first_digit:]] + parts[1:]
+        elif len(parts) > 1:
+            prefix = parts[0] + "_"
+            affixes = parts[1:]
+        else:
             return False
 
-        prefix = parts[0][:first_digit]
-        affixes = [parts[0][first_digit:]] + parts[1:]
-
         def negate(val: str) -> str:
+            if not val:
+                return val
             return val[1:] if val.startswith("-") else f"-{val}"
 
         if affix_index is None:
