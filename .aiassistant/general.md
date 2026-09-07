@@ -2,6 +2,8 @@
 apply: always
 ---
 
+> You must follow these rules and carry them out through the whole conversation.
+
 # Background
 This project aims to model a biologically justifiable spider in Houdini. It generates SOPs using Houdini Object Model (HOM) in Python. The API module in Python is `hou`. The executable is `hython`. The scope is restricted under `.../models/spider/generator/`, and there's no need to inspect upwards. Prefer building small SOPs and breaking down a big task into multiple steps. SOPs allows easy inspecting and modular designing. Insides one SOP, prefer modular methods. It's encouraged to write reusable methods, helper methods, wrapper methods, and methods simply for purpose documenting and logical grouping. breaking down into multiple.
 
