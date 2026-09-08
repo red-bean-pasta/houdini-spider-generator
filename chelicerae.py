@@ -25,7 +25,7 @@ from utilities.common import (
     get_params,
     get_parent,
     get_prim_centroid,
-    rotation_to,
+    rotation_to, get_first_neighbor,
 )
 from utilities.nodes import (
     add_fuse,
@@ -92,8 +92,9 @@ def build(cephalothorax: hou.SopNode, source: hou.SopNode) -> hou.SopNode:
 
     start_membrane = sopify(chelicerae, right_membrane, _add_start_membrane)
     inset_start_membrane = sopify(chelicerae, start_membrane, _inset_start_membrane)
+    adjusted_start_section = sopify(chelicerae, inset_start_membrane, _adjust_start_section_left)
 
-    end_section = sopify(chelicerae, inset_start_membrane, _add_end_section)
+    end_section = sopify(chelicerae, adjusted_start_section, _add_end_section)
     middle_section = sopify(chelicerae, end_section, _add_middle_section)
     upper_middle_section = sopify(chelicerae, middle_section, _add_upper_middle_section)
     lower_middle_section = sopify(chelicerae, upper_middle_section, _add_lower_middle_section)
@@ -248,6 +249,7 @@ def _inset_flaps(node: hou.SopNode) -> None:
         if prim.stringAttribValue("region") != Region.CHELICERASOCKET:
             prim.setAttribValue("region", Region.CHELICERAMEMBRANE)
 
+
 def _classify_after_inset(node: hou.SopNode) -> None:
     geo = node.geometry()
     socket_prims = [
@@ -366,6 +368,22 @@ def _inset_start_membrane(node: hou.SopNode) -> None:
 
     for j, pt in enumerate(start_points, start=1):
         set_point_id(pt, cheliceraestartmembranesupport(j))
+
+
+def _adjust_start_section_left(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    s1, s2, ss1, ss2 = point_from_geo(
+        geo,
+        cheliceraestart(1),
+        cheliceraestart(2),
+        cheliceraestartmembranesupport(1),
+        cheliceraestartmembranesupport(2),
+    )
+    ratio = 1/3
+    for s, ss in ((s1, ss1), (s2, ss2)):
+        pos = s.position()
+        new_x = pos.x() * ratio + ss.position().x() * (1 - ratio)
+        s.setPosition(hou.Vector3(new_x, pos.y(), pos.z()))
 
 
 def _add_end_section(node: hou.SopNode) -> None:
@@ -779,14 +797,29 @@ def _adjust_right_membrane_width(node: hou.SopNode) -> None:
 def _add_start_section_upper_support_loop(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     ratio = get_float_parm(get_parent(node), "membrane_ratio")
-    s1, u1 = point_from_geo(
+    s1, s2, u1 = point_from_geo(
         geo,
         cheliceraestart(1),
+        cheliceraestart(2),
         _middle_section(0.25, 1),
     )
     edge = geo.findEdge(s1, u1)
     assert edge is not None, "Expected edge between cheliceraestart(1) and _middle_section(0.25, 1)"
-    loop_cut(edge.prims()[0], s1, u1, ratio, use_ratio=True)
+    added_points, _ = loop_cut(edge.prims()[0], s1, u1, ratio, use_ratio=True)
+    ss1 = get_first_neighbor(geo, s1, added_points)
+    ss2 = get_first_neighbor(geo, s2, added_points)
+    assert ss1 and ss2
+    _adjust_start_section_gap(s1, s2, ss1, ss2)
+
+def _adjust_start_section_gap(
+        s1: hou.Point,
+        s2: hou.Point,
+        ss1: hou.Point,
+        ss2: hou.Point,
+) -> None:
+    ratio = 1/3
+    ss1.setPosition((ss1.position() * ratio + s1.position() * (1 - ratio)))
+    ss2.setPosition((ss2.position() * ratio + s2.position()* (1 - ratio)))
 
 
 def _rename_left_ids(node: hou.SopNode) -> None:
