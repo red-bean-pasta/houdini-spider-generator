@@ -686,7 +686,7 @@ def _middle_loop_cut(node: hou.SopNode) -> None:
     )
     top_edge = geo.findEdge(s2, s3)
     assert top_edge is not None, "Expected top edge between cheliceraestart(2) and cheliceraestart(3)"
-    added_points, _ = loop_cut(top_edge.prims()[0], s2, s3, 0.5, use_ratio=True)
+    added_points, _ = loop_cut(top_edge.prims()[0], s2, s3, 1 / 3, use_ratio=True)
     cut_ids = [
         bottom_middle(cheliceraemembrane, 1),
         bottom_middle(cheliceraestartmembranesupport, 1),
@@ -765,8 +765,16 @@ def _adjust_start_membrane_curve(node: hou.SopNode) -> None:
         bottom_middle(cheliceraestart, 1),
         upper_middle(cheliceraestart, 1),
     )
-    upper_offset = (m5.position() - support_upper_mid.position()).normalized() * (upper_width * 0.5)
-    bottom_offset = (m2.position() - support_bottom_mid.position()).normalized() * (bottom_width * 0.5)
+    upper_offset = (
+        (m5.position() - support_upper_mid.position()).normalized()
+        * upper_width
+        * 1/2
+    )
+    bottom_offset = (
+        (m2.position() - support_bottom_mid.position()).normalized()
+        * bottom_width
+        * 1/2
+    )
 
     support_upper_mid.setPosition(support_upper_mid.position() + upper_offset)
     start_upper_mid.setPosition(start_upper_mid.position() + upper_offset)
@@ -860,10 +868,11 @@ def _adjust_chelicerae_support_loop(node: hou.SopNode) -> None:
     # This method adjusts the points position so the topology becomes more natural and smooth at certain places
     by_id = points_by_attr(geo, "id", skip_blank=True)
     _adjust_right_chelicerae_support_points(by_id)
+    _adjust_right_chelicerae_membrane_points(by_id)
     _adjust_left_chelicerae_support_points(by_id)
     _adjust_bottom_chelicerae_support_points(by_id)
 
-def _adjust_right_chelicerae_support_points(points_by_attr: dict[str, set[hou.Point]]) -> None:
+def _adjust_right_chelicerae_support_points(points_by_id: dict[str, set[hou.Point]]) -> None:
     # For the right half support points, move them along 1/2 towards the upper middle line
     sections = (
         (cheliceraemembrane(4), cheliceraemembrane(5)),
@@ -875,11 +884,34 @@ def _adjust_right_chelicerae_support_points(points_by_attr: dict[str, set[hou.Po
         (cheliceraeend(3), upper_middle(cheliceraeend, 1)),
     )
     for support_id, mid_id in sections:
-        inset_support = _get_inset_chelicerae_support_point(points_by_attr, support_id)
-        inset_mid = _get_inset_chelicerae_support_point(points_by_attr, mid_id)
+        inset_support = _get_inset_chelicerae_support_point(points_by_id, support_id)
+        inset_mid = _get_inset_chelicerae_support_point(points_by_id, mid_id)
         inset_support.setPosition((inset_support.position() + inset_mid.position()) * 0.5)
 
-def _adjust_left_chelicerae_support_points(points_by_attr: dict[str, set[hou.Point]]) -> None:
+def _adjust_right_chelicerae_membrane_points(points_by_id: dict[str, set[hou.Point]]) -> None:
+    # for inset_cheliceraestartmambranesupport3
+    # move it along inset_cheliceraestartmambranesupport3-inset_cheliceraemembrane4
+    # so that it's y is at 1/4 of the y_offset of cheliceraestartmambranesupport_uppermiddle1-cheliceraestartmambranesupport3
+    # apply the same offset to inset_cheliceraestart3
+    inset_support3 = _get_inset_chelicerae_support_point(points_by_id, cheliceraestartmembranesupport(3))
+    inset_membrane4 = _get_inset_chelicerae_support_point(points_by_id, cheliceraemembrane(4))
+    inset_start3 = _get_inset_chelicerae_support_point(points_by_id, cheliceraestart(3))
+
+    support3 = _get_original_chelicerae_point(points_by_id, cheliceraestartmembranesupport(3))
+    support_uppermid = _get_original_chelicerae_point(points_by_id, upper_middle(cheliceraestartmembranesupport, 1))
+
+    target_y = (
+       support_uppermid.position().y() * 3/4
+       + support3.position().y() * 1/4
+    )
+    direction = inset_support3.position() - inset_membrane4.position()
+    assert abs(direction.y()) > 1e-6, "Expected non-zero y component in direction"
+    offset = direction * ((target_y - inset_support3.position().y()) / direction.y())
+
+    inset_support3.setPosition(inset_support3.position() + offset)
+    inset_start3.setPosition(inset_start3.position() + offset)
+
+def _adjust_left_chelicerae_support_points(points_by_id: dict[str, set[hou.Point]]) -> None:
     # For the left half support points, cheliceraemembrane(6), cheliceraestartmembranesupport(2),
     # and cheliceraestart(2) are kept at 0, tmpsection 0.25 is moved by 1/4, and the rest to 1/2
     sections = (
@@ -894,23 +926,27 @@ def _adjust_left_chelicerae_support_points(points_by_attr: dict[str, set[hou.Poi
     for support_id, mid_id, ratio in sections:
         if ratio == 0.0:
             continue
-        inset_support = _get_inset_chelicerae_support_point(points_by_attr, support_id)
-        inset_mid = _get_inset_chelicerae_support_point(points_by_attr, mid_id)
+        inset_support = _get_inset_chelicerae_support_point(points_by_id, support_id)
+        inset_mid = _get_inset_chelicerae_support_point(points_by_id, mid_id)
         inset_support.setPosition(inset_support.position() * (1.0 - ratio) + inset_mid.position() * ratio)
 
-def _adjust_bottom_chelicerae_support_points(points_by_attr: dict[str, set[hou.Point]]) -> None:
+def _adjust_bottom_chelicerae_support_points(points_by_id: dict[str, set[hou.Point]]) -> None:
     sections = (
         (cheliceraeend(2), _middle_section(0.75, 2)),
         (upper_middle(cheliceraeend, 1), upper_middle(_middle_section, 1, j=0.75)),
         (cheliceraeend(3), _middle_section(0.75, 3)),
     )
     for end_id, section_id in sections:
-        inset_end = _get_inset_chelicerae_support_point(points_by_attr, end_id)
-        inset_section = _get_inset_chelicerae_support_point(points_by_attr, section_id)
+        inset_end = _get_inset_chelicerae_support_point(points_by_id, end_id)
+        inset_section = _get_inset_chelicerae_support_point(points_by_id, section_id)
         inset_end.setPosition((inset_end.position() + inset_section.position()) * 0.5)
 
-def _get_inset_chelicerae_support_point(points_by_attr: dict[str, set[hou.Point]], pt_id: str) -> hou.Point:
-    matches = points_by_attr[pt_id]
+def _get_original_chelicerae_point(points_by_id: dict[str, set[hou.Point]], pt_id: str) -> hou.Point:
+    matches = points_by_id[pt_id]
+    return min(matches, key=lambda pt: pt.number())
+
+def _get_inset_chelicerae_support_point(points_by_id: dict[str, set[hou.Point]], pt_id: str) -> hou.Point:
+    matches = points_by_id[pt_id]
     return max(matches, key=lambda pt: pt.number())
 
 
