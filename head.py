@@ -327,7 +327,7 @@ def _curve_lip(node: hou.SopNode) -> None:
     geo = node.geometry()
     dist = get_head_base_loop_width(node)
     headchelicerae1, headsupport1 = point_from_geo(geo, headchelicerae(1), headsupport(1))
-    offset = hou.Vector3(0.0, dist * 0.5, 0.0)
+    offset = hou.Vector3(0.0, dist * 2, 0.0)
     headchelicerae1.setPosition(headchelicerae1.position() + offset)
     headsupport1.setPosition(headsupport1.position() + offset)
 
