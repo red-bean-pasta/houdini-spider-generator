@@ -25,7 +25,7 @@ from utilities.common import (
     get_params,
     get_parent,
     get_prim_centroid,
-    rotation_to, get_first_neighbor,
+    rotation_to,
 )
 from utilities.nodes import (
     add_fuse,
@@ -108,9 +108,9 @@ def build(cephalothorax: hou.SopNode, source: hou.SopNode) -> hou.SopNode:
     adjusted_right = sopify(chelicerae, adjusted_curve, _adjust_right_membrane_width)
     clamped_membrane = sopify(chelicerae, adjusted_right, _add_start_membrane_support_loops)
 
-    upper_clamped_start_section = sopify(chelicerae, clamped_membrane, _add_start_section_upper_support_loop)
+    upper_inset_start_section = sopify(chelicerae, clamped_membrane, _inset_start_section_upper_support_loop)
 
-    mirrored = add_mirror(chelicerae, "mirror_left_chelicerae", upper_clamped_start_section, (1, 0, 0), True, True)
+    mirrored = add_mirror(chelicerae, "mirror_left_chelicerae", upper_inset_start_section, (1, 0, 0), True, True)
     renamed = sopify(chelicerae, mirrored, _rename_left_ids)
 
     fused = add_fuse(chelicerae, "fuse_chelicerae", renamed)
@@ -794,32 +794,55 @@ def _adjust_right_membrane_width(node: hou.SopNode) -> None:
     s4.setPosition(s4.position() + bottom_offset)
 
 
-def _add_start_section_upper_support_loop(node: hou.SopNode) -> None:
+def _inset_start_section_upper_support_loop(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-    ratio = get_float_parm(get_parent(node), "membrane_ratio")
-    s1, s2, u1 = point_from_geo(
-        geo,
-        cheliceraestart(1),
-        cheliceraestart(2),
-        _middle_section(0.25, 1),
-    )
-    edge = geo.findEdge(s1, u1)
-    assert edge is not None, "Expected edge between cheliceraestart(1) and _middle_section(0.25, 1)"
-    added_points, _ = loop_cut(edge.prims()[0], s1, u1, ratio, use_ratio=True)
-    ss1 = get_first_neighbor(geo, s1, added_points)
-    ss2 = get_first_neighbor(geo, s2, added_points)
-    assert ss1 and ss2
-    _adjust_start_section_gap(s1, s2, ss1, ss2)
 
-def _adjust_start_section_gap(
-        s1: hou.Point,
-        s2: hou.Point,
-        ss1: hou.Point,
-        ss2: hou.Point,
-) -> None:
-    ratio = 1/3
-    ss1.setPosition((ss1.position() * ratio + s1.position() * (1 - ratio)))
-    ss2.setPosition((ss2.position() * ratio + s2.position()* (1 - ratio)))
+    # Boundary vertices along the upper-medial edge (#2) of the chelicera tube
+    medial_upper_points = point_from_geo(
+        geo,
+        cheliceraestartmembranesupport(2),
+        cheliceraestart(2),
+        _middle_section(0.25, 2),
+        cheliceraemiddle(2),
+        _middle_section(0.75, 2),
+        cheliceraeend(2),
+    )
+    # Opposing vertices along the upper-middle loop cut (#uppermiddle_1)
+    upper_middle_points = point_from_geo(
+        geo,
+        upper_middle(cheliceraestartmembranesupport, 1),
+        upper_middle(cheliceraestart, 1),
+        upper_middle(_middle_section, 1, j=0.25),
+        upper_middle(cheliceraemiddle, 1),
+        upper_middle(_middle_section, 1, j=0.75),
+        upper_middle(cheliceraeend, 1),
+    )
+    # Boundary vertices along the upper-lateral edge (#3) of the chelicera tube
+    lateral_upper_points = point_from_geo(
+        geo,
+        cheliceraestartmembranesupport(3),
+        cheliceraestart(3),
+        _middle_section(0.25, 3),
+        cheliceraemiddle(3),
+        _middle_section(0.75, 3),
+        cheliceraeend(3),
+    )
+
+    # Inset distance evaluated from the start membrane gap (1/3 of gap)
+    start_membrane_gap = medial_upper_points[0].position().distanceTo(medial_upper_points[1].position())
+    dist = start_membrane_gap / 3.0
+
+    # Form the full upper quad strip (medial and lateral halves) from start membrane support to end section
+    left_prims = [
+        find_prim(medial_upper_points[i], medial_upper_points[i + 1], upper_middle_points[i])
+        for i in range(len(medial_upper_points) - 1)
+    ]
+    right_prims = [
+        find_prim(lateral_upper_points[i], lateral_upper_points[i + 1], upper_middle_points[i])
+        for i in range(len(lateral_upper_points) - 1)
+    ]
+    inset(left_prims + right_prims, dist, use_ratio=False)
+    deduplicate_id_attr(geo, None, keep_first=True)
 
 
 def _rename_left_ids(node: hou.SopNode) -> None:
