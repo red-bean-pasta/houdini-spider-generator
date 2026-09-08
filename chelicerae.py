@@ -20,11 +20,12 @@ from utilities.common import (
     add_heading,
     add_prim_attr,
     fill_face,
-    get_float_parm,
     find_prim,
+    get_float_parm,
     get_params,
     get_parent,
     get_prim_centroid,
+    points_by_attr,
     rotation_to,
 )
 from utilities.nodes import (
@@ -106,11 +107,12 @@ def build(cephalothorax: hou.SopNode, source: hou.SopNode) -> hou.SopNode:
     merged_membrane = sopify(chelicerae, cut_tube, _merge_membrane_curves)
     adjusted_curve = sopify(chelicerae, merged_membrane, _adjust_start_membrane_curve)
     adjusted_right = sopify(chelicerae, adjusted_curve, _adjust_right_membrane_width)
-    clamped_membrane = sopify(chelicerae, adjusted_right, _add_start_membrane_support_loops)
+    upper_inset_start_section = sopify(chelicerae, adjusted_right, _inset_chelicerae_support_loop)
 
-    upper_inset_start_section = sopify(chelicerae, clamped_membrane, _inset_start_section_upper_support_loop)
+    clamped_membrane = sopify(chelicerae, upper_inset_start_section, _add_start_membrane_support_loops)
+    clamped_start = sopify(chelicerae, clamped_membrane, _add_start_section_support_loops)
 
-    mirrored = add_mirror(chelicerae, "mirror_left_chelicerae", upper_inset_start_section, (1, 0, 0), True, True)
+    mirrored = add_mirror(chelicerae, "mirror_left_chelicerae", clamped_start, (1, 0, 0), True, True)
     renamed = sopify(chelicerae, mirrored, _rename_left_ids)
 
     fused = add_fuse(chelicerae, "fuse_chelicerae", renamed)
@@ -712,20 +714,17 @@ def _add_start_membrane_support_loops(node: hou.SopNode) -> None:
         cheliceraemembrane(1),
         cheliceraestartmembranesupport(1),
     )
-    added = _add_start_membrane_support_loop(geo, ratio, membrane, support)
-    _add_start_membrane_support_loop(geo, ratio, support, added[0])
+    _add_support_loop(geo, ratio, support, membrane)
 
-def _add_start_membrane_support_loop(
-        geo: hou.Geometry,
-        ratio: float,
-        start_point: hou.Point,
-        end_point: hou.Point,
-) -> list[hou.Point]:
-    edge = geo.findEdge(start_point, end_point)
-    assert edge is not None, "Expected start membrane support edge"
-    prim = edge.prims()[0]
-    added_points, _ = loop_cut(prim, start_point, end_point, ratio, use_ratio=True)
-    return added_points
+def _add_start_section_support_loops(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    ratio = get_float_parm(get_parent(node), "membrane_ratio")
+    start, middle = point_from_geo(
+        geo,
+        cheliceraestart(2),
+        _middle_section(0.25, 2),
+    )
+    _add_support_loop(geo, ratio, start, middle)
 
 
 def _merge_membrane_curves(node: hou.SopNode) -> None:
@@ -794,12 +793,13 @@ def _adjust_right_membrane_width(node: hou.SopNode) -> None:
     s4.setPosition(s4.position() + bottom_offset)
 
 
-def _inset_start_section_upper_support_loop(node: hou.SopNode) -> None:
+def _inset_chelicerae_support_loop(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
 
     # Boundary vertices along the upper-medial edge (#2) of the chelicera tube
     medial_upper_points = point_from_geo(
         geo,
+        cheliceraemembrane(6),
         cheliceraestartmembranesupport(2),
         cheliceraestart(2),
         _middle_section(0.25, 2),
@@ -810,6 +810,7 @@ def _inset_start_section_upper_support_loop(node: hou.SopNode) -> None:
     # Opposing vertices along the upper-middle loop cut (#uppermiddle_1)
     upper_middle_points = point_from_geo(
         geo,
+        cheliceraemembrane(5),
         upper_middle(cheliceraestartmembranesupport, 1),
         upper_middle(cheliceraestart, 1),
         upper_middle(_middle_section, 1, j=0.25),
@@ -820,6 +821,7 @@ def _inset_start_section_upper_support_loop(node: hou.SopNode) -> None:
     # Boundary vertices along the upper-lateral edge (#3) of the chelicera tube
     lateral_upper_points = point_from_geo(
         geo,
+        cheliceraemembrane(4),
         cheliceraestartmembranesupport(3),
         cheliceraestart(3),
         _middle_section(0.25, 3),
@@ -829,10 +831,15 @@ def _inset_start_section_upper_support_loop(node: hou.SopNode) -> None:
     )
 
     # Inset distance evaluated from the start membrane gap (1/3 of gap)
-    start_membrane_gap = medial_upper_points[0].position().distanceTo(medial_upper_points[1].position())
+    start_membrane_support, start_point = point_from_geo(
+        geo,
+        cheliceraestartmembranesupport(2),
+        cheliceraestart(2),
+    )
+    start_membrane_gap = start_membrane_support.position().distanceTo(start_point.position())
     dist = start_membrane_gap / 3.0
 
-    # Form the full upper quad strip (medial and lateral halves) from start membrane support to end section
+    # Form the full upper quad strip (medial and lateral halves) from start membrane to end section
     left_prims = [
         find_prim(medial_upper_points[i], medial_upper_points[i + 1], upper_middle_points[i])
         for i in range(len(medial_upper_points) - 1)
@@ -842,7 +849,69 @@ def _inset_start_section_upper_support_loop(node: hou.SopNode) -> None:
         for i in range(len(lateral_upper_points) - 1)
     ]
     inset(left_prims + right_prims, dist, use_ratio=False)
+
+    _adjust_chelicerae_support_loop(node)
+
     deduplicate_id_attr(geo, None, keep_first=True)
+
+
+def _adjust_chelicerae_support_loop(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    # This method adjusts the points position so the topology becomes more natural and smooth at certain places
+    by_id = points_by_attr(geo, "id", skip_blank=True)
+    _adjust_right_chelicerae_support_points(by_id)
+    _adjust_left_chelicerae_support_points(by_id)
+    _adjust_bottom_chelicerae_support_points(by_id)
+
+def _adjust_right_chelicerae_support_points(points_by_attr: dict[str, set[hou.Point]]) -> None:
+    # For the right half support points, move them along 1/2 towards the upper middle line
+    sections = (
+        (cheliceraemembrane(4), cheliceraemembrane(5)),
+        (cheliceraestartmembranesupport(3), upper_middle(cheliceraestartmembranesupport, 1)),
+        (cheliceraestart(3), upper_middle(cheliceraestart, 1)),
+        (_middle_section(0.25, 3), upper_middle(_middle_section, 1, j=0.25)),
+        (cheliceraemiddle(3), upper_middle(cheliceraemiddle, 1)),
+        (_middle_section(0.75, 3), upper_middle(_middle_section, 1, j=0.75)),
+        (cheliceraeend(3), upper_middle(cheliceraeend, 1)),
+    )
+    for support_id, mid_id in sections:
+        inset_support = _get_inset_chelicerae_support_point(points_by_attr, support_id)
+        inset_mid = _get_inset_chelicerae_support_point(points_by_attr, mid_id)
+        inset_support.setPosition((inset_support.position() + inset_mid.position()) * 0.5)
+
+def _adjust_left_chelicerae_support_points(points_by_attr: dict[str, set[hou.Point]]) -> None:
+    # For the left half support points, cheliceraemembrane(6), cheliceraestartmembranesupport(2),
+    # and cheliceraestart(2) are kept at 0, tmpsection 0.25 is moved by 1/4, and the rest to 1/2
+    sections = (
+        (cheliceraemembrane(6), cheliceraemembrane(5), 0.0),
+        (cheliceraestartmembranesupport(2), upper_middle(cheliceraestartmembranesupport, 1), 0.0),
+        (cheliceraestart(2), upper_middle(cheliceraestart, 1), 0.0),
+        (_middle_section(0.25, 2), upper_middle(_middle_section, 1, j=0.25), 0.25),
+        (cheliceraemiddle(2), upper_middle(cheliceraemiddle, 1), 0.5),
+        (_middle_section(0.75, 2), upper_middle(_middle_section, 1, j=0.75), 0.5),
+        (cheliceraeend(2), upper_middle(cheliceraeend, 1), 0.5),
+    )
+    for support_id, mid_id, ratio in sections:
+        if ratio == 0.0:
+            continue
+        inset_support = _get_inset_chelicerae_support_point(points_by_attr, support_id)
+        inset_mid = _get_inset_chelicerae_support_point(points_by_attr, mid_id)
+        inset_support.setPosition(inset_support.position() * (1.0 - ratio) + inset_mid.position() * ratio)
+
+def _adjust_bottom_chelicerae_support_points(points_by_attr: dict[str, set[hou.Point]]) -> None:
+    sections = (
+        (cheliceraeend(2), _middle_section(0.75, 2)),
+        (upper_middle(cheliceraeend, 1), upper_middle(_middle_section, 1, j=0.75)),
+        (cheliceraeend(3), _middle_section(0.75, 3)),
+    )
+    for end_id, section_id in sections:
+        inset_end = _get_inset_chelicerae_support_point(points_by_attr, end_id)
+        inset_section = _get_inset_chelicerae_support_point(points_by_attr, section_id)
+        inset_end.setPosition((inset_end.position() + inset_section.position()) * 0.5)
+
+def _get_inset_chelicerae_support_point(points_by_attr: dict[str, set[hou.Point]], pt_id: str) -> hou.Point:
+    matches = points_by_attr[pt_id]
+    return max(matches, key=lambda pt: pt.number())
 
 
 def _rename_left_ids(node: hou.SopNode) -> None:
@@ -864,3 +933,16 @@ def _inset_and_recess(
     for pt in inner_pts:
         pt.setPosition(pt.position() - norm * dist)
     return inner
+
+
+def _add_support_loop(
+        geo: hou.Geometry,
+        ratio: float,
+        start_point: hou.Point,
+        end_point: hou.Point,
+) -> list[hou.Point]:
+    edge = geo.findEdge(start_point, end_point)
+    assert edge is not None, "Expected start membrane support edge"
+    prim = edge.prims()[0]
+    added_points, _ = loop_cut(prim, start_point, end_point, ratio, use_ratio=True)
+    return added_points
