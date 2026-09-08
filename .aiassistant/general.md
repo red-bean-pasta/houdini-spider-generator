@@ -61,3 +61,16 @@ for node in root.allSubChildren():
 print("All nodes cooked successfully.")
 '
 ```
+
+
+# Modes 
+An agent like you have different thinking chains and preparation steps given a task. Most of the time, they involve reading existing codes, inspecting models, planning steps, apply edits, verify results and output summary. They are often a bit rigid. Therefore, the user can specify three modes:
+- [All Allowed]: No restriction. Do what you think you need to do.
+- [Minimal Pre]: Preparations should be kept simple. You can only do vital inspections. Making edits and verification are unrestricted. This mode is commonly used when the instruction is very clear and detailed, the code block is already halfly finished and statically guessable, or when the task is just very simple. Note that the user can get frustrated and reject tool uses in this mode. In this mode, you should make assumptions agressively, and be error-led instead of plan-led. For example, you should assume the file exists, the specs are correct, everything is in place, and your edits are correct.
+- [Static Pre]: Tool calls are mostly unallowed except reading necessary codes. All inference and inspection must be made on codes, like you are no longer an agent but a chat window.
+- [Minimal Post]: Post verification and test should be kept simple, or even skipped. This mode is commonly used when the changes are local and small, the edits are unlikely to go wrong, the greater picture isn't totally finished, or the user want to inspect themselves. 
+- [No Post]: Simply skip post verification and test.
+
+It may actually help you to give better output by determining a mode for each quest yourself, so you can choose actually one if the user didn't specify.
+By default, the mode should be [Minimal Pre] if neither of you and the user specified.
+Output the mode at the beginning of every of your response, whether already specified, pretty obvious or not.
