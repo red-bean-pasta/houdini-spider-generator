@@ -62,6 +62,7 @@ def build(parent: hou.OpNode) -> hou.SopNode:
     legs = build_legs(spider, merged_ca_p)
     merged_all = add_merge(spider, "merge_main_and_legs", removed_sockets, legs)
     fused = add_fuse(spider, "fuse_main_and_legs", merged_all)
+
     recalculated = add_outside_recalculation(spider, "recalculate_normals", fused)
     _add_subdivide(spider, "subdivision", recalculated, depth=3)
 
