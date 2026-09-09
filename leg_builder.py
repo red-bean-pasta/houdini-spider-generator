@@ -1,6 +1,7 @@
 import math
 from dataclasses import dataclass
 from enum import StrEnum, auto
+from typing import Self
 
 import hou
 
@@ -22,13 +23,21 @@ class Region(StrEnum):
 class LegParam:
     coxa_size: tuple[float, float, float]
     length_ratios: tuple[float, ...] | list[float]
-    segment_specs: tuple[tuple[float, float], ...]
-    segment_height_ratio: float = 1.15
+    yaw_flex_specs: tuple[tuple[float, float], ...]
+
+    tarsus_wedge_angle: float = 45.0
+
+    height_ratio: float = 1.15
     spine_ratio: float = 0.5
     shrink_ratios: tuple[float, float] = (0.95, 0.875)
-    minimum_membrane: tuple[float, float] = (1.0, 5.0)
     support_loop_ratio: float = 0.015
-    tarsus_wedge_angle: float = 45.0
+
+    minimum_membrane: tuple[float, float] = (1.0, 5.0)
+
+    def __post_init__(self) -> None:
+        assert len(self.length_ratios) == len(self.yaw_flex_specs), (
+            f"Length mismatch: length_ratios ({len(self.length_ratios)}) != yaw_flex_specs ({len(self.yaw_flex_specs)})"
+        )
 
     @classmethod
     def from_specs(
@@ -38,12 +47,18 @@ class LegParam:
         max_segment_yaws: tuple[float, ...] | list[float],
         min_segment_flexes: tuple[float, ...] | list[float],
         **kwargs,
-    ) -> "LegParam":
+    ) -> Self:
+        assert len(max_segment_yaws) == len(min_segment_flexes), (
+            f"Spec mismatch: max_segment_yaws ({len(max_segment_yaws)}) != min_segment_flexes ({len(min_segment_flexes)})"
+        )
+        assert len(length_ratios) == len(max_segment_yaws), (
+            f"Length mismatch: length_ratios ({len(length_ratios)}) != max_segment_yaws ({len(max_segment_yaws)})"
+        )
         segment_specs = tuple(zip(max_segment_yaws, min_segment_flexes))
         return cls(
             coxa_size=coxa_size,
             length_ratios=length_ratios,
-            segment_specs=segment_specs,
+            yaw_flex_specs=segment_specs,
             **kwargs,
         )
 
@@ -61,6 +76,9 @@ def build_leg(
     all_mem_pts = _add_membrane_loop_cuts(geo, seg_pts, thickness_pts, mem_pts, param.support_loop_ratio)
     _close_tarsus(geo, all_seg_pts, param.tarsus_wedge_angle)
     return MessagedResult((all_seg_pts, thickness_pts, all_mem_pts), warnings)
+
+
+build = build_leg
 
 
 def _build_segment_tubes(
@@ -93,7 +111,7 @@ def _build_segment_tubes(
 def _get_leg_points(
     param: LegParam,
 ) -> MessagedResult[list[list[hou.Vector3]]]:
-    assert len(param.segment_specs) == len(param.length_ratios)
+    assert len(param.yaw_flex_specs) == len(param.length_ratios)
 
     coxa_width, coxa_height, coxa_length = param.coxa_size
     half_w = coxa_width / 2.0
@@ -114,13 +132,13 @@ def _get_leg_points(
 
     messages: list[str] = []
     segments: list[list[hou.Vector3]] = [coxa]
-    for i, (max_yaw, min_flex) in enumerate(param.segment_specs):
+    for i, (max_yaw, min_flex) in enumerate(param.yaw_flex_specs):
         length_ratio_to_former = (
             param.length_ratios[i] / param.length_ratios[i - 1]
             if i > 0 else
             param.length_ratios[0] / 1.0
         )
-        cur_height_ratio = 1.0 if i == 0 else param.segment_height_ratio
+        cur_height_ratio = 1.0 if i == 0 else param.height_ratio
         (former_wedged, latter), seg_messages = _append_segment(
             segments[-1],
             cur_height_ratio,
@@ -135,7 +153,7 @@ def _get_leg_points(
         segments[-1] = former_wedged
         segments.append(latter)
 
-    assert len(segments) == len(param.segment_specs) + 1
+    assert len(segments) == len(param.yaw_flex_specs) + 1
     return MessagedResult(segments, messages)
 
 def _append_segment(

@@ -3,7 +3,7 @@ import math
 import hou
 
 import base_sops
-from leg_builder import LegParam, Region, build_leg
+from leg_builder import LegParam, build_leg
 from utilities.common import (
     add_float_param,
     add_heading,
@@ -286,8 +286,8 @@ def _get_leg_param(
     return LegParam(
         coxa_size=coxa_size,
         length_ratios=tuple(params.front_segment_length_ratios),
-        segment_specs=segment_specs,
-        segment_height_ratio=control_params.segment_height_ratio,
+        yaw_flex_specs=segment_specs,
+        height_ratio=control_params.segment_height_ratio,
         spine_ratio=control_params.segment_lateral_ratio,
         shrink_ratios=control_params.segment_shrink_ratios,
         minimum_membrane=control_params.minimum_membrane_spec,
