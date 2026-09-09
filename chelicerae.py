@@ -113,7 +113,8 @@ def build(cephalothorax: hou.SopNode, source: hou.SopNode) -> hou.SopNode:
     adjusted_curve = sopify(chelicerae, merged_membrane, _adjust_start_membrane_curve)
     adjusted_right = sopify(chelicerae, adjusted_curve, _adjust_right_membrane_width)
 
-    upper_inset = sopify(chelicerae, adjusted_right, _inset_chelicerae_support_loop)
+    lip_adjusted = sopify(chelicerae, adjusted_right, _adjust_head_chelicerae_depth)
+    upper_inset = sopify(chelicerae, lip_adjusted, _inset_chelicerae_support_loop)
     clamped_membrane = sopify(chelicerae, upper_inset, _add_start_membrane_support_loops)
     clamped_start = sopify(chelicerae, clamped_membrane, _add_start_section_support_loops)
 
@@ -125,9 +126,7 @@ def build(cephalothorax: hou.SopNode, source: hou.SopNode) -> hou.SopNode:
     all_fuse = add_fuse(chelicerae, "fuse_head_and_chelicerae", all_merge)
     deduplicated = sopify(chelicerae, all_fuse, _deduplicate_base_faces)
 
-    adjusted = sopify(chelicerae, deduplicated, _adjust_head_chelicerae_depth)
-
-    add_output(chelicerae, "OUT_CHELICERAE", adjusted)
+    add_output(chelicerae, "OUT_CHELICERAE", deduplicated)
     chelicerae.layoutChildren()
     return chelicerae
 
@@ -286,7 +285,7 @@ def _inset_flaps(node: hou.SopNode) -> None:
         prim for prim in geo.prims()
         if prim.stringAttribValue("region") == Region.CHELICERA
     ]
-    inner = _inset_and_recess(chelicera_prims, dist)
+    inner = _inset_and_recess(chelicera_prims, dist / 4, dist)
     for prim in inner:
         prim.setAttribValue("region", Region.CHELICERASOCKET)
 
@@ -409,7 +408,7 @@ def _inset_start_membrane(node: hou.SopNode) -> None:
 
     start_points = point_from_geo(geo, *(cheliceraestart(j) for j in range(1, 5)))
     start_prim = next(prim for prim in start_points[0].prims() if all(pt in start_points for pt in prim.points()))
-    _inset_and_recess([start_prim], dist, delete_inset_prims=True)
+    _inset_and_recess([start_prim], dist / 4, dist, delete_inset_prims=True)
 
     for j, pt in enumerate(start_points, start=1):
         set_point_id(pt, cheliceraestartmembranesupport(j))
@@ -823,6 +822,35 @@ def _adjust_right_membrane_width(node: hou.SopNode) -> None:
     s4.setPosition(s4.position() + bottom_offset)
 
 
+def _adjust_head_chelicerae_depth(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+
+    # h0: headchelicerae0, hs0: headbasesupport_headchelicerae0
+    # c6: cheliceraemembrane6, cs6: cheliceraestartmembranesupport2
+    h0, hs0, c6, cs6 = point_from_geo(
+        geo,
+        headchelicerae(0),
+        headbasesupport(headchelicerae(0)),
+        cheliceraemembrane(6),
+        cheliceraestartmembranesupport(2),
+    )
+    for pt in (h0, hs0, c6, cs6):
+        assert abs(pt.position().x()) < 1e-4
+
+    dh = (h0.position() - hs0.position()).normalized()
+    dc = (cs6.position() - c6.position()).normalized()
+
+    v0 = h0.position() - c6.position()
+    v_perp = (v0 - dc * v0.dot(dc)).normalized()
+    angle = math.radians(10)
+    d_target = dc * math.cos(angle) + v_perp * math.sin(angle)
+
+    denom = (d_target.cross(dh)).x()
+    assert abs(denom) > 1e-6, "Target direction and head direction are nearly parallel"
+    t = (v0.cross(d_target)).x() / denom
+    h0.setPosition(h0.position() + dh * t)
+
+
 def _inset_chelicerae_support_loop(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
 
@@ -977,7 +1005,8 @@ def _add_start_membrane_support_loops(node: hou.SopNode) -> None:
         cheliceraemembrane(1),
         cheliceraestartmembranesupport(1),
     )
-    _add_support_loop(geo, ratio, support, membrane)
+    _added = _add_support_loop(geo, ratio, membrane, support)
+    _add_support_loop(geo, ratio, support, _added[0])
 
 
 def _add_start_section_support_loops(node: hou.SopNode) -> None:
@@ -997,67 +1026,35 @@ def _rename_left_ids(node: hou.SopNode) -> None:
 
 def _deduplicate_base_faces(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-    base_point_sets = []
+    base_id_sets = []
     for sign in (1, -1):
-        pts_quad1 = point_from_geo(
-            geo,
+        base_id_sets.append({
             headchelicerae(0),
             headchelicerae(sign * 1),
             headbasesupport(headchelicerae(sign * 1)),
             headbasesupport(headchelicerae(0)),
-        )
-        pts_quad2 = point_from_geo(
-            geo,
+        })
+        base_id_sets.append({
             headchelicerae(sign * 1),
             headchelicerae(sign * 2),
             headbasesupport(headchelicerae(sign * 2)),
             headbasesupport(headchelicerae(sign * 1)),
-        )
-        base_point_sets.append(set(pts_quad1))
-        base_point_sets.append(set(pts_quad2))
+        })
 
     duplicate_prims = [
         prim for prim in geo.prims()
-        if set(prim.points()) in base_point_sets
+        if {pt.stringAttribValue("id") for pt in prim.points()} in base_id_sets
     ]
-    geo.deletePrims(duplicate_prims, keep_points=True)
-
-
-def _adjust_head_chelicerae_depth(node: hou.SopNode) -> None:
-    geo: hou.Geometry = node.geometry()
-
-    # h0: headchelicerae0, hs0: headbasesupport_headchelicerae0
-    # c6: cheliceraemembrane6, cs6: cheliceraestartmembranesupport2
-    h0, hs0, c6, cs6 = point_from_geo(
-        geo,
-        headchelicerae(0),
-        headbasesupport(headchelicerae(0)),
-        cheliceraemembrane(6),
-        cheliceraestartmembranesupport(2),
-    )
-    for pt in (h0, hs0, c6, cs6):
-        assert abs(pt.position().x()) < 1e-4
-
-    dh = (h0.position() - hs0.position()).normalized()
-    dc = (cs6.position() - c6.position()).normalized()
-
-    v0 = h0.position() - c6.position()
-    v_perp = (v0 - dc * v0.dot(dc)).normalized()
-    angle = math.radians(10)
-    d_target = dc * math.cos(angle) + v_perp * math.sin(angle)
-
-    denom = (d_target.cross(dh)).x()
-    assert abs(denom) > 1e-6, "Target direction and head direction are nearly parallel"
-    t = (v0.cross(d_target)).x() / denom
-    h0.setPosition(h0.position() + dh * t)
+    geo.deletePrims(duplicate_prims, keep_points=False)
 
 
 def _inset_and_recess(
         prims: list[hou.Prim],
-        dist: float,
+        inset_dist: float,
+        recess_dist: float,
         delete_inset_prims: bool = False,
 ) -> list[hou.Prim]:
-    inner = inset(prims, dist, use_ratio=False)
+    inner = inset(prims, inset_dist, use_ratio=False)
     norm = inner[0].normal()
     inner_pts = list({pt.number(): pt for prim in inner for pt in prim.points()}.values())
     if delete_inset_prims:
@@ -1065,7 +1062,7 @@ def _inset_and_recess(
 
     # Move inset points along the face normal backwards by its width to create a seam
     for pt in inner_pts:
-        pt.setPosition(pt.position() - norm * dist)
+        pt.setPosition(pt.position() - norm * recess_dist)
     return inner
 
 
