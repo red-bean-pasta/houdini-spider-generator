@@ -333,8 +333,8 @@ def _reconnect_lower_sternum_pedicel_loop(
     p_prims = list(cp_outer_lower.prims())
     geo.deletePrims(p_prims, keep_points=True)
 
-    fill_pentagon(geo, [cp_outer_right, bs5_1, right_inner, s5, cp_outer_lower], (cp_outer_lower, s5), reverse=False)
-    fill_pentagon(geo, [cp_outer_left, bs5_2, left_inner, s5, cp_outer_lower], (cp_outer_lower, s5), reverse=True)
+    fill_pentagon(geo, [cp_outer_right, bs5_1, right_inner, s5, cp_outer_lower], (cp_outer_lower, s5), reverse=True)
+    fill_pentagon(geo, [cp_outer_left, bs5_2, left_inner, s5, cp_outer_lower], (cp_outer_lower, s5), reverse=False)
 
     fill_face(geo, [cp_lower, cp_right, cp_outer_right, cp_outer_lower], reverse=False)
     fill_face(geo, [cp_lower, cp_left, cp_outer_left, cp_outer_lower], reverse=True)

@@ -21,7 +21,6 @@ from utilities.common import (
 from utilities.nodes import (
     add_fuse,
     add_mirror,
-    add_outside_recalculation,
     add_output,
     add_reloadable_subnet,
     sopify,
@@ -48,8 +47,7 @@ def build(
     cleaned = sopify(legs, extruded, _remove_tmp_attributes)
     fused = add_fuse(legs, "fuse_sockets", cleaned)
     mirrored = add_mirror(legs, "mirror_left_legs", fused, (1, 0, 0), True, False)
-    recalculated = add_outside_recalculation(legs, "recalculate_normals", mirrored)
-    add_output(legs, "OUT_LEGS", recalculated)
+    add_output(legs, "OUT_LEGS", mirrored)
 
     legs.layoutChildren()
     return legs
@@ -696,24 +694,30 @@ def _add_segment_thickness(
         ie_loop = [former_inset[0], former_inset[1], former_inset[3], former_inset[2]]
         for j in range(4):
             next_j = (j + 1) % 4
-            prim = fill_face(geo, [
-                e_loop[next_j],
-                e_loop[j],
-                ie_loop[j],
-                ie_loop[next_j],
-            ])
+            prim = fill_face(geo,
+                 [
+                    e_loop[next_j],
+                    e_loop[j],
+                    ie_loop[j],
+                    ie_loop[next_j],
+                ],
+                 True,
+            )
             prim.setAttribValue("region", Region.LEGSEGMENT)
 
         s_loop = [latter_start[0], latter_start[1], latter_start[3], latter_start[2]]
         is_loop = [latter_inset[0], latter_inset[1], latter_inset[3], latter_inset[2]]
         for j in range(4):
             next_j = (j + 1) % 4
-            prim = fill_face(geo, [
-                s_loop[j],
-                s_loop[next_j],
-                is_loop[next_j],
-                is_loop[j],
-            ])
+            prim = fill_face(geo,
+             [
+                    s_loop[j],
+                    s_loop[next_j],
+                    is_loop[next_j],
+                    is_loop[j],
+                ],
+                True,
+             )
             prim.setAttribValue("region", Region.LEGSEGMENT)
 
         thickness_pts.extend([*former_inset, *latter_inset])
