@@ -26,6 +26,7 @@ You can use `sed` or `head` for file segmentation. But if you don't know the exa
 You can use MCP or `python.read` to read out-of-scope files.
 No Latex Output. Use only MarkDown. LaTex have problem rendering in PyCharm.
 You can use git stash, commit and branch. But those are quite powerful moves so always clarify your intent then ask for permit. 
+Response when you are confident enough. Don't be paranoid and spend forever verifying or inspecting. Those efforts are not appreciated.
 
 # Examples
 ## Example for inspecting output HIP file
@@ -70,6 +71,7 @@ An agent like you have different thinking chains and preparation steps given a t
 - [Static Pre]: Tool calls are mostly unallowed except reading necessary codes. All inference and inspection must be made on codes, like you are no longer an agent but a chat window. However, post verification and test is not restricted.
 - [Minimal Post]: Post verification and test should be kept simple, or even skipped. This mode is commonly used when the changes are local and small, the edits are unlikely to go wrong, the greater picture isn't totally finished, or the user want to inspect themselves. 
 - [No Post]: Simply skip post verification and test.
+- [Quicky]: Output as quick as possible. Common in simple and local method. You can think of it as [Static Pre] + [Minimal Post]. This mode resembles much more with traditional chat window, and expects limited even insufficient information, and more aggressive assumption and inference.
 
 It may actually help you to give better output by determining a mode for each quest yourself, so you can choose actually one if the user didn't specify.
 By default, the mode should be [Minimal Pre] if neither of you and the user specified.
