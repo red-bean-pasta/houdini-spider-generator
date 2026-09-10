@@ -6,7 +6,7 @@ import base_sops
 from base_sops import basemaxillamembrane
 from helper import point_from_geo
 from leg_builder import LegParam, build_leg
-from pedipalp import build_pedipalp, position_pedipalp
+from pedipalp import build_pedipalp, position_pedipalp, adjust_pedipalp_coxa
 from utilities.common import (
     add_float_param,
     add_heading,
@@ -45,7 +45,8 @@ def build(
 
     built_pedipalp = sopify(legs, extracted, build_pedipalp)
     positioned_pedipalp = sopify(legs, built_pedipalp, position_pedipalp)
-    merged_legs = add_merge(legs, "merge_legs_and_pedipalp", extruded, positioned_pedipalp)
+    adjusted_pedipalp = sopify(legs, positioned_pedipalp, adjust_pedipalp_coxa)
+    merged_legs = add_merge(legs, "merge_legs_and_pedipalp", extruded, adjusted_pedipalp)
 
     cleaned = sopify(legs, merged_legs, _remove_tmp_attributes)
     fused = add_fuse(legs, "fuse_sockets", cleaned)
@@ -302,7 +303,7 @@ def _get_leg_param(
     params = get_params(parent, use_tuple=False)
     control_params = get_params(get_control(parent), use_tuple=False)
 
-    front_socket_width, _ = _get_front_coxa_socket_size(geo)
+    front_socket_width, _ = get_front_coxa_socket_size(geo)
     front_coxa_width = front_socket_width * params.front_coxa_size_ratio.x()
     front_coxa_length = front_socket_width * params.front_coxa_size_ratio.y()
 
@@ -329,18 +330,6 @@ def _get_leg_param(
         tarsus_wedge_angle=control_params.tarsus_wedge_angle,
     )
 
-def _get_front_coxa_socket_size(geo: hou.Geometry) -> tuple[float, float]:
-    corners = geo.attribValue("tmp_coxa_corners")
-    pts = [geo.iterPoints()[p] for p in corners[:4]]
-
-    pos_top_sz, pos_top_bz, pos_btm_sz, pos_btm_bz = points_to_positions(pts)
-
-    width = (pos_top_bz - pos_top_sz).length()
-    top_mid = (pos_top_sz + pos_top_bz) / 2.0
-    btm_mid = (pos_btm_sz + pos_btm_bz) / 2.0
-    height = top_mid.y() - btm_mid.y()
-
-    return width, height
 
 def _adjust_coxa(
     node: hou.SopNode,
@@ -439,3 +428,22 @@ def _adjust_coxa(
 
 def _remove_tmp_attributes(node: hou.SopNode) -> None:
     remove_attrs(node.geometry(), global_attribs=("tmp_coxa_corners", "tmp_coxa_midpoints"))
+
+
+def get_front_coxa_socket_size(geo: hou.Geometry) -> tuple[float, float]:
+    """
+
+    :param geo:
+    :return: width, length
+    """
+    corners = geo.attribValue("tmp_coxa_corners")
+    pts = [geo.iterPoints()[p] for p in corners[:4]]
+
+    pos_top_sz, pos_top_bz, pos_btm_sz, pos_btm_bz = points_to_positions(pts)
+
+    width = (pos_top_bz - pos_top_sz).length()
+    top_mid = (pos_top_sz + pos_top_bz) / 2.0
+    btm_mid = (pos_btm_sz + pos_btm_bz) / 2.0
+    height = top_mid.y() - btm_mid.y()
+
+    return width, height
