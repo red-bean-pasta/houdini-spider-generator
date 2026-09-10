@@ -1,9 +1,8 @@
 import hou
 
-from base_sops import basemaxilla, basemaxillamembrane, basesternum
+from base_sops import basemaxillamembrane
 from helper import point_from_geo
-from leg_builder import LegParam, build_leg
-from sternum import sternumrim
+from leg_builder import LegParam, build_leg, Region
 from utilities.common import (
     MessagedResult,
     get_control,
@@ -25,25 +24,25 @@ def position_pedipalp(
     node: hou.SopNode,
 ) -> None:
     geo = node.geometry()
-    p_maxilla, p_sternum, p_inset = point_from_geo(
-        geo,
-        basemaxilla(1),
-        sternumrim(1),
-        basemaxillamembrane(1),
-    )
-
-    v = p_maxilla.position() - p_sternum.position()
-    direction = hou.Vector3(v.x(), 0.0, v.z()).normalized()
-    q = rotation_to(hou.Vector3(0.0, 0.0, -1.0), direction)
-
     pedipalp_pts = _get_pedipalp_points(geo)
     top_right_pt = max(
         pedipalp_pts,
         key=lambda pt: (pt.position().z(), pt.position().y(), pt.position().x()),
     )
-    offset = p_inset.position() - q.rotate(top_right_pt.position())
+
+    m1, m3, m4 = point_from_geo(
+        geo,
+        basemaxillamembrane(1),
+        basemaxillamembrane(3),
+        basemaxillamembrane(4),
+    )
+    v = m3.position() - m1.position()
+    direction = hou.Vector3(v.x(), 0.0, v.z()).normalized()
+    q = rotation_to(hou.Vector3(0.0, 0.0, -1.0), direction)
+
+    origin = m4.position() - q.rotate(top_right_pt.position())
     for pt in pedipalp_pts:
-        pt.setPosition(q.rotate(pt.position()) + offset)
+        pt.setPosition(q.rotate(pt.position()) + origin)
 
 
 def _build_cubes(
@@ -82,8 +81,8 @@ def _get_pedipalp_coxa_size(
     geo: hou.Geometry,
     front_coxa_size_ratio: hou.Vector2,
 ) -> tuple[float, float, float]:
-    p_maxilla, p_sternum = point_from_geo(geo, basemaxilla(1), basesternum(1, 2))
-    width = p_maxilla.position().distanceTo(p_sternum.position())
+    m3, m4 = point_from_geo(geo, basemaxillamembrane(3), basemaxillamembrane(4))
+    width = m3.position().distanceTo(m4.position())
     height = width
     length = front_coxa_size_ratio.y() / front_coxa_size_ratio.x() * width
     return width, height, length
@@ -95,7 +94,7 @@ def _get_pedipalp_points(
     pts = {
         pt
         for prim in geo.prims()
-        if prim.stringAttribValue("region").startswith(("legsegment", "legmembrane"))
+        if prim.stringAttribValue("region").startswith((Region.LEGMEMBRANE, Region.LEGSEGMENT))
         for pt in prim.points()
     }
     if not pts:

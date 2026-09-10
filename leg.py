@@ -3,7 +3,10 @@ import math
 import hou
 
 import base_sops
+from base_sops import basemaxillamembrane
+from helper import point_from_geo
 from leg_builder import LegParam, build_leg
+from pedipalp import build_pedipalp, position_pedipalp
 from utilities.common import (
     add_float_param,
     add_heading,
@@ -19,6 +22,7 @@ from utilities.common import (
 )
 from utilities.nodes import (
     add_fuse,
+    add_merge,
     add_mirror,
     add_output,
     add_reloadable_subnet,
@@ -38,7 +42,12 @@ def build(
 
     extracted = sopify(legs, legs.indirectInputs()[0], _extract_right_coxa)
     extruded = sopify(legs, extracted, _extrude_legs)
-    cleaned = sopify(legs, extruded, _remove_tmp_attributes)
+
+    built_pedipalp = sopify(legs, extracted, build_pedipalp)
+    positioned_pedipalp = sopify(legs, built_pedipalp, position_pedipalp)
+    merged_legs = add_merge(legs, "merge_legs_and_pedipalp", extruded, positioned_pedipalp)
+
+    cleaned = sopify(legs, merged_legs, _remove_tmp_attributes)
     fused = add_fuse(legs, "fuse_sockets", cleaned)
     mirrored = add_mirror(legs, "mirror_left_legs", fused, (1, 0, 0), True, False)
     add_output(legs, "OUT_LEGS", mirrored)
@@ -185,7 +194,15 @@ def _extract_right_coxa(node: hou.SopNode) -> None:
     ]
     assert len(socket_prims) == 8, f"Expected 8 right coxa socket prims, got {len(socket_prims)}"
 
-    used_points = {v.point() for prim in socket_prims for v in prim.vertices()}
+    pedipalp_points = point_from_geo(
+        geo,
+        basemaxillamembrane(1),
+        basemaxillamembrane(2),
+        basemaxillamembrane(3),
+        basemaxillamembrane(4),
+    )
+
+    used_points = {v.point() for prim in socket_prims for v in prim.vertices()} | set(pedipalp_points)
     unused_points = [p for p in geo.points() if p not in used_points]
     geo.deletePoints(unused_points)
 
@@ -204,7 +221,11 @@ def _get_right_coxa_socket_points(
     node: hou.SopNode,
 ) -> tuple[list[list[hou.Point]], list[list[hou.Point]]]:
     geo = node.geometry()
-    prims = sorted(geo.prims(), key=lambda p: p.boundingBox().center().z())
+    prims = [
+        prim for prim in geo.prims()
+        if prim.stringAttribValue("region").startswith(base_sops.Region.COXASOCKET)
+    ]
+    prims = sorted(prims, key=lambda p: p.boundingBox().center().z())
     assert len(prims) == 8, f"Expected 8 socket prims, got {len(prims)}"
 
     groups = [prims[i:i + 2] for i in range(0, 8, 2)]

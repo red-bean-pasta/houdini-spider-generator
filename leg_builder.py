@@ -78,9 +78,6 @@ def build_leg(
     return MessagedResult((all_seg_pts, thickness_pts, all_mem_pts), warnings)
 
 
-build = build_leg
-
-
 def _build_segment_tubes(
     geo: hou.Geometry,
     param: LegParam,

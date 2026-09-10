@@ -379,10 +379,13 @@ def _inset_membrane_region(
 def _classify_maxilla_membrane_points(geo: hou.Geometry) -> None:
     points_by_id_dict = points_by_attr(geo, "id", skip_blank=True)
     for side in (1, -1):
-        pts = points_by_id_dict.get(basemaxilla(side))
-        if pts and len(pts) > 1:
+        for index, name in enumerate(
+            (sternumrim(side), basesternum(side, 1), basemaxilla(side), basesternum(side, 2)),
+            start=1
+        ):
+            pts = points_by_id_dict[name]
             inset_pt = max(pts, key=lambda pt: pt.number())
-            inset_pt.setAttribValue("id", basemaxillamembrane(side))
+            inset_pt.setAttribValue("id", basemaxillamembrane(side * index))
 
 
 def extrude_base_buffer(node: hou.SopNode) -> None:
