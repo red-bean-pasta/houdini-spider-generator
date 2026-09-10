@@ -24,7 +24,7 @@ You can always actively prompt for clarification, answer for multiple choices et
 For file editing, prefer ACP tool `client_edit_file`. It's discouraged to use `apply_patch`, `pycharm_execute_terminal_command` and python's `file.write` because their formatting is hard for user to inspect. 
 You can use `sed` or `head` for file segmentation. But if you don't know the exact position, you can cat the whole file, or identify it first using grep. Do not use sed to "nudge" along the file because the user may get frustrated. You can also combine multiple commands into one to save turns and tokens.
 You can use MCP or `python.read` to read out-of-scope files.
-Also prefer to use MarkDown instead of LaTex in your answer, because LaTex have proble rendering in PyCharm.
+No Latex Output. Use only MarkDown. LaTex have problem rendering in PyCharm.
 You can use git stash, commit and branch. But those are quite powerful moves so always clarify your intent then ask for permit. 
 
 # Examples
