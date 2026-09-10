@@ -11,28 +11,27 @@ from utilities.common import (
     fill_face,
     get_float_parm,
     get_parent,
-    remove_attrs,
-    remove_groups,
+    points_by_attr,
 )
 from helper import (
     add_id_attr,
     affix_id,
     deduplicate_id_attr,
-    find_quad_polyextrude_splits,
     get_id_range,
     point_from_geo,
     points_by_id,
     set_points_id,
     unique_points_start_with_id,
 )
-from utilities.identifying import attribute_after_inset, deduplicate_point_attributes
-from utilities.nodes import sopify
+from utilities.identifying import deduplicate_point_attributes
+from utilities.topology import inset, outset
 
 
 class ID(StrEnum):
     BASESTERNUM = auto()
     BASESTERNUMMIDDLE = auto()
     BASEMAXILLA = auto()
+    BASEMAXILLAMEMBRANE = auto()
     BASEEND = auto()
 
 
@@ -56,6 +55,8 @@ def basesternummiddle(*i: int | str) -> str:
     return affix_id(ID.BASESTERNUMMIDDLE, *i)
 def basemaxilla(*i: int | str) -> str:
     return affix_id(ID.BASEMAXILLA, *i)
+def basemaxillamembrane(*i: int | str) -> str:
+    return affix_id(ID.BASEMAXILLAMEMBRANE, *i)
 def baseend(*i: int | str) -> str:
     return affix_id(ID.BASEEND, *i)
 def outer_loop_ids() -> tuple[str, ...]:
@@ -174,7 +175,12 @@ def connect_side_flaps(node: hou.SopNode) -> None:
                 basesternum(side * index, 1),
                 basesternum(side * index, 2),
             )
-            midpoint = (first.position() + second.position()) / 2.0
+            prev_mid, curr_mid = point_from_geo(
+                geo,
+                basesternummiddle(side * (index - 1)),
+                basesternummiddle(side * index),
+            )
+            midpoint = (prev_mid.position() + curr_mid.position()) / 2.0
             first.setPosition(midpoint)
             second.setPosition(midpoint)
 
@@ -202,6 +208,7 @@ def rotate_coxa_flaps(node: hou.SopNode) -> None:
     parent = get_parent(node)
     angle = get_float_parm(parent, "coxa_rotation_angle")
     clamped_angle = max(0.0, min(90.0, angle))
+
     rad = math.radians(clamped_angle)
     sin_angle = math.sin(rad)
     cos_angle = math.cos(rad)
@@ -303,177 +310,88 @@ def fill_pedicel_membrane(node: hou.SopNode) -> None:
     primitive.setAttribValue("region", Region.BASEPEDICELMEMBRANE)
 
 
-def extrude_base_buffer(parent: hou.SopNode, fused_pedicel: hou.SopNode) -> hou.SopNode:
-    boundary_prepared = sopify(parent, fused_pedicel, _prepare_outer_boundary)
-
-    extrude = parent.createNode("polyextrude", "extrude_base_buffer")
-    extrude.setInput(0, boundary_prepared)
-    extrude.parm("group").set("tmp_outer_boundary")
-    extrude.parm("dist").setExpression('ch("../membrane_ratio") * 50')
-    extrude.parm("outputside").set(1)
-
-    classified = sopify(parent, extrude, _classify_base_buffer)
-    cleanup = sopify(parent, classified, _cleanup_buffer_attributes)
-    return cleanup
-
-def _prepare_outer_boundary(node: hou.SopNode) -> None:
+def inset_membrane(node: hou.SopNode) -> None:
     geo = node.geometry()
-    grp = geo.createEdgeGroup("tmp_outer_boundary")
-    outer_ids = outer_loop_ids()
-    for edge in geo.globEdges("*"):
-        if all(pt.stringAttribValue("id").startswith(outer_ids) for pt in edge.points()):
-            grp.add(edge)
+    parent = get_parent(node)
+    ratio = get_float_parm(parent, "membrane_ratio")
+    points = points_by_id(geo)
 
-def _classify_base_buffer(node: hou.SopNode) -> None:
-    geo = node.geometry()
-    for prim in geo.prims():
-        if not prim.stringAttribValue("region"):
-            prim.setAttribValue("region", Region.BASEBUFFERMEMBRANE)
-    deduplicate_point_attributes(geo, "id", outer_loop_ids(), keep_first=False)
-
-def _cleanup_buffer_attributes(node: hou.SopNode) -> None:
-    geo = node.geometry()
-    remove_groups(geo, edge_groups="tmp_outer_boundary")
-
-
-def inset_membrane(parent: hou.SopNode, coxa: hou.SopNode) -> hou.SopNode:
-    attr_prepared = sopify(parent, coxa, _prepare_membrane_attributes)
-    front_prepared = sopify(parent, attr_prepared, _prepare_front_membrane)
-    maxilla_prepared = sopify(parent, front_prepared, _prepare_maxilla_membrane)
-    side_prepared = sopify(parent, maxilla_prepared, _prepare_side_membrane)
-    side_split = sopify(parent, side_prepared, _identify_side_inset_split)
-
-    side = _add_membrane_polyextrude(
-        parent,
-        "inset_side_membrane",
-        side_split,
-        f"@region={Region.COXA}",
-        split_type=1,
-        split_group="tmp_side_split",
-    )
-    classify_side = sopify(parent, side, _classify_side)
-
-    front = _add_membrane_polyextrude(
-        parent,
-        "inset_front_membrane",
-        classify_side,
-        f"@region={Region.LABIUM}",
-        split_type=1,
-    )
-    classify_front = sopify(parent, front, _classify_front)
-
-    maxilla = _add_membrane_polyextrude(
-        parent,
-        "inset_maxilla",
-        classify_front,
-        f"@region={Region.MAXILLA}",
-        split_type=0,
-    )
-    classify_maxilla = sopify(parent, maxilla, _classify_maxilla)
-
-    cleanup = sopify(parent, classify_maxilla, _cleanup_temp_attributes)
-    return cleanup
-
-def _add_membrane_polyextrude(
-    parent: hou.SopNode,
-    name: str,
-    source: hou.SopNode,
-    group: str,
-    split_type: int = 1,
-    split_group: str | None = None,
-) -> hou.SopNode:
-    extrude = parent.createNode("polyextrude", name)
-    extrude.setInput(0, source)
-    extrude.parm("group").set(group)
-    extrude.parm("splittype").set(split_type)
-    if split_group:
-        extrude.parm("usesplitgroup").set(1)
-        extrude.parm("splitgroup").set(split_group)
-    extrude.parm("inset").setExpression('ch("../membrane_ratio")')
-    extrude.parm("uselocalinsetscaleattrib").set(1)
-    extrude.parm("localinsetscaleattrib").set("tmp_insetscale")
-    return extrude
-
-def _prepare_membrane_attributes(node: hou.SopNode) -> None:
-    geo = node.geometry()
-    add_prim_attr(geo, "tmp_insetscale", 0.0)
-
-def _prepare_front_membrane(node: hou.SopNode) -> None:
-    geo = node.geometry()
-    for prim in geo.prims():
-        if prim.stringAttribValue("region") != Region.LABIUM:
-            continue
-        pts = prim.points()
-        prim.setAttribValue("tmp_insetscale", (pts[0].position() - pts[2].position()).length())
-
-def _prepare_maxilla_membrane(node: hou.SopNode) -> None:
-    geo = node.geometry()
-    prims = [
-        p
-        for p in geo.prims()
-        if p.stringAttribValue("region") == Region.MAXILLA
-    ]
-    assert len(prims) == 2, f"Expected 2 maxilla prims, got {len(prims)}"
-    pivot, outer = point_from_geo(geo, sternumrim(1), basesternum(1, 1))
-    for pm in prims:
-        pm.setAttribValue("tmp_insetscale", (pivot.position() - outer.position()).length())
-
-def _prepare_side_membrane(node: hou.SopNode) -> None:
-    geo = node.geometry()
-
-    for prim in geo.prims():
-        pts = prim.points()
-        midpoint = next(
-            (p for p in pts if p.stringAttribValue("id").startswith(STERNUM_ID.STERNUMMIDDLE)),
-            None,
-        )
-        if midpoint is None:
-            continue
-
-        midpoint_index = pts.index(midpoint)
-        outer_index = {
-            0: 3,
-            1: 2,
-            2: 1,
-            3: 0,
-        }.get(midpoint_index)
-        if outer_index is None:
-            continue
-
-        outer = pts[outer_index]
-        prim.setAttribValue("tmp_insetscale", (midpoint.position() - outer.position()).length())
-
-def _identify_side_inset_split(node: hou.SopNode) -> None:
-    geo = node.geometry()
-    find_quad_polyextrude_splits(
+    _inset_coxa_membranes(geo, points, ratio)
+    _inset_membrane_region(
         geo,
-        [
-            point
-            for point in geo.points()
-            if point.stringAttribValue("id").startswith(STERNUM_ID.STERNUMMIDDLE)
-        ],
-        "tmp_side_split",
+        Region.LABIUM,
+        Region.LABIUMSOCKET,
+        Region.LABIUMMEMBRANE,
+        (points[sternumrim(0)], points[basesternum(0)]),
+        ratio,
+        follow_existing_edge=False,
+    )
+    _inset_membrane_region(
+        geo,
+        Region.MAXILLA,
+        Region.MAXILLASOCKET,
+        Region.MAXILLAMEMBRANE,
+        (points[sternumrim(1)], points[basesternum(1, 1)]),
+        ratio,
+        follow_existing_edge=False,
     )
 
-def _classify_side(node: hou.SopNode) -> None:
-    _classify_membrane_and_socket(node, Region.COXASOCKET, Region.COXAMEMBRANE, 2)
-
-def _classify_front(node: hou.SopNode) -> None:
-    _classify_membrane_and_socket(node, Region.LABIUMSOCKET, Region.LABIUMMEMBRANE, 2)
-
-def _classify_maxilla(node: hou.SopNode) -> None:
-    _classify_membrane_and_socket(node, Region.MAXILLASOCKET, Region.MAXILLAMEMBRANE)
-
-def _classify_membrane_and_socket(
-    node: hou.SopNode,
-    socket_prefix: str,
-    membrane_prefix: str,
-    horizontal_pack_size: int = 1,
-) -> None:
-    attribute_after_inset(node, "region", socket_prefix, membrane_prefix, horizontal_pack_size)
-
-def _cleanup_temp_attributes(node: hou.SopNode) -> None:
-    geo = node.geometry()
-    remove_attrs(geo, prim_attribs="tmp_insetscale")
-    remove_groups(geo, edge_groups="tmp_side_split")
+    _classify_maxilla_membrane_points(geo)
     deduplicate_id_attr(geo, None, add_affix=False)
+
+def _inset_coxa_membranes(geo: hou.Geometry, points: dict[str, hou.Point], ratio: float) -> None:
+    side_indices = (*range(1, 5), *range(-4, 0))
+    for idx in side_indices:
+        sm = points[sternum.sternummiddle(idx)]
+        bsm = points[basesternummiddle(idx)]
+        dist = ratio * sm.position().distanceTo(bsm.position())
+        prims = [
+            prim for prim in sm.prims()
+            if prim.stringAttribValue("region") == Region.COXA
+        ]
+        inner_prims = inset(prims, dist, use_ratio=False, follow_existing_edge=True)
+        for prim in inner_prims:
+            prim.setAttribValue("region", Region.COXASOCKET)
+
+    for prim in geo.prims():
+        if prim.stringAttribValue("region") == Region.COXA:
+            prim.setAttribValue("region", Region.COXAMEMBRANE)
+
+def _inset_membrane_region(
+    geo: hou.Geometry,
+    region: Region,
+    socket_region: Region,
+    membrane_region: Region,
+    baseline: tuple[hou.Point, hou.Point],
+    ratio: float,
+    follow_existing_edge: bool = True,
+) -> None:
+    inner_pt, outer_pt = baseline
+    dist = ratio * inner_pt.position().distanceTo(outer_pt.position())
+    prims = [p for p in geo.prims() if p.stringAttribValue("region") == region]
+    inner_prims = inset(prims, dist, use_ratio=False, follow_existing_edge=follow_existing_edge)
+    for prim in inner_prims:
+        prim.setAttribValue("region", socket_region)
+    for prim in geo.prims():
+        if prim.stringAttribValue("region") == region:
+            prim.setAttribValue("region", membrane_region)
+
+def _classify_maxilla_membrane_points(geo: hou.Geometry) -> None:
+    points_by_id_dict = points_by_attr(geo, "id", skip_blank=True)
+    for side in (1, -1):
+        pts = points_by_id_dict.get(basemaxilla(side))
+        if pts and len(pts) > 1:
+            inset_pt = max(pts, key=lambda pt: pt.number())
+            inset_pt.setAttribValue("id", basemaxillamembrane(side))
+
+
+def extrude_base_buffer(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    parent = get_parent(node)
+
+    dist = get_float_parm(parent, "membrane_ratio") * 50
+    outer_prims = outset(list(geo.prims()), dist, use_ratio=False)
+    for prim in outer_prims:
+        prim.setAttribValue("region", Region.BASEBUFFERMEMBRANE)
+
+    deduplicate_point_attributes(geo, "id", outer_loop_ids(), keep_first=False)

@@ -36,12 +36,12 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     pedicel = sopify(base, maxilla, base_sops.fill_pedicel_membrane)
 
     fused_pedicel = add_fuse(base, "fuse_pedicel_membrane", pedicel)
-    buffered = base_sops.extrude_base_buffer(base, fused_pedicel)
-    membrane = base_sops.inset_membrane(base, buffered)
+    membrane = sopify(base, fused_pedicel, base_sops.inset_membrane)
 
     merge = add_merge(base, "merge_sternum_and_coxa", membrane, sternum)
     fuse = add_fuse(base, "fuse_sternum_and_coxa", merge)
-    add_output(base, "OUT_BASE", fuse)
+    buffered = sopify(base, fuse, base_sops.extrude_base_buffer)
+    add_output(base, "OUT_BASE", buffered)
 
     base.layoutChildren()
     return base
