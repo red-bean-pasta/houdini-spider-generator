@@ -91,7 +91,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
     )
     add_heading(
         legs,
-        "Other Legs",
+        "Other Main Legs",
     )
     add_float_param(
         legs,
@@ -108,6 +108,19 @@ def _add_parameters(legs: hou.OpNode) -> None:
         (0.85, 0.85, 1.1),
         (0.0, None),
         hou.parmNamingScheme.Base1,
+    )
+    add_heading(
+        legs,
+        "Pedipalp",
+    )
+    add_float_param(
+        legs,
+        "pedipalp_segment_length_ratios",
+        5,
+        (0.8, 3.75, 3, 2.5, 1.5),
+        (0.0, None),
+        hou.parmNamingScheme.Base1,
+        help="Ratio relative to pedipalp's own coxa length.",
     )
 
 
