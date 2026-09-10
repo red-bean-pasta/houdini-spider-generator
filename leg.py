@@ -3,10 +3,12 @@ import math
 import hou
 
 import base_sops
-from base_sops import basemaxillamembrane
-from helper import point_from_geo
+import pedipalp
 from leg_builder import LegParam, build_leg
-from pedipalp import build_pedipalp, position_pedipalp, adjust_pedipalp_coxa
+from pedipalp import (
+    build_pedipalp,
+    position_pedipalp,
+)
 from utilities.common import (
     add_float_param,
     add_heading,
@@ -45,8 +47,9 @@ def build(
 
     built_pedipalp = sopify(legs, extracted, build_pedipalp)
     positioned_pedipalp = sopify(legs, built_pedipalp, position_pedipalp)
-    adjusted_pedipalp = sopify(legs, positioned_pedipalp, adjust_pedipalp_coxa)
-    merged_legs = add_merge(legs, "merge_legs_and_pedipalp", extruded, adjusted_pedipalp)
+    support_deleted_pedipalp = sopify(legs, positioned_pedipalp, pedipalp.delete_coxa_supports)
+    base_trapezoid = sopify(legs, support_deleted_pedipalp, pedipalp.prepare_coxa_corners)
+    merged_legs = add_merge(legs, "merge_legs_and_pedipalp", extruded, base_trapezoid)
 
     cleaned = sopify(legs, merged_legs, _remove_tmp_attributes)
     fused = add_fuse(legs, "fuse_sockets", cleaned)
@@ -195,15 +198,10 @@ def _extract_right_coxa(node: hou.SopNode) -> None:
     ]
     assert len(socket_prims) == 8, f"Expected 8 right coxa socket prims, got {len(socket_prims)}"
 
-    pedipalp_points = point_from_geo(
-        geo,
-        basemaxillamembrane(1),
-        basemaxillamembrane(2),
-        basemaxillamembrane(3),
-        basemaxillamembrane(4),
+    used_points = (
+        {v.point() for prim in socket_prims for v in prim.vertices()}
+        | pedipalp.prepare(geo)
     )
-
-    used_points = {v.point() for prim in socket_prims for v in prim.vertices()} | set(pedipalp_points)
     unused_points = [p for p in geo.points() if p not in used_points]
     geo.deletePoints(unused_points)
 

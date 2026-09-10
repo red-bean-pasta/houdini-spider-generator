@@ -1,3 +1,5 @@
+import math
+
 import hou
 
 from base_sops import basemaxillamembrane
@@ -5,17 +7,35 @@ from helper import affix_id, point_from_geo, set_point_id
 from leg_builder import LegParam, build_leg, Region
 from utilities.common import (
     MessagedResult,
+    fill_face,
     get_control,
     get_params,
     get_parent,
-    rotation_to,
+    rotation_to, points_by_attr,
 )
 
 
-def _tmp_coxa(*i) -> str:
-    return affix_id("tmp_pedipalpcoxa", *i)
+def _tmp_coxa_start(*i) -> str:
+    return affix_id("tmp_pedipalpcoxastart", *i)
+def _tmp_coxa_end(*i) -> str:
+    return affix_id("tmp_pedipalpcoxaend", *i)
 def _tmp_coxa_support(*i) -> str:
     return affix_id("tmp_pedipalpcoxasupport", *i)
+def _tmp_coxa_corner(*i) -> str:
+    return affix_id("tmp_pedipalpcoxacorner", *i)
+
+
+def prepare(
+    geo: hou.Geometry
+) -> set[hou.Point]:
+    retained = point_from_geo(
+        geo,
+        basemaxillamembrane(1),
+        basemaxillamembrane(2),
+        basemaxillamembrane(3),
+        basemaxillamembrane(4),
+    )
+    return set(retained)
 
 
 def build_pedipalp(
@@ -33,7 +53,7 @@ def position_pedipalp(
     pedipalp_pts = _get_pedipalp_points(geo)
     top_right_pt, m1, m3, m4 = point_from_geo(
         geo,
-        _tmp_coxa(3),
+        _tmp_coxa_start(3),
         basemaxillamembrane(1),
         basemaxillamembrane(3),
         basemaxillamembrane(4),
@@ -48,30 +68,75 @@ def position_pedipalp(
         pt.setPosition(q.rotate(pt.position()) + origin)
 
 
-def adjust_pedipalp_coxa(
+def delete_coxa_supports(
     node: hou.SopNode,
 ) -> None:
     geo = node.geometry()
-    c1, c2, c4, s1, s2, s4, m1, m2, m3 = point_from_geo(
+    pts = [p for p in geo.points() if p.stringAttribValue("id").startswith(_tmp_coxa_support())]
+    geo.deletePoints(list(pts))
+
+
+def prepare_coxa_corners(
+    node: hou.SopNode,
+) -> None:
+    geo = node.geometry()
+    dist = _add_base_trapezoid(geo)
+    _add_base_corner_point(geo, dist)
+
+def _add_base_corner_point(
+        geo: hou.Geometry,
+        dist: float,
+) -> None:
+    s3, e3, m1 = point_from_geo(
         geo,
-        _tmp_coxa(1),
-        _tmp_coxa(2),
-        _tmp_coxa(4),
-        _tmp_coxa_support(1),
-        _tmp_coxa_support(2),
-        _tmp_coxa_support(4),
+        _tmp_coxa_start(3),
+        _tmp_coxa_end(3),
+        basemaxillamembrane(1),
+    )
+    d = (e3.position() - s3.position()).normalized()
+    pos = m1.position() + d * dist
+    p = geo.createPoint()
+    p.setPosition(pos)
+    set_point_id(p, _tmp_coxa_corner(3))
+
+def _add_base_trapezoid(
+    geo: hou.Geometry
+) -> float:
+    m1, m2, m4 = point_from_geo(
+        geo,
         basemaxillamembrane(1),
         basemaxillamembrane(2),
-        basemaxillamembrane(3),
+        basemaxillamembrane(4),
     )
-    for c_pt, s_pt, pos in (
-        (c4, s4, m1.position()),
-        (c2, s2, m3.position()),
-        (c1, s1, (m2.position() + m1.position()) * 0.5),
-    ):
-        offset = pos - c_pt.position()
-        c_pt.setPosition(pos)
-        s_pt.setPosition(s_pt.position() + offset)
+    neg_z = hou.Vector3(0.0, 0.0, -1.0)
+
+    n_socket = (m2.position() - m1.position()).cross(m4.position() - m1.position()).normalized()
+    if n_socket.dot(neg_z) < 0:
+        n_socket = -n_socket
+
+    pos_m1 = m1.position()
+    pos_m2 = m2.position()
+    edge = pos_m2 - pos_m1
+    length = edge.length()
+    u = edge.normalized()
+
+    n = hou.Quaternion(45.0, u).rotate(n_socket)
+    v = n.cross(u).normalized()
+
+    height = math.sqrt(3) / 4.0 * length
+    pos_p3 = pos_m1 + u * (0.75 * length) + v * height
+    pos_p4 = pos_m1 + u * (0.25 * length) + v * height
+
+    p3 = geo.createPoint()
+    p3.setPosition(pos_p3)
+    set_point_id(p3, _tmp_coxa_corner(1))
+    p4 = geo.createPoint()
+    p4.setPosition(pos_p4)
+    set_point_id(p4, _tmp_coxa_corner(2))
+
+    fill_face(geo, [m1, m2, p3, p4], reverse=True)
+
+    return height
 
 
 def _build_cubes(
@@ -83,11 +148,18 @@ def _build_cubes(
     (all_seg_pts, _, _), _ = result
 
     # 1: Bottom left, 2: Top left, 3: Top right, 4: Bottom right
-    coxa_corners = (all_seg_pts[3], all_seg_pts[1], all_seg_pts[0], all_seg_pts[2])
-    support_corners = (all_seg_pts[7], all_seg_pts[5], all_seg_pts[4], all_seg_pts[6])
-    for i, (c_pt, s_pt) in enumerate(zip(coxa_corners, support_corners), start=1):
-        set_point_id(c_pt, _tmp_coxa(i))
-        set_point_id(s_pt, _tmp_coxa_support(i))
+    start_corners = (all_seg_pts[3], all_seg_pts[1], all_seg_pts[0], all_seg_pts[2])
+    end_corners = (all_seg_pts[12 + 3], all_seg_pts[12 + 1], all_seg_pts[12 + 0], all_seg_pts[12 + 2])
+    for i, (s_pt, e_pt) in enumerate(
+        zip(start_corners, end_corners),
+        start=1
+    ):
+        set_point_id(s_pt, _tmp_coxa_start(i))
+        set_point_id(e_pt, _tmp_coxa_end(i))
+
+    support_corners = all_seg_pts[4: 12]
+    for i, ss_pt in enumerate(support_corners, start=1):
+        set_point_id(ss_pt, _tmp_coxa_support(i))
 
     return result
 
