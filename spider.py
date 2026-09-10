@@ -57,9 +57,10 @@ def build(parent: hou.OpNode) -> hou.SopNode:
 
     pedicel = build_pedicel(spider, merged_c_a)
     merged_ca_p = add_merge(spider, "merge_main_and_pedicel", merged_c_a, pedicel)
-    removed_sockets = sopify(spider, merged_ca_p, _remove_coxa_sockets)
+    fused_ca_p = add_fuse(spider, "fuse_main_and_pedicel", merged_ca_p)
+    removed_sockets = sopify(spider, fused_ca_p, _remove_coxa_sockets)
 
-    legs = build_legs(spider, merged_ca_p)
+    legs = build_legs(spider, fused_ca_p)
     merged_all = add_merge(spider, "merge_main_and_legs", removed_sockets, legs)
     fused = add_fuse(spider, "fuse_main_and_legs", merged_all)
 
