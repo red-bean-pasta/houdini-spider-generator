@@ -6,8 +6,8 @@ import base_sops
 import pedipalp
 from leg_builder import LegParam, build_leg
 from pedipalp import (
-    build_pedipalp,
-    position_pedipalp,
+    _build_basic,
+    _position_basic,
 )
 from utilities.common import (
     add_float_param,
@@ -45,11 +45,8 @@ def build(
     extracted = sopify(legs, legs.indirectInputs()[0], _extract_right_coxa)
     extruded = sopify(legs, extracted, _extrude_legs)
 
-    built_pedipalp = sopify(legs, extracted, build_pedipalp)
-    positioned_pedipalp = sopify(legs, built_pedipalp, position_pedipalp)
-    support_deleted_pedipalp = sopify(legs, positioned_pedipalp, pedipalp.delete_coxa_supports)
-    base_trapezoid = sopify(legs, support_deleted_pedipalp, pedipalp.prepare_coxa_corners)
-    merged_legs = add_merge(legs, "merge_legs_and_pedipalp", extruded, base_trapezoid)
+    pedipalp_built = pedipalp.build(legs, extracted)
+    merged_legs = add_merge(legs, "merge_legs_and_pedipalp", extruded, pedipalp_built)
 
     cleaned = sopify(legs, merged_legs, _remove_tmp_attributes)
     fused = add_fuse(legs, "fuse_sockets", cleaned)

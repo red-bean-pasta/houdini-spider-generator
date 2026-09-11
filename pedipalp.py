@@ -11,8 +11,10 @@ from utilities.common import (
     get_control,
     get_params,
     get_parent,
-    rotation_to, points_by_attr,
+    rotation_to,
+    add_global_attr,
 )
+from utilities.nodes import sopify
 
 
 def _tmp_coxa_start(*i) -> str:
@@ -23,6 +25,8 @@ def _tmp_coxa_support(*i) -> str:
     return affix_id("tmp_pedipalpcoxasupport", *i)
 def _tmp_coxa_corner(*i) -> str:
     return affix_id("tmp_pedipalpcoxacorner", *i)
+def _tmp_coxa_base_height() -> str:
+    return "tmp_coxabaseheight"
 
 
 def prepare(
@@ -38,7 +42,20 @@ def prepare(
     return set(retained)
 
 
-def build_pedipalp(
+def build(
+    parent: hou.SopNode,
+    input_node: hou.SopNode,
+) -> hou.SopNode:
+    built_pedipalp = sopify(parent, input_node, _build_basic)
+    positioned_pedipalp = sopify(parent, built_pedipalp, _position_basic)
+    support_deleted_pedipalp = sopify(parent, positioned_pedipalp, _delete_start_coxa_supports)
+    base_trapezoid = sopify(parent, support_deleted_pedipalp, _prepare_coxa_corners)
+    bottom_right_face_filled = sopify(parent, base_trapezoid, _fill_bottom_right_face)
+    back_filled = sopify(parent, bottom_right_face_filled, _fill_back_face)
+    return back_filled
+
+
+def _build_basic(
     node: hou.SopNode,
 ) -> None:
     _, warnings = _build_cubes(node)
@@ -46,7 +63,7 @@ def build_pedipalp(
         node.addWarning(w)
 
 
-def position_pedipalp(
+def _position_basic(
     node: hou.SopNode,
 ) -> None:
     geo = node.geometry()
@@ -68,15 +85,23 @@ def position_pedipalp(
         pt.setPosition(q.rotate(pt.position()) + origin)
 
 
-def delete_coxa_supports(
+def _delete_start_coxa_supports(
     node: hou.SopNode,
 ) -> None:
-    geo = node.geometry()
-    pts = [p for p in geo.points() if p.stringAttribValue("id").startswith(_tmp_coxa_support())]
+    geo: hou.Geometry = node.geometry()
+    pts = [p for p in geo.points() if p.stringAttribValue("id").startswith(_tmp_coxa_support(1))]
     geo.deletePoints(list(pts))
 
+    starts = point_from_geo(
+        geo,
+        _tmp_coxa_start(1),
+        _tmp_coxa_start(2),
+        _tmp_coxa_start(4),
+    )
+    geo.deletePoints(list(starts))
 
-def prepare_coxa_corners(
+
+def _prepare_coxa_corners(
     node: hou.SopNode,
 ) -> None:
     geo = node.geometry()
@@ -135,8 +160,62 @@ def _add_base_trapezoid(
     set_point_id(p4, _tmp_coxa_corner(2))
 
     fill_face(geo, [m1, m2, p3, p4], reverse=True)
+    add_global_attr(geo, _tmp_coxa_base_height(), height)
 
     return height
+
+
+def _fill_bottom_right_face(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    c4, c5 = _add_bottom_right_face_point(geo)
+    es4, c2, c3, m1 = point_from_geo(
+        geo,
+        _tmp_coxa_support(2, 4),
+        _tmp_coxa_corner(2),
+        _tmp_coxa_corner(3),
+        basemaxillamembrane(1),
+    )
+    fill_face(geo, [es4, c4, c3, c5])
+    fill_face(geo, [c4, c3, m1, c2], True)
+
+def _add_bottom_right_face_point(geo: hou.Geometry) -> tuple[hou.Point, hou.Point]:
+    dist = geo.attribValue(_tmp_coxa_base_height())
+    e1, e4= point_from_geo(
+        geo,
+        _tmp_coxa_end(1),
+        _tmp_coxa_end(4),
+    )
+
+    direction = _get_coxa_direction(geo)
+
+    start_position = e1.position() * 1 / 3 + e4.position() * 2 / 3
+    target_position = start_position + direction * dist
+    p1 = geo.createPoint()
+    p1.setPosition(target_position)
+    set_point_id(p1, _tmp_coxa_corner(4))
+
+    start_position = e4.position()
+    target_position = start_position + direction * dist
+    p2 = geo.createPoint()
+    p2.setPosition(target_position)
+    set_point_id(p2, _tmp_coxa_corner(5))
+
+    return p1, p2
+
+
+def _fill_back_face(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    s3, es3, es4, c5, c3, m1 = point_from_geo(
+        geo,
+        _tmp_coxa_start(3),
+        _tmp_coxa_support(2, 3),
+        _tmp_coxa_support(2, 4),
+        _tmp_coxa_corner(5),
+        _tmp_coxa_corner(3),
+        basemaxillamembrane(1),
+    )
+    fill_face(geo, [es3, es4, c5, s3])
+    fill_face(geo, [s3, c5, c3, m1])
 
 
 def _build_cubes(
@@ -147,19 +226,22 @@ def _build_cubes(
     result = build_leg(geo, param)
     (all_seg_pts, _, _), _ = result
 
+    def _get_ordered_loop(index: int) -> tuple[hou.Point, ...]:
+        return all_seg_pts[index * 4 + 3], all_seg_pts[index * 4 + 1], all_seg_pts[index * 4 + 0], all_seg_pts[index * 4 + 2]
+
     # 1: Bottom left, 2: Top left, 3: Top right, 4: Bottom right
-    start_corners = (all_seg_pts[3], all_seg_pts[1], all_seg_pts[0], all_seg_pts[2])
-    end_corners = (all_seg_pts[12 + 3], all_seg_pts[12 + 1], all_seg_pts[12 + 0], all_seg_pts[12 + 2])
-    for i, (s_pt, e_pt) in enumerate(
-        zip(start_corners, end_corners),
+    start_corners = _get_ordered_loop(0)
+    end_corners = _get_ordered_loop(3)
+    start_support_corners = _get_ordered_loop(1)
+    end_support_corners = _get_ordered_loop(2)
+    for i, (s_pt, e_pt, ss_pt, es_pt) in enumerate(
+        zip(start_corners, end_corners, start_support_corners, end_support_corners),
         start=1
     ):
         set_point_id(s_pt, _tmp_coxa_start(i))
         set_point_id(e_pt, _tmp_coxa_end(i))
-
-    support_corners = all_seg_pts[4: 12]
-    for i, ss_pt in enumerate(support_corners, start=1):
-        set_point_id(ss_pt, _tmp_coxa_support(i))
+        set_point_id(ss_pt, _tmp_coxa_support(1, i))
+        set_point_id(es_pt, _tmp_coxa_support(2, i))
 
     return result
 
@@ -214,3 +296,12 @@ def _get_pedipalp_points(
     if not pts:
         return list(geo.points())
     return list(pts)
+
+
+def _get_coxa_direction(geo: hou.Geometry) -> hou.Vector3:
+    es4, c3 = point_from_geo(
+        geo,
+        _tmp_coxa_support(2, 4),
+        _tmp_coxa_corner(3),
+    )
+    return (c3.position() - es4.position()).normalized()
