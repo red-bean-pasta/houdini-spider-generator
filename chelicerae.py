@@ -554,49 +554,30 @@ def _add_intermediate_section(
     start_section, end_pivot, _, end_surface_normal = _get_end_section_frame(geo, parent)
     offset_baseline = start_section.offset_baseline
 
-    normal0 = start_section.along
-    normal2 = -end_surface_normal
-
-    middle_pivot = hou.Vector3(
-        start_section.pivot.x() + offset_baseline.x() * middle_section_offset.x(),
-        start_section.pivot.y() + (end_pivot.y() - start_section.pivot.y()) * middle_section_height_ratio,
-        start_section.pivot.z() - offset_baseline.z() * middle_section_offset.y(),
+    middle_pivot = _get_middle_section_pivot(
+        start_section,
+        end_pivot,
+        offset_baseline,
+        middle_section_offset,
+        middle_section_height_ratio,
     )
-
-    evaluate = interpolate_elliptical(
+    pivot, direction, normal, weights = _get_intermediate_section_frame(
         start_section.pivot,
         middle_pivot,
         end_pivot,
-        normal0,
-        normal2,
+        start_section.along,
+        end_surface_normal,
+        start_section.normal,
+        factor,
     )
-
-    along_axis = (end_pivot - start_section.pivot).normalized()
-    chord_length = (end_pivot - start_section.pivot).length()
-    middle_t = (middle_pivot - start_section.pivot).dot(along_axis) / chord_length
-
-    f_upper = min(factor * 2.0, 1.0)
-    f_lower = max(factor * 2.0 - 1.0, 0.0)
-    w_start = 1.0 - f_upper
-    w_mid = f_upper - f_lower
-    w_end = f_lower
-
-    t = middle_t * w_mid + w_end
-
-    pivot, direction = evaluate(t)
-    normal = rotation_to(normal0, direction).rotate(start_section.normal)
 
     start_size = hou.Vector2(start_section.height, start_section.width)
-    middle_size = hou.Vector2(
-        start_section.height * middle_section_ratio.y(),
-        start_section.width * middle_section_ratio.x(),
+    size = _get_intermediate_section_size(
+        start_size,
+        middle_section_ratio,
+        end_section_ratio,
+        weights,
     )
-    end_size = hou.Vector2(
-        start_section.height * end_section_ratio.y(),
-        start_section.width * end_section_ratio.x(),
-    )
-
-    size = start_size * w_start + middle_size * w_mid + end_size * w_end
 
     positions = _construct_section_loop(
         pivot,
@@ -608,22 +589,101 @@ def _add_intermediate_section(
     for pos in positions:
         assert pos.x() >= 0.0, f"Section loop point at factor {factor} crossed symmetry plane (x={pos.x():.4f} < 0.0). Adjust parameters or ratio."
 
+    pts = _add_intermediate_section_points(geo, positions, id_factory)
+    fill_face(geo, pts, True)
+
+
+def _get_middle_section_pivot(
+    start_section: Section,
+    end_pivot: hou.Vector3,
+    offset_baseline: hou.Vector3,
+    middle_section_offset: hou.Vector2,
+    middle_section_height_ratio: float,
+) -> hou.Vector3:
+    return hou.Vector3(
+        start_section.pivot.x() + offset_baseline.x() * middle_section_offset.x(),
+        start_section.pivot.y() + (end_pivot.y() - start_section.pivot.y()) * middle_section_height_ratio,
+        start_section.pivot.z() - offset_baseline.z() * middle_section_offset.y(),
+    )
+
+
+def _get_intermediate_section_frame(
+    start_pivot: hou.Vector3,
+    middle_pivot: hou.Vector3,
+    end_pivot: hou.Vector3,
+    start_along: hou.Vector3,
+    end_surface_normal: hou.Vector3,
+    start_normal: hou.Vector3,
+    factor: float,
+) -> tuple[hou.Vector3, hou.Vector3, hou.Vector3, tuple[float, float, float]]:
+    evaluate = interpolate_elliptical(
+        start_pivot,
+        middle_pivot,
+        end_pivot,
+        start_along,
+        -end_surface_normal,
+    )
+
+    along_axis = (end_pivot - start_pivot).normalized()
+    chord_length = (end_pivot - start_pivot).length()
+    middle_t = (middle_pivot - start_pivot).dot(along_axis) / chord_length
+
+    f_upper = min(factor * 2.0, 1.0)
+    f_lower = max(factor * 2.0 - 1.0, 0.0)
+    w_start = 1.0 - f_upper
+    w_mid = f_upper - f_lower
+    w_end = f_lower
+    t = middle_t * w_mid + w_end
+
+    pivot, direction = evaluate(t)
+    normal = rotation_to(start_along, direction).rotate(start_normal)
+    return pivot, direction, normal, (w_start, w_mid, w_end)
+
+
+def _get_intermediate_section_size(
+    start_size: hou.Vector2,
+    middle_section_ratio: hou.Vector2,
+    end_section_ratio: hou.Vector2,
+    weights: tuple[float, float, float],
+) -> hou.Vector2:
+    w_start, w_mid, w_end = weights
+    middle_size = hou.Vector2(
+        start_size.x() * middle_section_ratio.y(),
+        start_size.y() * middle_section_ratio.x(),
+    )
+    end_size = hou.Vector2(
+        start_size.x() * end_section_ratio.y(),
+        start_size.y() * end_section_ratio.x(),
+    )
+    return start_size * w_start + middle_size * w_mid + end_size * w_end
+
+
+def _add_intermediate_section_points(
+    geo: hou.Geometry,
+    positions: list[hou.Vector3],
+    id_factory: Callable[[int], str] | None,
+) -> list[hou.Point]:
     if id_factory:
-        pts = [
+        return [
             add_id_point(geo, pos, id_factory(j))
             for j, pos in enumerate(positions, start=1)
         ]
-    else:
-        pts = [geo.createPoint() for _ in positions]
-        for pt, pos in zip(pts, positions):
-            pt.setPosition(pos)
 
-    fill_face(geo, pts, True)
+    pts = [geo.createPoint() for _ in positions]
+    for pt, pos in zip(pts, positions):
+        pt.setPosition(pos)
+    return pts
 
 
 def _connect_sections(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
 
+    _remove_section_cap_faces(geo)
+    _connect_membrane_to_start_support(geo)
+    _bridge_chelicerae_section_loops(geo)
+
+
+def _remove_section_cap_faces(geo: hou.Geometry) -> None:
     def is_cap_face(prim: hou.Prim) -> bool:
         if prim.stringAttribValue("region") == Region.FANG:
             return False
@@ -636,6 +696,8 @@ def _connect_sections(node: hou.SopNode) -> None:
     middle_prims = [prim for prim in geo.prims() if is_cap_face(prim)]
     geo.deletePrims(middle_prims, keep_points=True)
 
+
+def _connect_membrane_to_start_support(geo: hou.Geometry) -> None:
     # Connect socket membrane (4 corner points) to start membrane support (4 points)
     m1, m3, m4, m6 = point_from_geo(
         geo,
@@ -651,13 +713,6 @@ def _connect_sections(node: hou.SopNode) -> None:
         cheliceraestartmembranesupport(3),
         cheliceraestartmembranesupport(4),
     )
-    s1, s2, s3, s4 = point_from_geo(
-        geo,
-        cheliceraestart(1),
-        cheliceraestart(2),
-        cheliceraestart(3),
-        cheliceraestart(4),
-    )
 
     # Medial face: (m1, m6, ss2, ss1)
     fill_face(geo, [m1, m6, ss2, ss1], True)
@@ -668,8 +723,16 @@ def _connect_sections(node: hou.SopNode) -> None:
     # Bottom face: (m3, m1, ss1, ss4)
     fill_face(geo, [m3, m1, ss1, ss4], True)
 
+
+def _bridge_chelicerae_section_loops(geo: hou.Geometry) -> None:
     tube_loops = [
-        (s1, s2, s3, s4),
+        point_from_geo(
+            geo,
+            cheliceraestart(1),
+            cheliceraestart(2),
+            cheliceraestart(3),
+            cheliceraestart(4),
+        ),
         point_from_geo(geo, *(cheliceraeintermediate(0.25, j) for j in range(1, 5))),
         point_from_geo(geo, *(cheliceraemiddle(j) for j in range(1, 5))),
         point_from_geo(geo, *(cheliceraeintermediate(0.75, j) for j in range(1, 5))),
@@ -830,6 +893,23 @@ def _adjust_head_chelicerae_depth(node: hou.SopNode) -> None:
 def _inset_chelicerae_support_loop(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
 
+    support_prims = _get_chelicerae_support_strip_prims(geo)
+
+    # Inset distance evaluated from the start membrane gap (1/3 of gap)
+    start_membrane_support, start_point = point_from_geo(
+        geo,
+        cheliceraestartmembranesupport(2),
+        cheliceraestart(2),
+    )
+    start_membrane_gap = start_membrane_support.position().distanceTo(start_point.position())
+    dist = start_membrane_gap / 3.0
+    inset(support_prims, dist, use_ratio=False)
+
+    _adjust_chelicerae_support_loop(node)
+    deduplicate_id_attr(geo, None, keep_first=True)
+
+
+def _get_chelicerae_support_strip_prims(geo: hou.Geometry) -> list[hou.Prim]:
     # Boundary vertices along the upper-medial edge (#2) of the chelicera tube
     medial_upper_points = point_from_geo(
         geo,
@@ -870,20 +950,7 @@ def _inset_chelicerae_support_loop(node: hou.SopNode) -> None:
             side_points[1],
         )
     ]
-
-    # Inset distance evaluated from the start membrane gap (1/3 of gap)
-    start_membrane_support, start_point = point_from_geo(
-        geo,
-        cheliceraestartmembranesupport(2),
-        cheliceraestart(2),
-    )
-    start_membrane_gap = start_membrane_support.position().distanceTo(start_point.position())
-    dist = start_membrane_gap / 3.0
-    inset(left_prims + right_prims, dist, use_ratio=False)
-
-    _adjust_chelicerae_support_loop(node)
-
-    deduplicate_id_attr(geo, None, keep_first=True)
+    return left_prims + right_prims
 
 def _adjust_chelicerae_support_loop(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()

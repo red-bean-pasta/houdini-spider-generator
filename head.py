@@ -342,6 +342,13 @@ def _fill_back_loop_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
     add_prim_attr(geo, "region", "")
 
+    _fill_head_front_faces(geo)
+    _add_head_front_pentagon(geo)
+    _fill_head_top_and_back_faces(geo)
+    set_prim_attr_where_blank(geo, "region", Region.HEADTOP)
+
+
+def _fill_head_front_faces(geo: hou.Geometry) -> None:
     fill_face_by_id_with_attr(
         geo,
         (
@@ -381,6 +388,8 @@ def _fill_back_loop_faces(node: hou.SopNode) -> None:
         True,
     )
 
+
+def _add_head_front_pentagon(geo: hou.Geometry) -> None:
     hf0, hf1, hs2, hs1, hs0 = point_from_geo(
         geo,
         headfront(0),
@@ -397,6 +406,8 @@ def _fill_back_loop_faces(node: hou.SopNode) -> None:
     set_point_id(midpoint, headfrontmid(0))
     set_point_id(floatpoint, headfrontfloat(1))
 
+
+def _fill_head_top_and_back_faces(geo: hou.Geometry) -> None:
     faces = {
         (
             headfront(0),
@@ -426,8 +437,6 @@ def _fill_back_loop_faces(node: hou.SopNode) -> None:
 
     for face, (reverse, region) in faces.items():
         fill_face_by_id_with_attr(geo, face, "region", region, reverse)
-
-    set_prim_attr_where_blank(geo, "region", Region.HEADTOP)
 
 
 def _fill_support_loop_faces(node: hou.SopNode) -> None:
@@ -465,21 +474,48 @@ def _fill_side_faces(node: hou.SopNode) -> None:
     back_points = right_side[:center_index]
     assert len(front_points) == len(back_points), "Expected matching front and back sternum loops"
 
+    front_ratios, back_ratios = _get_head_side_layer_ratios(
+        center_position,
+        front_points,
+        back_points,
+    )
+    head_side_points = _get_head_side_reference_points(points)
+    side_points = _add_head_side_layer_points(
+        geo,
+        center_position,
+        head_side_points,
+        front_ratios,
+        back_ratios,
+    )
+    current_points = _fill_head_side_layer_faces(
+        geo,
+        front_points,
+        back_points,
+        head_side_points,
+        side_points,
+    )
+    _fill_head_side_end_faces(geo, front_points, back_points, center, current_points)
+
+
+def _get_head_side_layer_ratios(
+    center_position: hou.Vector3,
+    front_points: list[hou.Point],
+    back_points: list[hou.Point],
+) -> tuple[list[float], list[float]]:
     front_offsets = [center_position - point.position() for point in front_points]
     back_offsets = [center_position - point.position() for point in back_points]
     front_outer_length = front_offsets[0].length()
     back_outer_length = back_offsets[0].length()
     assert front_outer_length > 1e-6 and back_outer_length > 1e-6, "Expected nonzero sternum side offsets"
 
-    front_ratios = [
-        offset.length() / front_outer_length
-        for offset in front_offsets[1:]
-    ]
-    back_ratios = [
-        offset.length() / back_outer_length
-        for offset in back_offsets[1:]
-    ]
+    front_ratios = [offset.length() / front_outer_length for offset in front_offsets[1:]]
+    back_ratios = [offset.length() / back_outer_length for offset in back_offsets[1:]]
+    return front_ratios, back_ratios
 
+
+def _get_head_side_reference_points(
+    points: dict[str, hou.Point],
+) -> tuple[hou.Point, hou.Point, hou.Point]:
     headfront_point = points.get(headsupport(2))
     headmiddle_point = points.get(headsupport(3))
     headback_point = points.get(headsupport(4))
@@ -488,6 +524,17 @@ def _fill_side_faces(node: hou.SopNode) -> None:
         and headmiddle_point is not None
         and headback_point is not None
     ), "Expected head side reference points"
+    return headfront_point, headmiddle_point, headback_point
+
+
+def _add_head_side_layer_points(
+    geo: hou.Geometry,
+    center_position: hou.Vector3,
+    head_side_points: tuple[hou.Point, hou.Point, hou.Point],
+    front_ratios: list[float],
+    back_ratios: list[float],
+) -> list[tuple[hou.Point, hou.Point, hou.Point]]:
+    headfront_point, headmiddle_point, headback_point = head_side_points
     headfront_position = headfront_point.position()
     headmiddle_position = headmiddle_point.position()
     headback_position = headback_point.position()
@@ -508,10 +555,17 @@ def _fill_side_faces(node: hou.SopNode) -> None:
                 _add_named_point(geo, back_position, headsideback(layer)),
             )
         )
+    return side_points
 
-    current_front = headfront_point
-    current_middle = headmiddle_point
-    current_back = headback_point
+
+def _fill_head_side_layer_faces(
+    geo: hou.Geometry,
+    front_points: list[hou.Point],
+    back_points: list[hou.Point],
+    head_side_points: tuple[hou.Point, hou.Point, hou.Point],
+    side_points: list[tuple[hou.Point, hou.Point, hou.Point]],
+) -> tuple[hou.Point, hou.Point, hou.Point]:
+    current_front, current_middle, current_back = head_side_points
     for layer, (next_front, next_middle, next_back) in enumerate(side_points):
         fill_face(
             geo,
@@ -532,15 +586,19 @@ def _fill_side_faces(node: hou.SopNode) -> None:
         current_front = next_front
         current_middle = next_middle
         current_back = next_back
+    return current_front, current_middle, current_back
 
-    fill_face(
-        geo,
-        [current_front, front_points[-1], center, current_middle],
-    )
-    fill_face(
-        geo,
-        [current_middle, center, back_points[-1], current_back],
-    )
+
+def _fill_head_side_end_faces(
+    geo: hou.Geometry,
+    front_points: list[hou.Point],
+    back_points: list[hou.Point],
+    center: hou.Point,
+    current_points: tuple[hou.Point, hou.Point, hou.Point],
+) -> None:
+    current_front, current_middle, current_back = current_points
+    fill_face(geo, [current_front, front_points[-1], center, current_middle])
+    fill_face(geo, [current_middle, center, back_points[-1], current_back])
 
 def _sorted_right_side_points(geo: hou.Geometry) -> list[hou.Point]:
     candidates = [

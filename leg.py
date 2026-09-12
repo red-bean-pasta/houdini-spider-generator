@@ -210,32 +210,40 @@ def _get_right_coxa_socket_points(
     corner_result = []
     midpoint_result = []
     for group in groups:
-        p_set = set()
-        for prim in group:
-            for v in prim.vertices():
-                p_set.add(v.point())
-        assert len(p_set) == 6, f"Expected 6 unique points in socket group, got {len(p_set)}"
-
-        pts_prim0 = {v.point() for v in group[0].vertices()}
-        pts_prim1 = {v.point() for v in group[1].vertices()}
-        shared_pts = pts_prim0 & pts_prim1
-        outer_pts = list(p_set - shared_pts)
-        assert len(outer_pts) == 4, f"Expected 4 outer points, got {len(outer_pts)}"
-        assert len(shared_pts) == 2, f"Expected 2 shared points, got {len(shared_pts)}"
-
-        mid_y = sum(p.position().y() for p in outer_pts) / 4.0
-        top_pts = [p for p in outer_pts if p.position().y() >= mid_y]
-        btm_pts = [p for p in outer_pts if p.position().y() < mid_y]
-        assert len(top_pts) == 2 and len(btm_pts) == 2
-
-        top_pts.sort(key=lambda p: p.position().z())
-        btm_pts.sort(key=lambda p: p.position().z())
-        corner_result.append([top_pts[0], top_pts[1], btm_pts[0], btm_pts[1]])
-
-        shared_list = sorted(list(shared_pts), key=lambda p: p.position().y(), reverse=True)
-        midpoint_result.append([shared_list[0], shared_list[1]])
+        corners, midpoints = _get_socket_group_points(group)
+        corner_result.append(corners)
+        midpoint_result.append(midpoints)
 
     return corner_result, midpoint_result
+
+
+def _get_socket_group_points(
+    group: list[hou.Prim],
+) -> tuple[list[hou.Point], list[hou.Point]]:
+    group_points = {
+        vertex.point()
+        for prim in group
+        for vertex in prim.vertices()
+    }
+    assert len(group_points) == 6, f"Expected 6 unique points in socket group, got {len(group_points)}"
+
+    first_points = {vertex.point() for vertex in group[0].vertices()}
+    second_points = {vertex.point() for vertex in group[1].vertices()}
+    shared_points = first_points & second_points
+    outer_points = list(group_points - shared_points)
+    assert len(outer_points) == 4, f"Expected 4 outer points, got {len(outer_points)}"
+    assert len(shared_points) == 2, f"Expected 2 shared points, got {len(shared_points)}"
+
+    mid_y = sum(point.position().y() for point in outer_points) / 4.0
+    top_points = [point for point in outer_points if point.position().y() >= mid_y]
+    bottom_points = [point for point in outer_points if point.position().y() < mid_y]
+    assert len(top_points) == 2 and len(bottom_points) == 2
+
+    top_points.sort(key=lambda point: point.position().z())
+    bottom_points.sort(key=lambda point: point.position().z())
+    corners = [top_points[0], top_points[1], bottom_points[0], bottom_points[1]]
+    midpoints = sorted(shared_points, key=lambda point: point.position().y(), reverse=True)
+    return corners, midpoints
 
 
 def _extrude_legs(
@@ -321,43 +329,16 @@ def _adjust_coxa(
     geo = node.geometry()
     add_prim_attr(geo, "region", "")
 
-    # su: socket upper, sb: socket bottom
-    su1, su2, sb1, sb2 = socket_points
-    pos_su1, pos_su2, pos_sb1, pos_sb2 = points_to_positions(socket_points)
-    # s_mu, s_mb: socket midpoint upper / bottom
-    s_mu, s_mb = socket_midpoints
-
     coxa_start_pts = coxa_points[:4]
     coxa_start_support_pts = coxa_points[4:8]
     coxa_end_pts = coxa_points[12:16]
 
-    # pos_bu: base upper, pos_bb: base bottom
-    pos_bu2, pos_bu1, pos_bb2, pos_bb1 = points_to_positions(coxa_end_pts)
-
-    y_d1 = abs(pos_sb1.y() - pos_bb1.y())
-    xz_d1 = math.sqrt((pos_bb1.x() - pos_sb1.x()) ** 2 + (pos_bb1.z() - pos_sb1.z()) ** 2)
-    ratio1 = (y_d1 / xz_d1) if xz_d1 > 1e-6 else 0.5
-    # pos_ab: adjusted bottom, pos_au: adjusted upper
-    pos_ab1 = hou.Vector3(
-        pos_sb1.x() + (pos_bb1.x() - pos_sb1.x()) * ratio1,
-        pos_bb1.y(),
-        pos_sb1.z() + (pos_bb1.z() - pos_sb1.z()) * ratio1,
+    adjusted_support_positions = _get_adjusted_coxa_support_positions(
+        socket_points,
+        coxa_end_pts,
     )
-    y_d2 = abs(pos_sb2.y() - pos_bb2.y())
-    xz_d2 = math.sqrt((pos_bb2.x() - pos_sb2.x()) ** 2 + (pos_bb2.z() - pos_sb2.z()) ** 2)
-    ratio2 = (y_d2 / xz_d2) if xz_d2 > 1e-6 else 0.5
-    pos_ab2 = hou.Vector3(
-        pos_sb2.x() + (pos_bb2.x() - pos_sb2.x()) * ratio2,
-        pos_bb2.y(),
-        pos_sb2.z() + (pos_bb2.z() - pos_sb2.z()) * ratio2,
-    )
-    pos_au1 = (pos_su1 + pos_bu1) * 0.5
-    pos_au2 = (pos_su2 + pos_bu2) * 0.5
-
-    coxa_start_support_pts[0].setPosition(pos_au2)
-    coxa_start_support_pts[1].setPosition(pos_au1)
-    coxa_start_support_pts[2].setPosition(pos_ab2)
-    coxa_start_support_pts[3].setPosition(pos_ab1)
+    for point, position in zip(coxa_start_support_pts, adjusted_support_positions):
+        point.setPosition(position)
 
     # eu: end upper, eb: end bottom
     eu2 = coxa_start_support_pts[0]
@@ -366,13 +347,84 @@ def _adjust_coxa(
     eb1 = coxa_start_support_pts[3]
 
     support_loop_ratio = get_float_parm(get_control(node), "support_loop_ratio")
+    buffer_ratio = _get_coxa_buffer_ratio(
+        socket_points,
+        coxa_start_pts,
+        coxa_start_support_pts,
+        support_loop_ratio,
+    )
+    _build_coxa_socket_faces(
+        geo,
+        socket_points,
+        socket_midpoints,
+        coxa_start_support_pts,
+        buffer_ratio,
+    )
 
-    coxa_width = coxa_start_pts[0].position().distanceTo(coxa_start_pts[1].position())
+    geo.deletePoints(coxa_start_pts)
+
+
+def _get_adjusted_coxa_support_positions(
+    socket_points: list[hou.Point],
+    coxa_end_points: list[hou.Point],
+) -> tuple[hou.Vector3, hou.Vector3, hou.Vector3, hou.Vector3]:
+    # su: socket upper, sb: socket bottom
+    pos_su1, pos_su2, pos_sb1, pos_sb2 = points_to_positions(socket_points)
+    # pos_bu: base upper, pos_bb: base bottom
+    pos_bu2, pos_bu1, pos_bb2, pos_bb1 = points_to_positions(coxa_end_points)
+
+    pos_ab1 = _get_adjusted_bottom_coxa_position(pos_sb1, pos_bb1)
+    pos_ab2 = _get_adjusted_bottom_coxa_position(pos_sb2, pos_bb2)
+    pos_au1 = (pos_su1 + pos_bu1) * 0.5
+    pos_au2 = (pos_su2 + pos_bu2) * 0.5
+    return pos_au2, pos_au1, pos_ab2, pos_ab1
+
+
+def _get_adjusted_bottom_coxa_position(
+    socket_position: hou.Vector3,
+    base_position: hou.Vector3,
+) -> hou.Vector3:
+    y_delta = abs(socket_position.y() - base_position.y())
+    xz_delta = math.sqrt(
+        (base_position.x() - socket_position.x()) ** 2
+        + (base_position.z() - socket_position.z()) ** 2
+    )
+    ratio = (y_delta / xz_delta) if xz_delta > 1e-6 else 0.5
+    return hou.Vector3(
+        socket_position.x() + (base_position.x() - socket_position.x()) * ratio,
+        base_position.y(),
+        socket_position.z() + (base_position.z() - socket_position.z()) * ratio,
+    )
+
+
+def _get_coxa_buffer_ratio(
+    socket_points: list[hou.Point],
+    coxa_start_points: list[hou.Point],
+    support_points: list[hou.Point],
+    support_loop_ratio: float,
+) -> float:
+    pos_su1, pos_su2, _, _ = points_to_positions(socket_points)
+    pos_au2, pos_au1, _, _ = points_to_positions(support_points)
+    coxa_width = coxa_start_points[0].position().distanceTo(coxa_start_points[1].position())
     cut_length = coxa_width * support_loop_ratio
     pos_su_mid = (pos_su1 + pos_su2) * 0.5
     pos_au_mid = (pos_au1 + pos_au2) * 0.5
     dist_socket_to_support = pos_su_mid.distanceTo(pos_au_mid)
-    buffer_ratio = 1.0 - cut_length / dist_socket_to_support
+    return 1.0 - cut_length / dist_socket_to_support
+
+
+def _build_coxa_socket_faces(
+    geo: hou.Geometry,
+    socket_points: list[hou.Point],
+    socket_midpoints: list[hou.Point],
+    support_points: list[hou.Point],
+    buffer_ratio: float,
+) -> None:
+    # su: socket upper, sb: socket bottom
+    su1, su2, sb1, sb2 = socket_points
+    # s_mu, s_mb: socket midpoint upper / bottom
+    s_mu, s_mb = socket_midpoints
+    eu2, eu1, eb2, eb1 = support_points
 
     # Upper pentagon: su1, s_mu, su2, eu2, eu1
     mid_u, _, b_eu2, b_eu1 = fill_pentagon_with_buffer(
@@ -399,8 +451,6 @@ def _adjust_coxa(
     fill_face(geo, [su1, sb1, mid_b, mid_u])
     fill_face(geo, [mid_u, mid_b, b_eb1, b_eu1])
     fill_face(geo, [b_eu1, b_eb1, eb1, eu1])
-
-    geo.deletePoints(coxa_start_pts)
 
 
 def _remove_tmp_attributes(node: hou.SopNode) -> None:

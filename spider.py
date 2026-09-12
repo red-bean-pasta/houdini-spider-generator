@@ -353,11 +353,54 @@ def _reconnect_upper_sternum_pedicel_loop(
     bs5_2: hou.Point,
     size_ratio_x: float,
 ) -> tuple[hou.Point, hou.Point]:
+    _remove_upper_head_back_faces(baseend0, geo)
+    p_right, p_left = _create_upper_pedicel_support_points(
+        geo,
+        baseend0,
+        basesupportend0,
+        basesupportsternum5_1,
+        basesupportsternum5_2,
+        cp_outer_right,
+        cp_outer_left,
+        bs5_1,
+        bs5_2,
+        size_ratio_x,
+    )
+    _fill_upper_pedicel_head_back_faces(
+        geo,
+        basesupportend0,
+        baseend0,
+        cp_outer_right,
+        p_right,
+        bs5_1,
+        basesupportsternum5_1,
+        cp_outer_left,
+        p_left,
+        bs5_2,
+        basesupportsternum5_2,
+    )
+    _fill_upper_pedicel_buffer_faces(geo, cp_upper, cp_right, cp_left, cp_outer_right, cp_outer_left, baseend0)
+    return p_right, p_left
+
+
+def _remove_upper_head_back_faces(baseend0: hou.Point, geo: hou.Geometry) -> None:
     headback_prims = prims_by_attr(baseend0.prims(), "region", head.Region.HEADBACK)
     assert len(headback_prims) == 2, f"Expected 2 headback prims on baseend0, got {len(headback_prims)}"
-
     geo.deletePrims(headback_prims, keep_points=True)
 
+
+def _create_upper_pedicel_support_points(
+    geo: hou.Geometry,
+    baseend0: hou.Point,
+    basesupportend0: hou.Point,
+    basesupportsternum5_1: hou.Point,
+    basesupportsternum5_2: hou.Point,
+    cp_outer_right: hou.Point,
+    cp_outer_left: hou.Point,
+    bs5_1: hou.Point,
+    bs5_2: hou.Point,
+    size_ratio_x: float,
+) -> tuple[hou.Point, hou.Point]:
     v_end = basesupportend0.position() - baseend0.position()
     v_bs1 = basesupportsternum5_1.position() - bs5_1.position()
     v_bs2 = basesupportsternum5_2.position() - bs5_2.position()
@@ -371,28 +414,52 @@ def _reconnect_upper_sternum_pedicel_loop(
     p_left = geo.createPoint()
     p_left.setPosition(pos_p_left)
 
+    return p_right, p_left
+
+
+def _fill_upper_pedicel_head_back_faces(
+    geo: hou.Geometry,
+    basesupportend0: hou.Point,
+    baseend0: hou.Point,
+    cp_outer_right: hou.Point,
+    p_right: hou.Point,
+    bs5_1: hou.Point,
+    basesupportsternum5_1: hou.Point,
+    cp_outer_left: hou.Point,
+    p_left: hou.Point,
+    bs5_2: hou.Point,
+    basesupportsternum5_2: hou.Point,
+) -> None:
     # Reconnect upper-right and upper-left faces
-    face_ur1 = fill_face_with_attr(
+    fill_face_with_attr(
         geo, [basesupportend0, baseend0, cp_outer_right, p_right], "region", head.Region.HEADBACK, reverse=True
     )
-    face_ur2 = fill_face_with_attr(
+    fill_face_with_attr(
         geo, [p_right, cp_outer_right, bs5_1, basesupportsternum5_1], "region", head.Region.HEADBACK, reverse=True
     )
-    face_ul1 = fill_face_with_attr(
+    fill_face_with_attr(
         geo, [basesupportend0, baseend0, cp_outer_left, p_left], "region", head.Region.HEADBACK, reverse=False
     )
-    face_ul2 = fill_face_with_attr(
+    fill_face_with_attr(
         geo, [p_left, cp_outer_left, bs5_2, basesupportsternum5_2], "region", head.Region.HEADBACK, reverse=False
     )
 
+
+def _fill_upper_pedicel_buffer_faces(
+    geo: hou.Geometry,
+    cp_upper: hou.Point,
+    cp_right: hou.Point,
+    cp_left: hou.Point,
+    cp_outer_right: hou.Point,
+    cp_outer_left: hou.Point,
+    baseend0: hou.Point,
+) -> None:
     fill_face_with_attr(
         geo, [cp_upper, cp_right, cp_outer_right, baseend0], "region", base_sops.Region.BASEBUFFERMEMBRANE, reverse=True
     )
     fill_face_with_attr(
         geo, [cp_upper, cp_left, cp_outer_left, baseend0], "region", base_sops.Region.BASEBUFFERMEMBRANE, reverse=False
     )
-
-    return p_right, p_left
 
 
 def _retopo_head_back_faces(

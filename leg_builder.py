@@ -191,40 +191,81 @@ def _append_segment(
         minimum_membrane,
     )
 
-    latter_start_top_y = end_top1.y() + offset.y()
-    latter_start_btm_y = latter_start_top_y - latter_start_height
-    latter_start_z = end_top1.z() - offset.x()
-    latter_end_z = latter_start_z - latter_length
-    latter_start_hw = latter_start_width / 2.0
-    latter_end_hw = latter_end_width / 2.0
+    latter_segment = _build_latter_segment_positions(
+        end_top1,
+        offset,
+        (latter_start_width, latter_start_height),
+        (latter_end_width, latter_end_height),
+        latter_length,
+        wedge_angle,
+        spine_ratio,
+    )
+    former_positions_list = _apply_former_segment_wedge(
+        former_positions,
+        start_btm1,
+        start_btmn1,
+        end_btm1,
+        end_btmn1,
+        former_height,
+        wedge_angle,
+    )
 
-    delta_z_latter = latter_start_height * math.tan(math.radians(wedge_angle))
-    latter_start_btm_z = latter_start_z - delta_z_latter
+    return MessagedResult((former_positions_list, latter_segment), messages)
 
-    offset_y_in = -(latter_start_height - latter_end_height) * spine_ratio
-    latter_end_top_y = latter_start_top_y + offset_y_in
-    latter_end_btm_y = latter_end_top_y - latter_end_height
 
-    latter_segment = [
-        hou.Vector3(latter_start_hw, latter_start_top_y, latter_start_z),
-        hou.Vector3(-latter_start_hw, latter_start_top_y, latter_start_z),
-        hou.Vector3(latter_start_hw, latter_start_btm_y, latter_start_btm_z),
-        hou.Vector3(-latter_start_hw, latter_start_btm_y, latter_start_btm_z),
-        hou.Vector3(latter_end_hw, latter_end_top_y, latter_end_z),
-        hou.Vector3(-latter_end_hw, latter_end_top_y, latter_end_z),
-        hou.Vector3(latter_end_hw, latter_end_btm_y, latter_end_z),
-        hou.Vector3(-latter_end_hw, latter_end_btm_y, latter_end_z),
+def _build_latter_segment_positions(
+    former_end_top: hou.Vector3,
+    offset: hou.Vector2,
+    start_size: tuple[float, float],
+    end_size: tuple[float, float],
+    length: float,
+    wedge_angle: float,
+    spine_ratio: float,
+) -> list[hou.Vector3]:
+    start_width, start_height = start_size
+    end_width, end_height = end_size
+
+    start_top_y = former_end_top.y() + offset.y()
+    start_btm_y = start_top_y - start_height
+    start_z = former_end_top.z() - offset.x()
+    end_z = start_z - length
+    start_hw = start_width / 2.0
+    end_hw = end_width / 2.0
+
+    start_btm_z = start_z - start_height * math.tan(math.radians(wedge_angle))
+    end_top_y = start_top_y - (start_height - end_height) * spine_ratio
+    end_btm_y = end_top_y - end_height
+
+    return [
+        hou.Vector3(start_hw, start_top_y, start_z),
+        hou.Vector3(-start_hw, start_top_y, start_z),
+        hou.Vector3(start_hw, start_btm_y, start_btm_z),
+        hou.Vector3(-start_hw, start_btm_y, start_btm_z),
+        hou.Vector3(end_hw, end_top_y, end_z),
+        hou.Vector3(-end_hw, end_top_y, end_z),
+        hou.Vector3(end_hw, end_btm_y, end_z),
+        hou.Vector3(-end_hw, end_btm_y, end_z),
     ]
 
-    delta_z_former = former_height * math.tan(math.radians(wedge_angle))
-    new_end_btm1_z = min(end_btm1.z() + delta_z_former, start_btm1.z())
-    new_end_btmn1_z = min(end_btmn1.z() + delta_z_former, start_btmn1.z())
+
+def _apply_former_segment_wedge(
+    former_positions: list[hou.Vector3],
+    start_btm1: hou.Vector3,
+    start_btmn1: hou.Vector3,
+    end_btm1: hou.Vector3,
+    end_btmn1: hou.Vector3,
+    former_height: float,
+    wedge_angle: float,
+) -> list[hou.Vector3]:
+    delta_z = former_height * math.tan(math.radians(wedge_angle))
+    new_end_btm1_z = min(end_btm1.z() + delta_z, start_btm1.z())
+    new_end_btmn1_z = min(end_btmn1.z() + delta_z, start_btmn1.z())
 
     former_positions_list = list(former_positions)
     former_positions_list[6] = hou.Vector3(end_btm1.x(), end_btm1.y(), new_end_btm1_z)
     former_positions_list[7] = hou.Vector3(end_btmn1.x(), end_btmn1.y(), new_end_btmn1_z)
+    return former_positions_list
 
-    return MessagedResult((former_positions_list, latter_segment), messages)
 
 def _calc_segment_offset_and_wedge(
     max_yaw: float,
@@ -279,29 +320,58 @@ def _calc_membrane_spec(
     )
     messages.extend(wedge_messages)
     angle = max(angle, min_return[1])
-    if angle > max_wedge_deg:
-        angle = max_wedge_deg
-        distance = _solve_membrane_thickness_deg(
-            180 - 2 * max_wedge_deg - min_flex_deg,
-            min_height,
-            max_wedge_deg,
-        )
-        max_distance = max(former_width, latter_width) * max_distance_ratio
-        if distance > max_distance:
-            max_membrane_angle = math.degrees(
-                math.atan(max_distance * math.cos(math.radians(max_wedge_deg)) / min_height)
-            )
-            min_flex_ceiling = 180 - 2 * max_wedge_deg - max_membrane_angle
-            messages.append(
-                f"Membrane distance ({distance:.4f}) exceeded max_distance_ratio limit "
-                f"({max_distance:.4f}). Max angle ceiling reached with max_wedge_deg={max_wedge_deg}° "
-                f"and max_distance_ratio={max_distance_ratio}, limiting min flex angle ceiling to {min_flex_ceiling:.2f}° "
-                f"(requested {min_flex_deg:.2f}°)."
-            )
-            distance = max_distance
-        distance = max(distance, min_distance)
+    limited_distance, limited_angle, limit_messages = _apply_membrane_spec_limits(
+        distance,
+        angle,
+        min_distance,
+        min_flex_deg,
+        min_height,
+        former_width,
+        latter_width,
+        max_wedge_deg,
+        max_distance_ratio,
+    )
+    messages.extend(limit_messages)
 
-    return MessagedResult((distance, angle), messages)
+    return MessagedResult((limited_distance, limited_angle), messages)
+
+
+def _apply_membrane_spec_limits(
+    distance: float,
+    angle: float,
+    min_distance: float,
+    min_flex_deg: float,
+    min_height: float,
+    former_width: float,
+    latter_width: float,
+    max_wedge_deg: float,
+    max_distance_ratio: float,
+) -> tuple[float, float, list[str]]:
+    if angle <= max_wedge_deg:
+        return distance, angle, []
+
+    angle = max_wedge_deg
+    distance = _solve_membrane_thickness_deg(
+        180 - 2 * max_wedge_deg - min_flex_deg,
+        min_height,
+        max_wedge_deg,
+    )
+    messages: list[str] = []
+    max_distance = max(former_width, latter_width) * max_distance_ratio
+    if distance > max_distance:
+        max_membrane_angle = math.degrees(
+            math.atan(max_distance * math.cos(math.radians(max_wedge_deg)) / min_height)
+        )
+        min_flex_ceiling = 180 - 2 * max_wedge_deg - max_membrane_angle
+        messages.append(
+            f"Membrane distance ({distance:.4f}) exceeded max_distance_ratio limit "
+            f"({max_distance:.4f}). Max angle ceiling reached with max_wedge_deg={max_wedge_deg}° "
+            f"and max_distance_ratio={max_distance_ratio}, limiting min flex angle ceiling to {min_flex_ceiling:.2f}° "
+            f"(requested {min_flex_deg:.2f}°)."
+        )
+        distance = max_distance
+    distance = max(distance, min_distance)
+    return distance, angle, messages
 
 def _solve_membrane_wedge_deg(
     min_flex: float,
@@ -416,34 +486,48 @@ def _add_segment_thickness(
     for i in range(num_segs - 1):
         former_end = seg_pts[i * 8 + 4:(i + 1) * 8]
         latter_start = seg_pts[(i + 1) * 8:(i + 1) * 8 + 4]
-
-        former_inset = _inset_loop(geo, former_end, cut_length)
-        latter_inset = _inset_loop(geo, latter_start, cut_length)
-
-        e_loop = [former_end[0], former_end[1], former_end[3], former_end[2]]
-        ie_loop = [former_inset[0], former_inset[1], former_inset[3], former_inset[2]]
-        bridge_loops(
+        former_inset, latter_inset = _add_segment_thickness_loops(
             geo,
-            e_loop,
-            ie_loop,
-            reverse=True,
-            cross_order=True,
-            primitive_attr=("region", Region.LEGSEGMENT),
+            former_end,
+            latter_start,
+            cut_length,
         )
-
-        s_loop = [latter_start[0], latter_start[1], latter_start[3], latter_start[2]]
-        is_loop = [latter_inset[0], latter_inset[1], latter_inset[3], latter_inset[2]]
-        bridge_loops(
-            geo,
-            s_loop,
-            is_loop,
-            reverse=True,
-            primitive_attr=("region", Region.LEGSEGMENT),
-        )
-
         thickness_pts.extend([*former_inset, *latter_inset])
 
     return thickness_pts
+
+
+def _add_segment_thickness_loops(
+    geo: hou.Geometry,
+    former_end: list[hou.Point],
+    latter_start: list[hou.Point],
+    cut_length: float,
+) -> tuple[list[hou.Point], list[hou.Point]]:
+    former_inset = _inset_loop(geo, former_end, cut_length)
+    latter_inset = _inset_loop(geo, latter_start, cut_length)
+
+    e_loop = [former_end[0], former_end[1], former_end[3], former_end[2]]
+    ie_loop = [former_inset[0], former_inset[1], former_inset[3], former_inset[2]]
+    bridge_loops(
+        geo,
+        e_loop,
+        ie_loop,
+        reverse=True,
+        cross_order=True,
+        primitive_attr=("region", Region.LEGSEGMENT),
+    )
+
+    s_loop = [latter_start[0], latter_start[1], latter_start[3], latter_start[2]]
+    is_loop = [latter_inset[0], latter_inset[1], latter_inset[3], latter_inset[2]]
+    bridge_loops(
+        geo,
+        s_loop,
+        is_loop,
+        reverse=True,
+        primitive_attr=("region", Region.LEGSEGMENT),
+    )
+    return former_inset, latter_inset
+
 
 def _inset_loop(
     geo: hou.Geometry,
@@ -511,53 +595,67 @@ def _fill_membranes(
     for i in range(num_joints):
         former_end = thickness_pts[i * 8:i * 8 + 4]
         latter_start = thickness_pts[i * 8 + 4:(i + 1) * 8]
-        # fu: former upper, fb: former bottom, lu: latter upper, lb: latter bottom
-        fu1, fu2, fb1, fb2 = former_end
-        lu1, lu2, lb1, lb2 = latter_start
-
-        (
-            pos_fu1,
-            pos_fu2,
-            pos_fb1,
-            pos_fb2,
-            pos_lu1,
-            pos_lu2,
-            pos_lb1,
-            pos_lb2,
-        ) = points_to_positions(former_end + latter_start)
-
-        lf = pos_fu1.distanceTo(pos_fb1)
-        ll = pos_lu1.distanceTo(pos_lb1)
-        membrane_length = (lf + ll) * 0.5
-
-        # mu: midpoint upper, mb: midpoint bottom
-        pos_mu1 = (pos_fu1 + pos_lu1) * 0.5
-        pos_mu2 = (pos_fu2 + pos_lu2) * 0.5
-        pos_mb1 = (pos_fb1 + pos_lb1) * 0.5
-        pos_mb2 = (pos_fb2 + pos_lb2) * 0.5
-        pos_mb1[1] = (pos_mb1.y() + (pos_mu1.y() - membrane_length)) * 0.5
-        pos_mb2[1] = (pos_mb2.y() + (pos_mu2.y() - membrane_length)) * 0.5
-
-        mu1 = geo.createPoint()
-        mu2 = geo.createPoint()
-        mb1 = geo.createPoint()
-        mb2 = geo.createPoint()
-
-        mu1.setPosition(pos_mu1)
-        mu2.setPosition(pos_mu2)
-        mb1.setPosition(pos_mb1)
-        mb2.setPosition(pos_mb2)
-
-        membrane_points.extend([mu1, mu2, mb1, mb2])
-
-        former_loop = [fu1, fu2, fb2, fb1]
-        mid_loop = [mu1, mu2, mb2, mb1]
-        latter_loop = [lu1, lu2, lb2, lb1]
-
-        bridge_loops(geo, former_loop, mid_loop, primitive_attr=("region", Region.LEGMEMBRANE))
-        bridge_loops(geo, mid_loop, latter_loop, primitive_attr=("region", Region.LEGMEMBRANE))
+        membrane_points.extend(_add_membrane_joint(geo, former_end, latter_start))
 
     return membrane_points
+
+
+def _add_membrane_joint(
+    geo: hou.Geometry,
+    former_end: list[hou.Point],
+    latter_start: list[hou.Point],
+) -> list[hou.Point]:
+    # fu: former upper, fb: former bottom, lu: latter upper, lb: latter bottom
+    fu1, fu2, fb1, fb2 = former_end
+    lu1, lu2, lb1, lb2 = latter_start
+    midpoint_positions = _get_membrane_joint_midpoint_positions(former_end, latter_start)
+    mu1, mu2, mb1, mb2 = _create_membrane_midpoints(geo, midpoint_positions)
+
+    former_loop = [fu1, fu2, fb2, fb1]
+    mid_loop = [mu1, mu2, mb2, mb1]
+    latter_loop = [lu1, lu2, lb2, lb1]
+    bridge_loops(geo, former_loop, mid_loop, primitive_attr=("region", Region.LEGMEMBRANE))
+    bridge_loops(geo, mid_loop, latter_loop, primitive_attr=("region", Region.LEGMEMBRANE))
+    return [mu1, mu2, mb1, mb2]
+
+
+def _get_membrane_joint_midpoint_positions(
+    former_end: list[hou.Point],
+    latter_start: list[hou.Point],
+) -> tuple[hou.Vector3, hou.Vector3, hou.Vector3, hou.Vector3]:
+    (
+        pos_fu1,
+        pos_fu2,
+        pos_fb1,
+        pos_fb2,
+        pos_lu1,
+        pos_lu2,
+        pos_lb1,
+        pos_lb2,
+    ) = points_to_positions(former_end + latter_start)
+
+    lf = pos_fu1.distanceTo(pos_fb1)
+    ll = pos_lu1.distanceTo(pos_lb1)
+    membrane_length = (lf + ll) * 0.5
+
+    # mu: midpoint upper, mb: midpoint bottom
+    pos_mu1 = (pos_fu1 + pos_lu1) * 0.5
+    pos_mu2 = (pos_fu2 + pos_lu2) * 0.5
+    pos_mb1 = (pos_fb1 + pos_lb1) * 0.5
+    pos_mb2 = (pos_fb2 + pos_lb2) * 0.5
+    pos_mb1[1] = (pos_mb1.y() + (pos_mu1.y() - membrane_length)) * 0.5
+    pos_mb2[1] = (pos_mb2.y() + (pos_mu2.y() - membrane_length)) * 0.5
+    return pos_mu1, pos_mu2, pos_mb1, pos_mb2
+
+
+def _create_membrane_midpoints(
+    geo: hou.Geometry,
+    positions: tuple[hou.Vector3, hou.Vector3, hou.Vector3, hou.Vector3],
+) -> tuple[hou.Point, hou.Point, hou.Point, hou.Point]:
+    points = [geo.createPoint() for _ in positions]
+    for point, position in zip(points, positions):
+        point.setPosition(position)
+    return tuple(points)
 
 
 def _add_membrane_loop_cuts(

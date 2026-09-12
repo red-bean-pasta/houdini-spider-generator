@@ -184,41 +184,49 @@ def rename_left_ids(geo: hou.Geometry, affix_index: int | None = 0) -> None:
 
     If an ID has only a single affix (e.g. "cheliceraestart1"), that affix is negated even if `affix_index` is out of range.
     """
-    def filtrate(p: hou.Point) -> bool:
-        return p.position()[0] < 0.0
+    rename_point_attr(
+        geo,
+        "id",
+        _is_left_point,
+        lambda point_id: _rename_point_id(point_id, affix_index),
+    )
 
-    def rename(point_id: str) -> str | Literal[False]:
-        parts = point_id.split("_")
-        first_digit = next(
-            (index for index, character in enumerate(parts[0]) if character.isdigit() or character == "-"),
-            None,
-        )
-        if first_digit is not None:
-            prefix = parts[0][:first_digit]
-            affixes = [parts[0][first_digit:]] + parts[1:]
-        elif len(parts) > 1:
-            prefix = parts[0] + "_"
-            affixes = parts[1:]
-        else:
-            return False
 
-        def negate(val: str) -> str:
-            if not val:
-                return val
-            return val[1:] if val.startswith("-") else f"-{val}"
+def _is_left_point(point: hou.Point) -> bool:
+    return point.position()[0] < 0.0
 
-        if affix_index is None:
-            affixes = [negate(a) for a in affixes]
-        else:
-            try:
-                affixes[affix_index] = negate(affixes[affix_index])
-            except IndexError:
-                if len(affixes) == 1:
-                    affixes[0] = negate(affixes[0])
 
-        return prefix + "_".join(affixes)
+def _rename_point_id(point_id: str, affix_index: int | None) -> str | Literal[False]:
+    parts = point_id.split("_")
+    first_digit = next(
+        (index for index, character in enumerate(parts[0]) if character.isdigit() or character == "-"),
+        None,
+    )
+    if first_digit is not None:
+        prefix = parts[0][:first_digit]
+        affixes = [parts[0][first_digit:]] + parts[1:]
+    elif len(parts) > 1:
+        prefix = parts[0] + "_"
+        affixes = parts[1:]
+    else:
+        return False
 
-    rename_point_attr(geo, "id", filtrate, rename)
+    if affix_index is None:
+        affixes = [_negate_id_affix(affix) for affix in affixes]
+    else:
+        try:
+            affixes[affix_index] = _negate_id_affix(affixes[affix_index])
+        except IndexError:
+            if len(affixes) == 1:
+                affixes[0] = _negate_id_affix(affixes[0])
+
+    return prefix + "_".join(affixes)
+
+
+def _negate_id_affix(value: str) -> str:
+    if not value:
+        return value
+    return value[1:] if value.startswith("-") else f"-{value}"
 
 
 def rename_left_ids_node(node: hou.SopNode) -> None:
