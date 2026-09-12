@@ -7,7 +7,11 @@ from helper import (
     add_id_attr,
     affix_id,
     point_from_geo,
+    position_from_geo,
     points_by_id,
+    set_point_id,
+    sopify_chain,
+    replace_points,
     set_points_id,
 )
 from utilities.common import (
@@ -53,8 +57,7 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     _add_parameters(sternum)
     _add_controls(sternum)
 
-    half = sopify(sternum, None, _left_half)
-    midpoints = sopify(sternum, half, _add_midpoints)
+    midpoints = sopify_chain(sternum, None, (_left_half, _add_midpoints))
 
     mirror = add_mirror(sternum, "right_mirror", midpoints, (1, 0, 0), True, False)
     point_ids = sopify(sternum, mirror, _add_point_ids)
@@ -64,10 +67,11 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     merge = add_merge(sternum, "merge_boundary_and_spine", point_ids, spine)
     fuse = add_fuse(sternum, "fuse_center_points", merge)
 
-    depth = sopify(sternum, fuse, _descend_sternum_spine)
-    faces = sopify(sternum, depth, _build_sternum_faces)
-    regions = sopify(sternum, faces, _add_prim_regions)
-    buffered = sopify(sternum, regions, _outset_sternum_loop)
+    buffered = sopify_chain(
+        sternum,
+        fuse,
+        (_descend_sternum_spine, _build_sternum_faces, _add_prim_regions, _outset_sternum_loop),
+    )
 
     _ = add_output(sternum, "OUT_STERNUM", buffered)
     sternum.layoutChildren()
@@ -209,7 +213,7 @@ def _add_point_ids(node: hou.SopNode) -> None:
 
     add_id_attr(geo)
 
-    set_points_id([right_points[0]], [sternumrim(0)])
+    set_point_id(right_points[0], sternumrim(0))
 
     for index in range(1, len(right_points)):
         point_id = (
@@ -217,7 +221,7 @@ def _add_point_ids(node: hou.SopNode) -> None:
             if index % 2
             else sternummiddle(index // 2)
         )
-        set_points_id([right_points[index]], [point_id])
+        set_point_id(right_points[index], point_id)
 
     for index, point in enumerate(left_points):
         id_index = index // 2 + 1
@@ -226,7 +230,7 @@ def _add_point_ids(node: hou.SopNode) -> None:
             if index % 2 == 0
             else sternummiddle(-id_index)
         )
-        set_points_id([point], [point_id])
+        set_point_id(point, point_id)
 
 def _ordered_points(points: list[hou.Point]) -> list[hou.Point]:
     return sorted(points, key=lambda point: (point.position()[2], point.position()[0]))
@@ -240,17 +244,13 @@ def _add_center_spine(node: hou.SopNode) -> None:
     positions = [point.position() for point in right_points[2:-1]]
 
     geo = node.geometry()
-    geo.clear()
-    add_id_attr(geo)
-
-    spine_points: list[hou.Point] = []
-    for position in positions:
-        point = geo.createPoint()
-        point.setPosition(hou.Vector3(0.0, 0.0, position[2]))
-        spine_points.append(point)
-
-    ids = [sternumspine(index) for index in range(1, len(spine_points) + 1)]
-    set_points_id(spine_points, ids)
+    replace_points(
+        geo,
+        [
+            (sternumspine(index), hou.Vector3(0.0, 0.0, position[2]))
+            for index, position in enumerate(positions, start=1)
+        ],
+    )
 
 
 def _descend_sternum_spine(node: hou.SopNode) -> None:
@@ -264,15 +264,12 @@ def _descend_sternum_spine(node: hou.SopNode) -> None:
     power = params.spine_descend_handle
     points = points_by_id(geo)
 
-    top, middle, bottom = point_from_geo(
+    top, middle, bottom = position_from_geo(
         geo,
         sternumrim(0),
         sternumrim(3),
         sternumrim(5),
     )
-    top = top.position()
-    middle = middle.position()
-    bottom = bottom.position()
 
     upper_span = abs(middle[2] - top[2])
     lower_span = abs(bottom[2] - middle[2])

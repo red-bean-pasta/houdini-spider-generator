@@ -6,13 +6,17 @@ import hou
 import base_sops
 import sternum
 from helper import (
-    add_id_attr,
+    add_id_point,
     affix_id,
     deduplicate_id_attr,
-    fill_face_by_id,
+    fill_face_by_id_with_attr,
     point_from_geo,
+    position_from_geo,
     points_by_id,
-    rename_left_ids,
+    rename_left_ids_node,
+    set_prim_attr_where_blank,
+    sopify_chain,
+    replace_points,
     set_point_id,
 )
 from utilities.common import (
@@ -89,21 +93,25 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
     source = head.indirectInputs()[0]
     base_rim = sopify(head, source, _extract_base_rim)
     base_points = sopify(head, source, _extract_work_base)
-    corners = sopify(head, base_points, _add_corners_half)
-    dent = sopify(head, corners, _add_head_dent)
-    curved_lip = sopify(head, dent, _curve_lip)
-    back_faces = sopify(head, curved_lip, _fill_back_loop_faces)
-    support_faces = sopify(head, back_faces, _fill_support_loop_faces)
-    right_half = sopify(head, support_faces, _fill_side_faces)
-    regions = sopify(head, right_half, _add_side_regions)
+    regions = sopify_chain(
+        head,
+        base_points,
+        (
+            _add_corners_half,
+            _add_head_dent,
+            _curve_lip,
+            _fill_back_loop_faces,
+            _fill_support_loop_faces,
+            _fill_side_faces,
+            _add_side_regions,
+        ),
+    )
     mirrored = add_mirror(head, "left_mirror", regions, (1, 0, 0), True, False)
-    faces = sopify(head, mirrored, _rename_left_ids)
+    faces = sopify(head, mirrored, rename_left_ids_node)
 
     merged = add_merge(head, "merge_base_rim", base_rim, faces)
     fused = add_fuse(head, "fuse_base_rim", merged)
-    inset_support = sopify(head, fused, _inset_base_support_loop)
-    extruded_lip = sopify(head, inset_support, _extrude_lip)
-    cleaned = sopify(head, extruded_lip, _cleanup)
+    cleaned = sopify_chain(head, fused, (_inset_base_support_loop, _extrude_lip, _cleanup))
     add_output(head, "OUT_HEAD", cleaned)
     head.layoutChildren()
     return head
@@ -179,7 +187,7 @@ def _extract_base_rim(node: hou.SopNode) -> None:
         if point.stringAttribValue("id") not in excluded_ids
         and point.stringAttribValue("id").startswith("base")
     ]
-    _add_points(geo, point_data)
+    replace_points(geo, point_data)
 
 
 def _extract_work_base(node: hou.SopNode) -> None:
@@ -203,7 +211,7 @@ def _extract_work_base(node: hou.SopNode) -> None:
     point_data.append((headchelicerae(0), upper0_pos))
     point_data.append((headchelicerae(1), upper1_pos))
     point_data.append((headchelicerae(2), upper2_pos))
-    _add_points(geo, point_data)
+    replace_points(geo, point_data)
 
 
 def _get_chelicerae_upper_positions(geo: hou.Geometry, parent: hou.OpNode) -> tuple[hou.Vector3, hou.Vector3, hou.Vector3]:
@@ -216,18 +224,6 @@ def _get_chelicerae_upper_positions(geo: hou.Geometry, parent: hou.OpNode) -> tu
     upper2_pos = basemaxilla1.position() + height_offset
     upper1_pos = (upper0_pos + upper2_pos) / 2.0
     return upper0_pos, upper1_pos, upper2_pos
-
-
-def _add_points(
-    geo: hou.Geometry,
-    point_data: list[tuple[str, hou.Vector3]],
-) -> None:
-    geo.clear()
-    add_id_attr(geo)
-    for point_id, position in point_data:
-        point = geo.createPoint()
-        point.setPosition(position)
-        point.setAttribValue("id", point_id)
 
 
 def _add_corners_half(node: hou.SopNode) -> None:
@@ -246,7 +242,7 @@ def _add_corners_half(node: hou.SopNode) -> None:
         if point_id not in (sternum.sternumrim(0), base_sops.basesternum(0))
     ]
     new_points = list(top_corners.items()) + list(support_points.items())
-    _add_points(geo, point_data + new_points)
+    replace_points(geo, point_data + new_points)
 
 def _get_corner_reference_positions(geo: hou.Geometry) -> dict[str, hou.Vector3]:
     points = points_by_id(geo)
@@ -260,8 +256,8 @@ def _get_corner_reference_positions(geo: hou.Geometry) -> dict[str, hou.Vector3]
         base_sops.baseend(0),
     )
     assert all(point_id in points for point_id in expected_ids), "Expected head reference points"
-    pts = point_from_geo(geo, *expected_ids)
-    return {pid: pt.position() for pid, pt in zip(expected_ids, pts)}
+    positions = position_from_geo(geo, *expected_ids)
+    return dict(zip(expected_ids, positions))
 
 def _compute_top_corners(
     ref: dict[str, hou.Vector3],
@@ -338,15 +334,15 @@ def _curve_lip(node: hou.SopNode) -> None:
     dist = get_head_base_loop_width(node)
     headchelicerae1, headsupport1 = point_from_geo(geo, headchelicerae(1), headsupport(1))
     offset = hou.Vector3(0.0, dist * 2, 0.0)
-    headchelicerae1.setPosition(headchelicerae1.position() + offset)
-    headsupport1.setPosition(headsupport1.position() + offset)
+    for point in (headchelicerae1, headsupport1):
+        offset_point(point, offset)
 
 
 def _fill_back_loop_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
     add_prim_attr(geo, "region", "")
 
-    f_main1 = fill_face_by_id(
+    fill_face_by_id_with_attr(
         geo,
         (
             headchelicerae(0),
@@ -354,11 +350,12 @@ def _fill_back_loop_faces(node: hou.SopNode) -> None:
             headsupport(1),
             headchelicerae(1),
         ),
+        "region",
+        Region.HEADFRONTMAIN,
         True,
     )
-    f_main1.setAttribValue("region", Region.HEADFRONTMAIN)
 
-    f_main2 = fill_face_by_id(
+    fill_face_by_id_with_attr(
         geo,
         (
             headchelicerae(1),
@@ -366,11 +363,12 @@ def _fill_back_loop_faces(node: hou.SopNode) -> None:
             headsupport(2),
             headchelicerae(2),
         ),
+        "region",
+        Region.HEADFRONTMAIN,
         True,
     )
-    f_main2.setAttribValue("region", Region.HEADFRONTMAIN)
 
-    f_cheek = fill_face_by_id(
+    fill_face_by_id_with_attr(
         geo,
         (
             headchelicerae(2),
@@ -378,9 +376,10 @@ def _fill_back_loop_faces(node: hou.SopNode) -> None:
             base_sops.basesternum(1, 2),
             base_sops.basemaxilla(1),
         ),
+        "region",
+        Region.HEADFRONTCHEEK,
         True,
     )
-    f_cheek.setAttribValue("region", Region.HEADFRONTCHEEK)
 
     hf0, hf1, hs2, hs1, hs0 = point_from_geo(
         geo,
@@ -426,12 +425,9 @@ def _fill_back_loop_faces(node: hou.SopNode) -> None:
     }
 
     for face, (reverse, region) in faces.items():
-        prim = fill_face_by_id(geo, face, reverse)
-        prim.setAttribValue("region", region)
+        fill_face_by_id_with_attr(geo, face, "region", region, reverse)
 
-    for prim in geo.prims():
-        if not prim.stringAttribValue("region"):
-            prim.setAttribValue("region", Region.HEADTOP)
+    set_prim_attr_where_blank(geo, "region", Region.HEADTOP)
 
 
 def _fill_support_loop_faces(node: hou.SopNode) -> None:
@@ -453,8 +449,7 @@ def _fill_support_loop_faces(node: hou.SopNode) -> None:
     regions = (Region.HEADTOP, Region.HEADTOP)
 
     for i, (face, reverse) in enumerate(faces.items()):
-        prim = fill_face_by_id(geo, face, reverse)
-        prim.setAttribValue("region", regions[i])
+        fill_face_by_id_with_attr(geo, face, "region", regions[i], reverse)
 
 
 def _fill_side_faces(node: hou.SopNode) -> None:
@@ -574,21 +569,12 @@ def _add_named_point(
     position: hou.Vector3,
     point_id: str,
 ) -> hou.Point:
-    point = geo.createPoint()
-    point.setPosition(position)
-    set_point_id(point, point_id)
-    return point
+    return add_id_point(geo, position, point_id)
 
 
 def _add_side_regions(node: hou.SopNode) -> None:
     geo = node.geometry()
-    for prim in geo.prims():
-        if not prim.stringAttribValue("region"):
-            prim.setAttribValue("region", Region.HEADSIDE)
-
-
-def _rename_left_ids(node: hou.SopNode) -> None:
-    rename_left_ids(node.geometry())
+    set_prim_attr_where_blank(geo, "region", Region.HEADSIDE)
 
 
 def _inset_base_support_loop(node: hou.SopNode) -> None:
@@ -647,18 +633,18 @@ def _extrude_lip(node: hou.SopNode) -> None:
             headsupport(side),
         )
         for pt in (hc, hb, hs):
-            pt.setPosition(pt.position() + offset)
+            offset_point(pt, offset)
 
     for side in (0, 1, -1):
         (hf,) = point_from_geo(geo, headfront(side))
-        hf.setPosition(hf.position() + offset)
+        offset_point(hf, offset)
 
     for side in (1, -1):
         (hff,) = point_from_geo(geo, headfrontfloat(side))
-        hff.setPosition(hff.position() + offset)
+        offset_point(hff, offset)
 
     (hfm,) = point_from_geo(geo, headfrontmid(0))
-    hfm.setPosition(hfm.position() + offset)
+    offset_point(hfm, offset)
 
 
 def _cleanup(node: hou.SopNode) -> None:

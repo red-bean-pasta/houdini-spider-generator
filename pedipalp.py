@@ -3,7 +3,7 @@ import math
 import hou
 
 from base_sops import basemaxillamembrane
-from helper import affix_id, point_from_geo, set_point_id
+from helper import add_id_point, affix_id, point_from_geo, position_from_geo, prims_by_attr, set_point_id, sopify_chain
 from leg_builder import LegParam, build_leg, Region
 from utilities.common import (
     MessagedResult,
@@ -16,7 +16,6 @@ from utilities.common import (
     add_heading,
     add_float_param,
     get_float_parm,
-    add_point,
     points_by_attr,
     remove_attrs,
     points_start_with,
@@ -88,19 +87,25 @@ def build(
     pedipalp.setInput(0, input_node)
     _add_controls(pedipalp)
 
-    remove_noise_points = sopify(pedipalp, pedipalp.indirectInputs()[0], _remove_noise_points)
-    built_pedipalp = sopify(pedipalp, remove_noise_points, _build_basic)
-    positioned_pedipalp = sopify(pedipalp, built_pedipalp, _position_basic)
-    support_deleted_pedipalp = sopify(pedipalp, positioned_pedipalp, _delete_start_coxa_supports)
-    base_trapezoid = sopify(pedipalp, support_deleted_pedipalp, _prepare_coxa_corners)
-    bottom_right_face_filled = sopify(pedipalp, base_trapezoid, _fill_bottom_right_face)
-    back_filled = sopify(pedipalp, bottom_right_face_filled, _fill_back_face)
-    top_filled = sopify(pedipalp, back_filled, _fill_top_face)
-    front_upper_face_filled = sopify(pedipalp, top_filled, _add_front_upper_face)
-    loop_face_filled = sopify(pedipalp, front_upper_face_filled, _add_front_loop_faces)
-    maxilla_quad_added = sopify(pedipalp, loop_face_filled, _add_maxilla_quads)
-    maxilla_filled = sopify(pedipalp, maxilla_quad_added, _fill_maxilla_faces)
-    cleaned_up = sopify(pedipalp, maxilla_filled, _remove_tmp_attributes)
+    cleaned_up = sopify_chain(
+        pedipalp,
+        pedipalp.indirectInputs()[0],
+        (
+            _remove_noise_points,
+            _build_basic,
+            _position_basic,
+            _delete_start_coxa_supports,
+            _prepare_coxa_corners,
+            _fill_bottom_right_face,
+            _fill_back_face,
+            _fill_top_face,
+            _add_front_upper_face,
+            _add_front_loop_faces,
+            _add_maxilla_quads,
+            _fill_maxilla_faces,
+            _remove_tmp_attributes,
+        ),
+    )
     fused = add_fuse(pedipalp, "fuse_sockets", cleaned_up)
     add_output(pedipalp, "OUT_PEDIPALP", fused)
     pedipalp.layoutChildren()
@@ -214,7 +219,7 @@ def _add_bottom_right_face_point(
     start_position = e1.position() * endite_buffer.x() + e4.position() * (1.0 - endite_buffer.x())
     dist = _get_buffer_dist_z(geo, endite_buffer.y())
     target_position = start_position + direction * dist
-    p = add_point(geo, target_position, ("id", _tmp_coxa_corner("bottom")))
+    p = add_id_point(geo, target_position, _tmp_coxa_corner("bottom"))
     return p
 
 
@@ -246,7 +251,7 @@ def _fill_top_face(node: hou.SopNode) -> None:
     )
 
     pos = e2.position() + direction * dist
-    c6 = add_point(geo, pos, ("id", _tmp_coxa_corner("fronttop")))
+    c6 = add_id_point(geo, pos, _tmp_coxa_corner("fronttop"))
 
     fill_face(geo, [es3, m4, c6, es2])
     fill_face(geo, [m4, m3, m2, c6])
@@ -335,7 +340,7 @@ def _add_maxilla_quads_to_geo(
     poses = [p0, p1, p2, p3, p4, p5]
     pts = []
     for i, p in enumerate(poses, start=1):
-        p = add_point(geo, p, ("id", _tmp_maxilla_pole(i)))
+        p = add_id_point(geo, p, _tmp_maxilla_pole(i))
         pts.append(p)
 
     fill_face(geo, [pts[0], pts[1], pts[5], pts[4]], True)
@@ -369,7 +374,7 @@ def _add_front_face_point(
     direction = _get_coxa_direction(geo)
     start = e1.position() * endite_buffer.x() + e2.position() * (1.0 - endite_buffer.x())
     target = start + direction * dist
-    return add_point(geo, target, ("id", _tmp_coxa_corner("front")))
+    return add_id_point(geo, target, _tmp_coxa_corner("front"))
 
 
 def _add_front_loop_faces(node: hou.SopNode) -> None:
@@ -398,7 +403,7 @@ def _add_loop_point(
     dist = _get_buffer_dist_z(geo, endite_buffer_y)
     direction = _get_coxa_direction(geo)
     target = e1.position() + direction * dist
-    return add_point(geo, target, ("id", _tmp_coxa_corner("frontbottom")))
+    return add_id_point(geo, target, _tmp_coxa_corner("frontbottom"))
 
 
 def _fill_maxilla_faces(node: hou.SopNode) -> None:
@@ -473,12 +478,14 @@ def _get_pedipalp_param(
         params.front_coxa_size_ratio,
     )
     length_ratios = tuple(params.pedipalp_segment_length_ratios)
-    segment_specs = tuple(zip(params.max_segment_yaws[1:], params.min_segment_flexes[1:]))[:len(length_ratios)]
+    max_segment_yaws = tuple(params.max_segment_yaws[1:])[:len(length_ratios)]
+    min_segment_flexes = tuple(params.min_segment_flexes[1:])[:len(length_ratios)]
 
-    return LegParam(
+    return LegParam.from_specs(
         coxa_size=coxa_size,
         length_ratios=length_ratios,
-        yaw_flex_specs=segment_specs,
+        max_segment_yaws=max_segment_yaws,
+        min_segment_flexes=min_segment_flexes,
         height_ratio=control_params.segment_height_ratio,
         spine_ratio=control_params.segment_lateral_ratio,
         shrink_ratios=control_params.segment_shrink_ratios,
@@ -491,8 +498,8 @@ def _get_pedipalp_coxa_size(
     geo: hou.Geometry,
     front_coxa_size_ratio: hou.Vector2,
 ) -> tuple[float, float, float]:
-    m3, m4 = point_from_geo(geo, basemaxillamembrane(3), basemaxillamembrane(4))
-    width = m3.position().distanceTo(m4.position())
+    m3, m4 = position_from_geo(geo, basemaxillamembrane(3), basemaxillamembrane(4))
+    width = m3.distanceTo(m4)
     height = width
     length = front_coxa_size_ratio.y() / front_coxa_size_ratio.x() * width
     return width, height, length
@@ -500,12 +507,7 @@ def _get_pedipalp_coxa_size(
 def _get_pedipalp_points(
     geo: hou.Geometry,
 ) -> list[hou.Point]:
-    pts = {
-        pt
-        for prim in geo.prims()
-        if prim.stringAttribValue("region").startswith((Region.LEGMEMBRANE, Region.LEGSEGMENT))
-        for pt in prim.points()
-    }
+    pts = {pt for prim in prims_by_attr(geo, "region", (Region.LEGMEMBRANE, Region.LEGSEGMENT), startswith=True) for pt in prim.points()}
     if not pts:
         return list(geo.points())
     return list(pts)
@@ -530,9 +532,7 @@ def _add_base_corner_point(
     )
     d = (e3.position() - s3.position()).normalized()
     pos = m1.position() + d * dist
-    p = geo.createPoint()
-    p.setPosition(pos)
-    set_point_id(p, _tmp_coxa_corner(3))
+    p = add_id_point(geo, pos, _tmp_coxa_corner(3))
 
 def _add_base_trapezoid(
     geo: hou.Geometry
@@ -562,12 +562,8 @@ def _add_base_trapezoid(
     pos_p3 = pos_m1 + u * (0.75 * length) + v * height
     pos_p4 = pos_m1 + u * (0.25 * length) + v * height
 
-    p3 = geo.createPoint()
-    p3.setPosition(pos_p3)
-    set_point_id(p3, _tmp_coxa_corner("base", 1))
-    p4 = geo.createPoint()
-    p4.setPosition(pos_p4)
-    set_point_id(p4, _tmp_coxa_corner("base", 2))
+    p3 = add_id_point(geo, pos_p3, _tmp_coxa_corner("base", 1))
+    p4 = add_id_point(geo, pos_p4, _tmp_coxa_corner("base", 2))
 
     fill_face(geo, [m1, m2, p3, p4], reverse=True)
     add_global_attr(geo, _tmp_coxa_base_height(), height)
@@ -586,12 +582,12 @@ def _get_coxa_direction(geo: hou.Geometry) -> hou.Vector3:
 
 
 def _get_buffer_dist_z(geo: hou.Geometry, endite_buffer_y: float) -> float:
-    e1, m1 = point_from_geo(
+    e1, m1 = position_from_geo(
         geo,
         _tmp_coxa_end(1),
         basemaxillamembrane(1),
     )
-    return e1.position().distanceTo(m1.position()) * endite_buffer_y
+    return e1.distanceTo(m1) * endite_buffer_y
 
 
 def get_leg(node: hou.Node) -> hou.OpNode:

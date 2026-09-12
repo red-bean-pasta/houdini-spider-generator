@@ -8,13 +8,19 @@ import hou
 import base_sops
 from head import headbasesupport, headchelicerae
 from helper import (
-    add_id_attr,
+    add_id_point,
     affix_id,
+    bridge_loops,
     deduplicate_id_attr,
+    fill_face_with_attr,
     point_from_geo,
+    position_from_geo,
+    prims_by_attr,
     rename_left_ids,
+    replace_points,
     set_point_id,
     set_points_id,
+    sopify_chain,
 )
 from utilities.common import (
     add_float_param,
@@ -42,6 +48,7 @@ from utilities.topology import (
     interpolate_elliptical,
     loop_cut,
     merge_points,
+    offset_point,
     traverse_faces_between_edges,
 )
 
@@ -90,33 +97,41 @@ def build(cephalothorax: hou.SopNode, source: hou.SopNode) -> hou.SopNode:
     chelicerae.setInput(0, source)
     _add_parameters(chelicerae)
 
-    geometry = sopify(chelicerae, chelicerae.indirectInputs()[0], _build_geometry)
-    inset_node = sopify(chelicerae, geometry, _inset_flaps)
-    classified = sopify(chelicerae, inset_node, _classify_after_inset)
-    prepared = sopify(chelicerae, classified, _prepare_extrusion)
-    right_membrane = sopify(chelicerae, prepared, _remove_left_membrane)
-
-    start_membrane = sopify(chelicerae, right_membrane, _add_start_membrane)
-    inset_start_membrane = sopify(chelicerae, start_membrane, _inset_start_membrane)
-    adjusted_start_section = sopify(chelicerae, inset_start_membrane, _adjust_start_section_left)
-
-    end_section = sopify(chelicerae, adjusted_start_section, _add_end_section)
-    middle_section_node = sopify(chelicerae, end_section, _add_middle_section)
-    upper_middle_section = sopify(chelicerae, middle_section_node, _add_upper_middle_section)
-    lower_middle_section = sopify(chelicerae, upper_middle_section, _add_lower_middle_section)
-
-    connected = sopify(chelicerae, lower_middle_section, _connect_sections)
-    middle_face_removed = sopify(chelicerae, connected, _remove_middle_face)
-    cut_tube = sopify(chelicerae, middle_face_removed, _middle_loop_cut)
-
-    merged_membrane = sopify(chelicerae, cut_tube, _merge_membrane_curves)
-    adjusted_curve = sopify(chelicerae, merged_membrane, _adjust_start_membrane_curve)
-    adjusted_right = sopify(chelicerae, adjusted_curve, _adjust_right_membrane_width)
-
-    lip_adjusted = sopify(chelicerae, adjusted_right, _adjust_head_chelicerae_depth)
-    upper_inset = sopify(chelicerae, lip_adjusted, _inset_chelicerae_support_loop)
-    clamped_membrane = sopify(chelicerae, upper_inset, _add_start_membrane_support_loops)
-    clamped_start = sopify(chelicerae, clamped_membrane, _add_start_section_support_loops)
+    right_membrane = sopify_chain(
+        chelicerae,
+        chelicerae.indirectInputs()[0],
+        (_build_geometry, _inset_flaps, _classify_after_inset, _prepare_extrusion, _remove_left_membrane),
+    )
+    adjusted_start_section = sopify_chain(
+        chelicerae,
+        right_membrane,
+        (_add_start_membrane, _inset_start_membrane, _adjust_start_section_left),
+    )
+    lower_middle_section = sopify_chain(
+        chelicerae,
+        adjusted_start_section,
+        (_add_end_section, _add_middle_section, _add_upper_middle_section, _add_lower_middle_section),
+    )
+    cut_tube = sopify_chain(
+        chelicerae,
+        lower_middle_section,
+        (_connect_sections, _remove_middle_face, _middle_loop_cut),
+    )
+    adjusted_right = sopify_chain(
+        chelicerae,
+        cut_tube,
+        (_merge_membrane_curves, _adjust_start_membrane_curve, _adjust_right_membrane_width),
+    )
+    clamped_start = sopify_chain(
+        chelicerae,
+        adjusted_right,
+        (
+            _adjust_head_chelicerae_depth,
+            _inset_chelicerae_support_loop,
+            _add_start_membrane_support_loops,
+            _add_start_section_support_loops,
+        ),
+    )
 
     mirrored = add_mirror(chelicerae, "mirror_left_chelicerae", clamped_start, (1, 0, 0), True, True)
     renamed = sopify(chelicerae, mirrored, _rename_left_ids)
@@ -204,46 +219,36 @@ def _build_geometry(node: hou.SopNode) -> None:
         base_sops.basesternum(1, 1),
         base_sops.basemaxilla(1),
     )
-    source_points = point_from_geo(geo, *base_ids)
-    base_positions = [point.position() for point in source_points]
+    base_positions = position_from_geo(geo, *base_ids)
 
     upper_ids = tuple(headchelicerae(i) for i in range(-2, 3))
-    upper_source_points = point_from_geo(geo, *upper_ids)
-    upper_positions = [point.position() for point in upper_source_points]
+    upper_positions = position_from_geo(geo, *upper_ids)
 
-    headbase_pts = point_from_geo(
+    headbase_positions = position_from_geo(
         geo,
         headbasesupport(headchelicerae(0)),
         headbasesupport(headchelicerae(1)),
         headbasesupport(headchelicerae(2)),
     )
-    headbase_positions = [pt.position() for pt in headbase_pts]
 
-    geo.clear()
-    add_id_attr(geo)
+    all_point_data = [
+        *zip(base_ids, base_positions),
+        *zip(upper_ids, upper_positions),
+    ]
+    all_points = replace_points(geo, all_point_data)
+    base_points = all_points[:len(base_ids)]
+    upper_points = all_points[len(base_ids):]
     add_prim_attr(geo, "region", "")
-    base_points = []
-    for point_id, position in zip(base_ids, base_positions):
-        point = geo.createPoint()
-        point.setPosition(position)
-        base_points.append(point)
-    set_points_id(base_points, list(base_ids))
 
-    upper_points = []
-    for point_id, position in zip(upper_ids, upper_positions):
-        point = geo.createPoint()
-        point.setPosition(position)
-        upper_points.append(point)
-    set_points_id(upper_points, upper_ids)
-
-    primitive = fill_face(
+    fill_face_with_attr(
         geo,
         [
             *base_points,
             *reversed(upper_points),
         ],
+        "region",
+        Region.CHELICERA,
     )
-    primitive.setAttribValue("region", Region.CHELICERA)
 
     _retain_headbase_faces(geo, upper_points[2], upper_points[3], upper_points[4], headbase_positions)
 
@@ -254,17 +259,9 @@ def _retain_headbase_faces(
     h2: hou.Point,
     headbase_positions: list[hou.Vector3],
 ) -> None:
-    hb0 = geo.createPoint()
-    hb0.setPosition(headbase_positions[0])
-    set_point_id(hb0, headbasesupport(headchelicerae(0)))
-
-    hb1 = geo.createPoint()
-    hb1.setPosition(headbase_positions[1])
-    set_point_id(hb1, headbasesupport(headchelicerae(1)))
-
-    hb2 = geo.createPoint()
-    hb2.setPosition(headbase_positions[2])
-    set_point_id(hb2, headbasesupport(headchelicerae(2)))
+    hb0 = add_id_point(geo, headbase_positions[0], headbasesupport(headchelicerae(0)))
+    hb1 = add_id_point(geo, headbase_positions[1], headbasesupport(headchelicerae(1)))
+    hb2 = add_id_point(geo, headbase_positions[2], headbasesupport(headchelicerae(2)))
 
     fill_face(geo, [h0, h1, hb1, hb0])
     fill_face(geo, [h1, h2, hb2, hb1])
@@ -281,25 +278,18 @@ def _inset_flaps(node: hou.SopNode) -> None:
     )
     dist = ratio * lower.position().distanceTo(upper.position())
 
-    chelicera_prims = [
-        prim for prim in geo.prims()
-        if prim.stringAttribValue("region") == Region.CHELICERA
-    ]
+    chelicera_prims = prims_by_attr(geo, "region", Region.CHELICERA)
     inner = _inset_and_recess(chelicera_prims, dist / 4, dist)
     for prim in inner:
         prim.setAttribValue("region", Region.CHELICERASOCKET)
 
-    for prim in geo.prims():
-        if prim.stringAttribValue("region") == Region.CHELICERA:
-            prim.setAttribValue("region", Region.CHELICERAMEMBRANE)
+    for prim in prims_by_attr(geo, "region", Region.CHELICERA):
+        prim.setAttribValue("region", Region.CHELICERAMEMBRANE)
 
 
 def _classify_after_inset(node: hou.SopNode) -> None:
     geo = node.geometry()
-    socket_prims = [
-        prim for prim in geo.prims()
-        if prim.stringAttribValue("region") == Region.CHELICERASOCKET
-    ]
+    socket_prims = prims_by_attr(geo, "region", Region.CHELICERASOCKET)
     pts_dict = {}
     for prim in socket_prims:
         for pt in prim.points():
@@ -329,18 +319,14 @@ def _classify_after_inset(node: hou.SopNode) -> None:
 
 def _prepare_extrusion(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-    socket_prims: list[hou.Prim] = [
-        prim for prim in geo.prims()
-        if prim.stringAttribValue("region").startswith(Region.CHELICERASOCKET)
-    ]
+    socket_prims = prims_by_attr(geo, "region", Region.CHELICERASOCKET, startswith=True)
     geo.deletePrims(socket_prims)
 
 
 def _remove_left_membrane(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     left_prims = [
-        prim for prim in geo.prims()
-        if prim.stringAttribValue("region") == Region.CHELICERAMEMBRANE
+        prim for prim in prims_by_attr(geo, "region", Region.CHELICERAMEMBRANE)
         if get_prim_centroid(prim).x() < 0.0
     ]
     left_points = list({
@@ -388,10 +374,10 @@ def _add_start_membrane(node: hou.SopNode) -> None:
         hou.Vector3(0.0, 0.0, -dist * 0.5),
     )
 
-    pts = [geo.createPoint() for _ in range(4)]
-    for j, (pt, start, offset) in enumerate(zip(pts, membrane_points, offsets), start=1):
-        pt.setPosition(start.position() + offset)
-        set_point_id(pt, cheliceraestart(j))
+    pts = [
+        add_id_point(geo, start.position() + offset, cheliceraestart(j))
+        for j, (start, offset) in enumerate(zip(membrane_points, offsets), start=1)
+    ]
 
     fill_face(geo, pts, True)
 
@@ -448,15 +434,13 @@ def _add_end_section(node: hou.SopNode) -> None:
     for pos in c3_positions:
         assert pos.x() >= 0.0, f"End section loop point crossed symmetry plane (x={pos.x():.4f} < 0.0). Adjust parameters."
 
-    c3_pts = [geo.createPoint() for _ in range(4)]
-    for pt, pos in zip(c3_pts, c3_positions):
-        pt.setPosition(pos)
-    for j, pt in enumerate(c3_pts, start=1):
-        set_point_id(pt, cheliceraeend(j))
+    c3_pts = [
+        add_id_point(geo, pos, cheliceraeend(j))
+        for j, pos in enumerate(c3_positions, start=1)
+    ]
 
-    end_prim = fill_face(geo, c3_pts, True)
     add_prim_attr(geo, "region", "")
-    end_prim.setAttribValue("region", Region.FANG)
+    fill_face_with_attr(geo, c3_pts, "region", Region.FANG, True)
 
 
 @dataclass
@@ -624,12 +608,15 @@ def _add_intermediate_section(
     for pos in positions:
         assert pos.x() >= 0.0, f"Section loop point at factor {factor} crossed symmetry plane (x={pos.x():.4f} < 0.0). Adjust parameters or ratio."
 
-    pts = [geo.createPoint() for _ in range(4)]
-    for pt, pos in zip(pts, positions):
-        pt.setPosition(pos)
     if id_factory:
-        for j, pt in enumerate(pts, start=1):
-            set_point_id(pt, id_factory(j))
+        pts = [
+            add_id_point(geo, pos, id_factory(j))
+            for j, pos in enumerate(positions, start=1)
+        ]
+    else:
+        pts = [geo.createPoint() for _ in positions]
+        for pt, pos in zip(pts, positions):
+            pt.setPosition(pos)
 
     fill_face(geo, pts, True)
 
@@ -692,18 +679,7 @@ def _connect_sections(node: hou.SopNode) -> None:
     for i in range(len(tube_loops) - 1):
         current_loop = tube_loops[i]
         next_loop = tube_loops[i + 1]
-        for j in range(4):
-            next_j = (j + 1) % 4
-            fill_face(
-                geo,
-                [
-                    current_loop[j],
-                    current_loop[next_j],
-                    next_loop[next_j],
-                    next_loop[j],
-                ],
-                True,
-            )
+        bridge_loops(geo, current_loop, next_loop, reverse=True)
 
 
 def _remove_middle_face(node: hou.SopNode) -> None:
@@ -797,10 +773,10 @@ def _adjust_start_membrane_curve(node: hou.SopNode) -> None:
         * 1/2
     )
 
-    support_upper_mid.setPosition(support_upper_mid.position() + upper_offset)
-    start_upper_mid.setPosition(start_upper_mid.position() + upper_offset)
-    support_bottom_mid.setPosition(support_bottom_mid.position() + bottom_offset)
-    start_bottom_mid.setPosition(start_bottom_mid.position() + bottom_offset)
+    for point in (support_upper_mid, start_upper_mid):
+        offset_point(point, upper_offset)
+    for point in (support_bottom_mid, start_bottom_mid):
+        offset_point(point, bottom_offset)
 
 
 def _adjust_right_membrane_width(node: hou.SopNode) -> None:
@@ -816,10 +792,10 @@ def _adjust_right_membrane_width(node: hou.SopNode) -> None:
     )
     upper_offset = (ss3.position() - m4.position()) * 0.5
     bottom_offset = (ss4.position() - m3.position()) * 0.5
-    ss3.setPosition(ss3.position() + upper_offset)
-    s3.setPosition(s3.position() + upper_offset)
-    ss4.setPosition(ss4.position() + bottom_offset)
-    s4.setPosition(s4.position() + bottom_offset)
+    for point in (ss3, s3):
+        offset_point(point, upper_offset)
+    for point in (ss4, s4):
+        offset_point(point, bottom_offset)
 
 
 def _adjust_head_chelicerae_depth(node: hou.SopNode) -> None:
@@ -848,7 +824,7 @@ def _adjust_head_chelicerae_depth(node: hou.SopNode) -> None:
     denom = (d_target.cross(dh)).x()
     assert abs(denom) > 1e-6, "Target direction and head direction are nearly parallel"
     t = (v0.cross(d_target)).x() / denom
-    h0.setPosition(h0.position() + dh * t)
+    offset_point(h0, dh * t)
 
 
 def _inset_chelicerae_support_loop(node: hou.SopNode) -> None:
@@ -956,8 +932,8 @@ def _adjust_right_chelicerae_membrane_points(points_by_id: dict[str, set[hou.Poi
     assert abs(direction.y()) > 1e-6, "Expected non-zero y component in direction"
     offset = direction * ((target_y - inset_support3.position().y()) / direction.y())
 
-    inset_support3.setPosition(inset_support3.position() + offset)
-    inset_start3.setPosition(inset_start3.position() + offset)
+    for point in (inset_support3, inset_start3):
+        offset_point(point, offset)
 
 def _adjust_left_chelicerae_support_points(points_by_id: dict[str, set[hou.Point]]) -> None:
     # For the left half support points, new cuts at headbasesupport and headchelicerae are moved to 1/2

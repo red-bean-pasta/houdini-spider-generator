@@ -5,10 +5,11 @@ import hou
 import abdomen
 import spider
 from helper import (
-    add_id_attr,
     affix_id,
     point_from_geo,
     points_by_id,
+    replace_points,
+    set_prim_attr_where_blank,
 )
 from utilities.common import add_prim_attr
 from utilities.nodes import (
@@ -75,12 +76,7 @@ def _extract_needed_points(node: hou.SopNode) -> None:
         assert point is not None, f"Expected point {point_id!r} in merged geometry"
         point_data.append((point_id, point.position()))
 
-    geo.clear()
-    add_id_attr(geo)
-    for point_id, position in point_data:
-        point = geo.createPoint()
-        point.setPosition(position)
-        point.setAttribValue("id", point_id)
+    replace_points(geo, point_data)
 
 
 def _connect_pedicel(node: hou.SopNode) -> None:
@@ -169,6 +165,4 @@ def _connect_pedicel(node: hou.SopNode) -> None:
         mid_pt.setAttribValue("id", mid_id)
         float_pt.setAttribValue("id", float_id)
 
-    for prim in geo.prims():
-        if not prim.stringAttribValue("region"):
-            prim.setAttribValue("region", Region.PEDICEL)
+    set_prim_attr_where_blank(geo, "region", Region.PEDICEL)

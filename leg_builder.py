@@ -5,10 +5,10 @@ from typing import Self
 
 import hou
 
+from helper import bridge_loops, fill_face_with_attr
 from utilities.common import (
     MessagedResult,
     add_prim_attr,
-    fill_face,
     points_to_positions,
 )
 from utilities.topology import loop_cut
@@ -93,15 +93,7 @@ def _build_segment_tubes(
 
         start_loop = [cur_seg_pts[0], cur_seg_pts[1], cur_seg_pts[3], cur_seg_pts[2]]
         end_loop = [cur_seg_pts[4], cur_seg_pts[5], cur_seg_pts[7], cur_seg_pts[6]]
-        for j in range(4):
-            next_j = (j + 1) % 4
-            prim = fill_face(geo, [
-                start_loop[j],
-                start_loop[next_j],
-                end_loop[next_j],
-                end_loop[j],
-            ])
-            prim.setAttribValue("region", Region.LEGSEGMENT)
+        bridge_loops(geo, start_loop, end_loop, primitive_attr=("region", Region.LEGSEGMENT))
 
     return MessagedResult(seg_pts, messages)
 
@@ -430,35 +422,24 @@ def _add_segment_thickness(
 
         e_loop = [former_end[0], former_end[1], former_end[3], former_end[2]]
         ie_loop = [former_inset[0], former_inset[1], former_inset[3], former_inset[2]]
-        for j in range(4):
-            next_j = (j + 1) % 4
-            prim = fill_face(
-                geo,
-                [
-                    e_loop[next_j],
-                    e_loop[j],
-                    ie_loop[j],
-                    ie_loop[next_j],
-                ],
-                True,
-            )
-            prim.setAttribValue("region", Region.LEGSEGMENT)
+        bridge_loops(
+            geo,
+            e_loop,
+            ie_loop,
+            reverse=True,
+            cross_order=True,
+            primitive_attr=("region", Region.LEGSEGMENT),
+        )
 
         s_loop = [latter_start[0], latter_start[1], latter_start[3], latter_start[2]]
         is_loop = [latter_inset[0], latter_inset[1], latter_inset[3], latter_inset[2]]
-        for j in range(4):
-            next_j = (j + 1) % 4
-            prim = fill_face(
-                geo,
-                [
-                    s_loop[j],
-                    s_loop[next_j],
-                    is_loop[next_j],
-                    is_loop[j],
-                ],
-                True,
-            )
-            prim.setAttribValue("region", Region.LEGSEGMENT)
+        bridge_loops(
+            geo,
+            s_loop,
+            is_loop,
+            reverse=True,
+            primitive_attr=("region", Region.LEGSEGMENT),
+        )
 
         thickness_pts.extend([*former_inset, *latter_inset])
 
@@ -573,22 +554,8 @@ def _fill_membranes(
         mid_loop = [mu1, mu2, mb2, mb1]
         latter_loop = [lu1, lu2, lb2, lb1]
 
-        for j in range(4):
-            next_j = (j + 1) % 4
-            prim1 = fill_face(geo, [
-                former_loop[j],
-                former_loop[next_j],
-                mid_loop[next_j],
-                mid_loop[j],
-            ])
-            prim1.setAttribValue("region", Region.LEGMEMBRANE)
-            prim2 = fill_face(geo, [
-                mid_loop[j],
-                mid_loop[next_j],
-                latter_loop[next_j],
-                latter_loop[j],
-            ])
-            prim2.setAttribValue("region", Region.LEGMEMBRANE)
+        bridge_loops(geo, former_loop, mid_loop, primitive_attr=("region", Region.LEGMEMBRANE))
+        bridge_loops(geo, mid_loop, latter_loop, primitive_attr=("region", Region.LEGMEMBRANE))
 
     return membrane_points
 
@@ -638,8 +605,7 @@ def _close_tarsus(
 ) -> None:
     assert len(seg_pts) >= 4, f"Expected at least 4 seg_pts, got {len(seg_pts)}"
     p4, p5, p6, p7 = seg_pts[-4:]
-    prim = fill_face(geo, [p4, p6, p7, p5])
-    prim.setAttribValue("region", Region.LEGSEGMENT)
+    fill_face_with_attr(geo, [p4, p6, p7, p5], "region", Region.LEGSEGMENT)
 
     pos4, pos5, pos6, pos7 = points_to_positions([p4, p5, p6, p7])
     offset_y = pos4.y() - pos6.y()

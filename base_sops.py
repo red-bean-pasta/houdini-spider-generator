@@ -14,13 +14,16 @@ from utilities.common import (
     points_by_attr,
 )
 from helper import (
-    add_id_attr,
+    add_id_point,
     affix_id,
     deduplicate_id_attr,
+    add_id_point,
+    fill_face_with_attr,
     get_id_range,
     point_from_geo,
     points_by_id,
-    set_points_id,
+    prims_by_attr,
+    replace_points,
     unique_points_start_with_id,
 )
 from utilities.identifying import deduplicate_point_attributes
@@ -79,14 +82,7 @@ def extract_sternum_rim(node: hou.SopNode) -> None:
     ]
     assert len(rim_edges) == len(sternum_rim), "Expected one edge per sternum rim point"
 
-    geo.clear()
-    add_id_attr(geo)
-    points = {}
-    for point_id, position in sternum_rim.items():
-        point = geo.createPoint()
-        point.setPosition(position)
-        point.setAttribValue("id", point_id)
-        points[point_id] = point
+    points = dict(zip(sternum_rim, replace_points(geo, sternum_rim.items())))
 
     for start_id, end_id in rim_edges:
         edge = geo.createPolygon(is_closed=False)
@@ -144,14 +140,8 @@ def _extrude_edge_outward(
     ) / edge_length
     offset = outward * edge_length * flap_ratio * 2.0
 
-    outer_start = geo.createPoint()
-    outer_start.setPosition(start_position + offset)
-    outer_end = geo.createPoint()
-    outer_end.setPosition(end_position + offset)
-    set_points_id(
-        [outer_start, outer_end],
-        [_get_extruded_id(start), _get_extruded_id(end)],
-    )
+    outer_start = add_id_point(geo, start_position + offset, _get_extruded_id(start))
+    outer_end = add_id_point(geo, end_position + offset, _get_extruded_id(end))
     fill_face(geo, [start, end, outer_end, outer_start], True)
 
 
@@ -277,11 +267,12 @@ def fill_maxilla(node: hou.SopNode) -> None:
         direction_length = direction.length()
         assert direction_length > 1e-6, "Expected distinct maxilla endpoints"
         direction /= direction_length
-        maxilla = geo.createPoint()
-        maxilla.setPosition(start_position + direction * (center_position - start_position).length())
-        maxilla.setAttribValue("id", f"basemaxilla{1 if side == 0 else -1}")
-        primitive = fill_face(geo, [start, maxilla, end, pivot], side == 0)
-        primitive.setAttribValue("region", Region.MAXILLA)
+        maxilla = add_id_point(
+            geo,
+            start_position + direction * (center_position - start_position).length(),
+            f"basemaxilla{1 if side == 0 else -1}",
+        )
+        fill_face_with_attr(geo, [start, maxilla, end, pivot], "region", Region.MAXILLA, side == 0)
 
 
 def fill_pedicel_membrane(node: hou.SopNode) -> None:
@@ -303,11 +294,8 @@ def fill_pedicel_membrane(node: hou.SopNode) -> None:
     px_offset = horizontal * math.sqrt(e5_1_offset[0] ** 2 + e5_1_offset[2] ** 2)
     px_offset[1] = (e5_1_offset[1] + e5_2_offset[1]) / 2.0
 
-    px0 = geo.createPoint()
-    px0.setPosition(p5_position + px_offset)
-    px0.setAttribValue("id", "baseend0")
-    primitive = fill_face(geo, [px0, e5_1, p5, e5_2])
-    primitive.setAttribValue("region", Region.BASEPEDICELMEMBRANE)
+    px0 = add_id_point(geo, p5_position + px_offset, "baseend0")
+    fill_face_with_attr(geo, [px0, e5_1, p5, e5_2], "region", Region.BASEPEDICELMEMBRANE)
 
 
 def inset_membrane(node: hou.SopNode) -> None:
@@ -345,17 +333,13 @@ def _inset_coxa_membranes(geo: hou.Geometry, points: dict[str, hou.Point], ratio
         sm = points[sternum.sternummiddle(idx)]
         bsm = points[basesternummiddle(idx)]
         dist = ratio * sm.position().distanceTo(bsm.position())
-        prims = [
-            prim for prim in sm.prims()
-            if prim.stringAttribValue("region") == Region.COXA
-        ]
+        prims = prims_by_attr(sm.prims(), "region", Region.COXA)
         inner_prims = inset(prims, dist, use_ratio=False, follow_existing_edge=True)
         for prim in inner_prims:
             prim.setAttribValue("region", Region.COXASOCKET)
 
-    for prim in geo.prims():
-        if prim.stringAttribValue("region") == Region.COXA:
-            prim.setAttribValue("region", Region.COXAMEMBRANE)
+    for prim in prims_by_attr(geo, "region", Region.COXA):
+        prim.setAttribValue("region", Region.COXAMEMBRANE)
 
 def _inset_membrane_region(
     geo: hou.Geometry,
@@ -368,13 +352,12 @@ def _inset_membrane_region(
 ) -> None:
     inner_pt, outer_pt = baseline
     dist = ratio * inner_pt.position().distanceTo(outer_pt.position())
-    prims = [p for p in geo.prims() if p.stringAttribValue("region") == region]
+    prims = prims_by_attr(geo, "region", region)
     inner_prims = inset(prims, dist, use_ratio=False, follow_existing_edge=follow_existing_edge)
     for prim in inner_prims:
         prim.setAttribValue("region", socket_region)
-    for prim in geo.prims():
-        if prim.stringAttribValue("region") == region:
-            prim.setAttribValue("region", membrane_region)
+    for prim in prims_by_attr(geo, "region", region):
+        prim.setAttribValue("region", membrane_region)
 
 def _classify_maxilla_membrane_points(geo: hou.Geometry) -> None:
     points_by_id_dict = points_by_attr(geo, "id", skip_blank=True)

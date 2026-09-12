@@ -7,7 +7,15 @@ import base_sops
 import head
 import sternum
 from cephalothorax import build as build_cephalothorax
-from helper import affix_id, point_from_geo, points_by_id
+from helper import (
+    add_id_point,
+    affix_id,
+    fill_face_with_attr,
+    point_from_geo,
+    points_by_id,
+    prims_by_attr,
+    set_prim_attr_where_blank,
+)
 from leg import build as build_legs
 from pedicel import build as build_pedicel
 from utilities.common import (
@@ -24,7 +32,7 @@ from utilities.nodes import (
     add_reload_button,
     sopify,
 )
-from utilities.topology import fill_pentagon
+from utilities.topology import fill_pentagon, offset_point
 
 
 class ID(StrEnum):
@@ -204,10 +212,7 @@ def _get_opening_support_loop_width(
 
 
 def _identify_pedicel_membrane_points(geo: hou.Geometry) -> tuple[hou.Point, hou.Point, hou.Point]:
-    membrane_prims = [
-        prim for prim in geo.prims()
-        if prim.stringAttribValue("region") == base_sops.Region.BASEPEDICELMEMBRANE
-    ]
+    membrane_prims = prims_by_attr(geo, "region", base_sops.Region.BASEPEDICELMEMBRANE)
     assert len(membrane_prims) == 1, f"Expected 1 basepedicelmembrane prim, got {len(membrane_prims)}"
     mem_prim = membrane_prims[0]
 
@@ -250,9 +255,7 @@ def _add_side_cepha_pedicel_points(
     pos_outer_right = pos_right + dir_right * support_width
 
     # cp = cephalothorax pedicel
-    cp_right = geo.createPoint()
-    cp_right.setPosition(pos_right)
-    cp_right.setAttribValue("id", cephapedicelright())
+    cp_right = add_id_point(geo, pos_right, cephapedicelright())
 
     cp_outer_right = geo.createPoint()
     cp_outer_right.setPosition(pos_outer_right)
@@ -260,9 +263,7 @@ def _add_side_cepha_pedicel_points(
     pos_left = pos_bs5_2 * size_ratio_x + p_end * (1 - size_ratio_x)
     pos_outer_left = pos_left + dir_left * support_width
 
-    cp_left = geo.createPoint()
-    cp_left.setPosition(pos_left)
-    cp_left.setAttribValue("id", cephapedicelleft())
+    cp_left = add_id_point(geo, pos_left, cephapedicelleft())
 
     cp_outer_left = geo.createPoint()
     cp_outer_left.setPosition(pos_outer_left)
@@ -292,9 +293,7 @@ def _position_vertical_pedicel_points(
     pos_cp_outer_lower = p_sternum * (1.0 / 3.0) + pos_cp_lower * (2.0 / 3.0)
     cp_outer_lower.setPosition(pos_cp_outer_lower)
 
-    cp_lower = geo.createPoint()
-    cp_lower.setPosition(pos_cp_lower)
-    cp_lower.setAttribValue("id", cephapedicellower())
+    cp_lower = add_id_point(geo, pos_cp_lower, cephapedicellower())
 
     target_height = p_end.y() - pos_cp_lower.y()
     dy = p_head.y() - p_end.y()
@@ -307,12 +306,10 @@ def _position_vertical_pedicel_points(
     pos_baseend0 = p_upper + dir_upper * support_width
     baseend0_offset = pos_baseend0 - p_end
 
-    cp_upper = geo.createPoint()
-    cp_upper.setPosition(p_upper)
-    cp_upper.setAttribValue("id", cephapedicelupper())
+    cp_upper = add_id_point(geo, p_upper, cephapedicelupper())
 
     baseend0.setPosition(pos_baseend0)
-    basesupportend0.setPosition(basesupportend0.position() + baseend0_offset)
+    offset_point(basesupportend0, baseend0_offset)
 
     return cp_upper, cp_lower
 
@@ -356,7 +353,7 @@ def _reconnect_upper_sternum_pedicel_loop(
     bs5_2: hou.Point,
     size_ratio_x: float,
 ) -> tuple[hou.Point, hou.Point]:
-    headback_prims = [pr for pr in baseend0.prims() if pr.stringAttribValue("region") == head.Region.HEADBACK]
+    headback_prims = prims_by_attr(baseend0.prims(), "region", head.Region.HEADBACK)
     assert len(headback_prims) == 2, f"Expected 2 headback prims on baseend0, got {len(headback_prims)}"
 
     geo.deletePrims(headback_prims, keep_points=True)
@@ -375,18 +372,25 @@ def _reconnect_upper_sternum_pedicel_loop(
     p_left.setPosition(pos_p_left)
 
     # Reconnect upper-right and upper-left faces
-    face_ur1 = fill_face(geo, [basesupportend0, baseend0, cp_outer_right, p_right], reverse=True)
-    face_ur2 = fill_face(geo, [p_right, cp_outer_right, bs5_1, basesupportsternum5_1], reverse=True)
-    face_ul1 = fill_face(geo, [basesupportend0, baseend0, cp_outer_left, p_left], reverse=False)
-    face_ul2 = fill_face(geo, [p_left, cp_outer_left, bs5_2, basesupportsternum5_2], reverse=False)
+    face_ur1 = fill_face_with_attr(
+        geo, [basesupportend0, baseend0, cp_outer_right, p_right], "region", head.Region.HEADBACK, reverse=True
+    )
+    face_ur2 = fill_face_with_attr(
+        geo, [p_right, cp_outer_right, bs5_1, basesupportsternum5_1], "region", head.Region.HEADBACK, reverse=True
+    )
+    face_ul1 = fill_face_with_attr(
+        geo, [basesupportend0, baseend0, cp_outer_left, p_left], "region", head.Region.HEADBACK, reverse=False
+    )
+    face_ul2 = fill_face_with_attr(
+        geo, [p_left, cp_outer_left, bs5_2, basesupportsternum5_2], "region", head.Region.HEADBACK, reverse=False
+    )
 
-    face_buf_ur = fill_face(geo, [cp_upper, cp_right, cp_outer_right, baseend0], reverse=True)
-    face_buf_ul = fill_face(geo, [cp_upper, cp_left, cp_outer_left, baseend0], reverse=False)
-    face_buf_ur.setAttribValue("region", base_sops.Region.BASEBUFFERMEMBRANE)
-    face_buf_ul.setAttribValue("region", base_sops.Region.BASEBUFFERMEMBRANE)
-
-    for f in (face_ur1, face_ur2, face_ul1, face_ul2):
-        f.setAttribValue("region", head.Region.HEADBACK)
+    fill_face_with_attr(
+        geo, [cp_upper, cp_right, cp_outer_right, baseend0], "region", base_sops.Region.BASEBUFFERMEMBRANE, reverse=True
+    )
+    fill_face_with_attr(
+        geo, [cp_upper, cp_left, cp_outer_left, baseend0], "region", base_sops.Region.BASEBUFFERMEMBRANE, reverse=False
+    )
 
     return p_right, p_left
 
@@ -422,9 +426,7 @@ def _retopo_head_back_faces(
         reverse=True,
     )
 
-    for prim in geo.prims():
-        if not prim.stringAttribValue("region"):
-            prim.setAttribValue("region", head.Region.HEADBACK)
+    set_prim_attr_where_blank(geo, "region", head.Region.HEADBACK)
 
 
 def _adjust_opening_points_depth(
@@ -433,9 +435,9 @@ def _adjust_opening_points_depth(
     cp_upper: hou.Point,
 ) -> None:
     offset_z = (cp_right.position().x() - cp_left.position().x()) / 4.0
+    offset = hou.Vector3(0.0, 0.0, -offset_z)
     for pt in (cp_right, cp_left, cp_upper):
-        pos = pt.position()
-        pt.setPosition(hou.Vector3(pos.x(), pos.y(), pos.z() - offset_z))
+        offset_point(pt, offset)
 
 
 def _open_abdomen_pedicel(node: hou.SopNode) -> None:
@@ -451,14 +453,11 @@ def _open_abdomen_pedicel(node: hou.SopNode) -> None:
 
 def _remove_coxa_sockets(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-    socket_prims = [
-        prim for prim in geo.prims()
-        if prim.stringAttribValue("region").startswith(
-            (
-                base_sops.Region.COXASOCKET,
-                base_sops.Region.MAXILLASOCKET
-            )
-        )
-    ]
+    socket_prims = prims_by_attr(
+        geo,
+        "region",
+        (base_sops.Region.COXASOCKET, base_sops.Region.MAXILLASOCKET),
+        startswith=True,
+    )
     assert len(socket_prims) == 16 + 2, f"Expected 18 coxa socket prims, got {len(socket_prims)}"
     geo.deletePrims(socket_prims, keep_points=True)

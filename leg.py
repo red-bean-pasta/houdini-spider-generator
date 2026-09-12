@@ -18,6 +18,7 @@ from utilities.common import (
     remove_attrs,
     rotation_to,
 )
+from helper import prims_by_attr
 from utilities.nodes import (
     add_fuse,
     add_merge,
@@ -174,8 +175,8 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
 def _extract_right_coxa(node: hou.SopNode) -> None:
     geo = node.geometry()
     socket_prims = [
-        prim for prim in geo.prims()
-        if prim.boundingBox().center().x() > 0 and prim.stringAttribValue("region").startswith(base_sops.Region.COXASOCKET)
+        prim for prim in prims_by_attr(geo, "region", base_sops.Region.COXASOCKET, startswith=True)
+        if prim.boundingBox().center().x() > 0
     ]
     assert len(socket_prims) == 8, f"Expected 8 right coxa socket prims, got {len(socket_prims)}"
 
@@ -201,10 +202,7 @@ def _get_right_coxa_socket_points(
     node: hou.SopNode,
 ) -> tuple[list[list[hou.Point]], list[list[hou.Point]]]:
     geo = node.geometry()
-    prims = [
-        prim for prim in geo.prims()
-        if prim.stringAttribValue("region").startswith(base_sops.Region.COXASOCKET)
-    ]
+    prims = prims_by_attr(geo, "region", base_sops.Region.COXASOCKET, startswith=True)
     prims = sorted(prims, key=lambda p: p.boundingBox().center().z())
     assert len(prims) == 8, f"Expected 8 socket prims, got {len(prims)}"
 
@@ -295,12 +293,12 @@ def _get_leg_param(
 
     coxa_height = coxa_width
     coxa_size = (coxa_width, coxa_height, coxa_length)
-    segment_specs = tuple(zip(params.max_segment_yaws[1:], params.min_segment_flexes[1:]))
 
-    return LegParam(
+    return LegParam.from_specs(
         coxa_size=coxa_size,
         length_ratios=tuple(params.front_segment_length_ratios),
-        yaw_flex_specs=segment_specs,
+        max_segment_yaws=tuple(params.max_segment_yaws[1:]),
+        min_segment_flexes=tuple(params.min_segment_flexes[1:]),
         height_ratio=control_params.segment_height_ratio,
         spine_ratio=control_params.segment_lateral_ratio,
         shrink_ratios=control_params.segment_shrink_ratios,

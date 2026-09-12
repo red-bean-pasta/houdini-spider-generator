@@ -5,11 +5,14 @@ import hou
 
 import spider
 from helper import (
-    add_id_attr,
+    add_id_point,
     affix_id,
     point_from_geo,
+    position_from_geo,
     points_by_id,
-    rename_left_ids,
+    rename_left_ids_node,
+    replace_points,
+    sopify_chain,
 )
 from utilities.common import (
     add_float_param,
@@ -73,8 +76,7 @@ def build(spider_node: hou.OpNode, cephalothorax: hou.SopNode) -> hou.SopNode:
 
     merged = add_merge(abdomen, "merge_frames", width_frame, height_frame)
     fused = add_fuse(abdomen, "fuse_frames", merged)
-    upper_middle_frame = sopify(abdomen, fused, _add_upper_middle_frame)
-    lower_middle_frame = sopify(abdomen, upper_middle_frame, _add_lower_middle_frame)
+    lower_middle_frame = sopify_chain(abdomen, fused, (_add_upper_middle_frame, _add_lower_middle_frame))
     right_side_faces = sopify(abdomen, lower_middle_frame, _fill_right_side_faces)
 
     # Kept for in-editor debug and visualize purpose
@@ -82,9 +84,8 @@ def build(spider_node: hou.OpNode, cephalothorax: hou.SopNode) -> hou.SopNode:
     _ = add_merge(abdomen, "merge_frames_and_points", lower_middle_frame, connected)
 
     mirrored = add_mirror(abdomen, "mirror_left_faces", right_side_faces, (1, 0, 0), True, False)
-    renamed = sopify(abdomen, mirrored, _rename_left_ids)
-    regions = sopify(abdomen, renamed, _add_regions)
-    cleaned = sopify(abdomen, regions, _cleanup_temp_attributes)
+    renamed = sopify(abdomen, mirrored, rename_left_ids_node)
+    cleaned = sopify_chain(abdomen, renamed, (_add_regions, _cleanup_temp_attributes))
 
     recalculate = add_outside_recalculation(abdomen, "recalculate_normals", cleaned)
     add_output(abdomen, "OUT_ABDOMEN", recalculate)
@@ -188,8 +189,6 @@ def _add_width_frame(node: hou.SopNode) -> None:
     r4 = hou.Vector3(half_width * end_ratio, 0.0, length)
     end = hou.Vector3(0.0, 0.0, length)
 
-    geo.clear()
-    add_id_attr(geo)
     points_data = [
         (abdomenorigin(), origin),
         (abdomenhorizontalrim(1), r1),
@@ -198,10 +197,7 @@ def _add_width_frame(node: hou.SopNode) -> None:
         (abdomenhorizontalrim(4), r4),
         (abdomenend(), end),
     ]
-    for point_id, position in points_data:
-        point = geo.createPoint()
-        point.setPosition(position)
-        point.setAttribValue("id", point_id)
+    replace_points(geo, points_data)
 
 
 def _add_height_frame(node: hou.SopNode) -> None:
@@ -242,8 +238,6 @@ def _add_height_frame(node: hou.SopNode) -> None:
     r1 = r2 * (tmp_pedicel_height / r2.y())
     rn1 = rn2 * (tmp_pedicel_height / abs(rn2.y()))
 
-    geo.clear()
-    add_id_attr(geo)
     points_data = [
         (abdomenorigin(), o),
         (abdomenverticalrim(1), r1),
@@ -256,10 +250,7 @@ def _add_height_frame(node: hou.SopNode) -> None:
         (abdomenverticalrim(-2), rn2),
         (abdomenverticalrim(-1), rn1),
     ]
-    for point_id, position in points_data:
-        point = geo.createPoint()
-        point.setPosition(position)
-        point.setAttribValue("id", point_id)
+    replace_points(geo, points_data)
 
 
 def _add_upper_middle_frame(node: hou.SopNode) -> None:
@@ -275,33 +266,26 @@ def _add_middle_frame(node: hou.SopNode, negative: bool = False) -> None:
     sign = -1 if negative else 1
     side_attr = abdomensidelower if negative else abdomensideupper
 
-    o, v1, h1 = point_from_geo(
+    o, v1, h1 = position_from_geo(
         geo,
         abdomenorigin(),
         abdomenverticalrim(sign * 1),
         abdomenhorizontalrim(1),
     )
-    o = o.position()
-    v1 = v1.position()
-    h1 = h1.position()
     s1 = get_point_on_ellipse_2d(o, v1, h1, math.pi / 4)
 
     s_points = [s1]
     for i in range(2, 5):
-        vi, hi = point_from_geo(
+        vi, hi = position_from_geo(
             geo,
             abdomenverticalrim(sign * i),
             abdomenhorizontalrim(i),
         )
-        vi = vi.position()
-        hi = hi.position()
         center = hou.Vector3(0.0, 0.0, vi.z())
         s_points.append(get_point_on_ellipse_2d(center, vi, hi))
 
     for i, pos in enumerate(s_points, start=1):
-        point = geo.createPoint()
-        point.setPosition(pos)
-        point.setAttribValue("id", side_attr(i))
+        add_id_point(geo, pos, side_attr(i))
 
 
 def _fill_right_side_faces(node: hou.SopNode) -> None:
@@ -350,10 +334,6 @@ def _connect_frames_tmp(node: hou.SopNode) -> None:
             point = points.get(point_id)
             assert point is not None, f"Expected point {point_id!r}"
             poly.addVertex(point)
-
-
-def _rename_left_ids(node: hou.SopNode) -> None:
-    rename_left_ids(node.geometry())
 
 
 def _add_regions(node: hou.SopNode) -> None:

@@ -1,6 +1,7 @@
 import hou
 
 import base_sops
+from helper import sopify_chain
 from sternum import build as build_sternum
 from utilities.common import add_float_param
 from utilities.nodes import (
@@ -21,19 +22,25 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     propagate_parameters(base, sternum, skip_params="membrane_ratio")
     sternum.parm("membrane_ratio").set(base.parm("membrane_ratio"))
 
-    rim = sopify(base, sternum, base_sops.extract_sternum_rim)
-    flaps = sopify(base, rim, base_sops.build_coxa_flaps)
-    flap_regions = sopify(base, flaps, base_sops.add_flap_regions)
+    flap_regions = sopify_chain(
+        base,
+        sternum,
+        (base_sops.extract_sternum_rim, base_sops.build_coxa_flaps, base_sops.add_flap_regions),
+    )
     fuse_flaps = add_fuse(base, "fuse_coxa_flaps", flap_regions)
     connected = sopify(base, fuse_flaps, base_sops.connect_side_flaps)
     fuse_connected = add_fuse(base, "fuse_connected_side_flaps", connected)
-    cleaned_connected = sopify(base, fuse_connected, base_sops.cleanup_connected_side_flap_ids)
-
-    rotated = sopify(base, cleaned_connected, base_sops.rotate_coxa_flaps)
-    adjusted = sopify(base, rotated, base_sops.adjust_frontest_line)
-
-    maxilla = sopify(base, adjusted, base_sops.fill_maxilla)
-    pedicel = sopify(base, maxilla, base_sops.fill_pedicel_membrane)
+    pedicel = sopify_chain(
+        base,
+        fuse_connected,
+        (
+            base_sops.cleanup_connected_side_flap_ids,
+            base_sops.rotate_coxa_flaps,
+            base_sops.adjust_frontest_line,
+            base_sops.fill_maxilla,
+            base_sops.fill_pedicel_membrane,
+        ),
+    )
 
     fused_pedicel = add_fuse(base, "fuse_pedicel_membrane", pedicel)
     membrane = sopify(base, fused_pedicel, base_sops.inset_membrane)
