@@ -38,6 +38,11 @@ def point_from_geo(geo: hou.Geometry, *point_ids: str) -> tuple[hou.Point, ...]:
     points = points_by_id(geo)
     return tuple(points[point_id] for point_id in point_ids)
 
+def position_from_geo(geo: hou.Geometry, *point_ids: str) -> tuple[hou.Vector3, ...]:
+    """Return the geometry points' positions identified by ``point_ids`` in the same order."""
+    points = points_by_id(geo)
+    return tuple(points[point_id].position() for point_id in point_ids)
+
 
 def set_point_id(point: hou.Point, value: str) -> None:
     set_point_attr(point, "id", value)
