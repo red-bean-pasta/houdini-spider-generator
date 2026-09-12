@@ -31,7 +31,7 @@ from utilities.nodes import (
     add_reloadable_subnet,
     sopify,
 )
-from utilities.topology import fill_pentagon, inset
+from utilities.topology import fill_pentagon, inset, offset_point
 
 
 class ID(StrEnum):
@@ -318,9 +318,15 @@ def _add_corners_half(node: hou.SopNode) -> None:
 
 def _add_head_dent(node: hou.SopNode) -> None:
     geo = node.geometry()
-    headfront0, headsupport0 = point_from_geo(geo, headfront(0), headsupport(0))
+    headfront0, headsupport0 = point_from_geo(
+        geo,
+        headfront(0),
+        headsupport(0),
+    )
     dist = headfront0.position().distanceTo(headsupport0.position())
-    headfront0.setPosition(headfront0.position() - hou.Vector3(0.0, dist * (1.0 / 3.0), 0.0))
+    offset = hou.Vector3(0.0, -dist * 1/3, 0.0)
+    offset_point(headfront0, offset)
+    offset_point(headsupport0, offset)
 
 
 def _curve_lip(node: hou.SopNode) -> None:
@@ -384,7 +390,6 @@ def _fill_back_loop_faces(node: hou.SopNode) -> None:
         geo,
         [hf0, hf1, hs2, hs1, hs0],
         (hf0, hs0),
-        reverse=True,
     )
     set_point_id(midpoint, headfrontmid(0))
     set_point_id(floatpoint, headfrontfloat(1))
