@@ -5,10 +5,6 @@ import hou
 import base_sops
 import pedipalp
 from leg_builder import LegParam, build_leg
-from pedipalp import (
-    _build_basic,
-    _position_basic,
-)
 from utilities.common import (
     add_float_param,
     add_heading,
@@ -119,19 +115,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
         (0.0, None),
         hou.parmNamingScheme.Base1,
     )
-    add_heading(
-        legs,
-        "Pedipalp",
-    )
-    add_float_param(
-        legs,
-        "pedipalp_segment_length_ratios",
-        5,
-        (0.8, 3.75, 3, 2.5, 1.5),
-        (0.0, None),
-        hou.parmNamingScheme.Base1,
-        help="Ratio relative to pedipalp's own coxa length.",
-    )
+    pedipalp.add_parameters(legs)
 
 
 def _add_controls(parent: hou.SopNode) -> hou.SopNode:
