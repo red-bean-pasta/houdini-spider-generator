@@ -12,10 +12,21 @@ from utilities.common import (
     get_params,
     get_parent,
     rotation_to,
-    add_global_attr, add_heading, add_float_param, get_float_parm, add_point, points_by_attr, remove_attrs,
+    add_global_attr,
+    add_heading,
+    add_float_param,
+    get_float_parm,
+    add_point,
+    points_by_attr,
+    remove_attrs,
     points_start_with,
 )
-from utilities.nodes import sopify, add_fuse
+from utilities.nodes import (
+    add_fuse,
+    add_output,
+    add_reloadable_subnet,
+    sopify,
+)
 from utilities.topology import edge_point_on_face
 
 
@@ -73,21 +84,45 @@ def build(
     parent: hou.SopNode,
     input_node: hou.SopNode,
 ) -> hou.SopNode:
-    remove_noise_points = sopify(parent, input_node, _remove_noise_points)
-    built_pedipalp = sopify(parent, remove_noise_points, _build_basic)
-    positioned_pedipalp = sopify(parent, built_pedipalp, _position_basic)
-    support_deleted_pedipalp = sopify(parent, positioned_pedipalp, _delete_start_coxa_supports)
-    base_trapezoid = sopify(parent, support_deleted_pedipalp, _prepare_coxa_corners)
-    bottom_right_face_filled = sopify(parent, base_trapezoid, _fill_bottom_right_face)
-    back_filled = sopify(parent, bottom_right_face_filled, _fill_back_face)
-    top_filled = sopify(parent, back_filled, _fill_top_face)
-    front_upper_face_filled = sopify(parent, top_filled, _add_front_upper_face)
-    loop_face_filled = sopify(parent, front_upper_face_filled, _add_front_loop_faces)
-    maxilla_quad_added = sopify(parent, loop_face_filled, _add_maxilla_quads)
-    maxilla_filled = sopify(parent, maxilla_quad_added, _fill_maxilla_faces)
-    cleaned_up = sopify(parent, maxilla_filled, _remove_tmp_attributes)
-    fused = add_fuse(parent, "fuse_sockets", cleaned_up)
-    return fused
+    pedipalp = add_reloadable_subnet(parent, "pedipalp")
+    pedipalp.setInput(0, input_node)
+    _add_controls(pedipalp)
+
+    remove_noise_points = sopify(pedipalp, pedipalp.indirectInputs()[0], _remove_noise_points)
+    built_pedipalp = sopify(pedipalp, remove_noise_points, _build_basic)
+    positioned_pedipalp = sopify(pedipalp, built_pedipalp, _position_basic)
+    support_deleted_pedipalp = sopify(pedipalp, positioned_pedipalp, _delete_start_coxa_supports)
+    base_trapezoid = sopify(pedipalp, support_deleted_pedipalp, _prepare_coxa_corners)
+    bottom_right_face_filled = sopify(pedipalp, base_trapezoid, _fill_bottom_right_face)
+    back_filled = sopify(pedipalp, bottom_right_face_filled, _fill_back_face)
+    top_filled = sopify(pedipalp, back_filled, _fill_top_face)
+    front_upper_face_filled = sopify(pedipalp, top_filled, _add_front_upper_face)
+    loop_face_filled = sopify(pedipalp, front_upper_face_filled, _add_front_loop_faces)
+    maxilla_quad_added = sopify(pedipalp, loop_face_filled, _add_maxilla_quads)
+    maxilla_filled = sopify(pedipalp, maxilla_quad_added, _fill_maxilla_faces)
+    cleaned_up = sopify(pedipalp, maxilla_filled, _remove_tmp_attributes)
+    fused = add_fuse(pedipalp, "fuse_sockets", cleaned_up)
+    add_output(pedipalp, "OUT_PEDIPALP", fused)
+    pedipalp.layoutChildren()
+    return pedipalp
+
+
+def _add_controls(parent: hou.SopNode) -> hou.SopNode:
+    control = parent.createNode("null", "CONTROL")
+    add_float_param(
+        control,
+        "endite_buffer",
+        size=2,
+        default=(0.2, 0.2),
+        min_max=(0.0, 1.0),
+    )
+    add_float_param(
+        control,
+        "endite_flatness",
+        default=0.1,
+        min_max=(0.0, 1.0),
+    )
+    return control
 
 
 def _remove_noise_points(
@@ -148,13 +183,13 @@ def _prepare_coxa_corners(
     node: hou.SopNode,
 ) -> None:
     geo = node.geometry()
-    dist = _add_base_trapezoid(geo)
-    _add_base_corner_point(geo, dist)
+    _add_base_trapezoid(geo)
 
 
 def _fill_bottom_right_face(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-    c4 = _add_bottom_right_face_point(geo)
+    control_params = get_params(get_control(node), use_tuple=False)
+    c4 = _add_bottom_right_face_point(geo, control_params.endite_buffer)
     es4, c2, m1 = point_from_geo(
         geo,
         _tmp_coxa_support(2, 4),
@@ -163,17 +198,21 @@ def _fill_bottom_right_face(node: hou.SopNode) -> None:
     )
     fill_face(geo, [es4, c4, c2, m1])
 
-def _add_bottom_right_face_point(geo: hou.Geometry) -> hou.Point:
-    dist = geo.attribValue(_tmp_coxa_base_height())
-    e1, e4= point_from_geo(
+def _add_bottom_right_face_point(
+    geo: hou.Geometry,
+    endite_buffer: hou.Vector2,
+) -> hou.Point:
+    e1, e4, m1 = point_from_geo(
         geo,
         _tmp_coxa_end(1),
         _tmp_coxa_end(4),
+        basemaxillamembrane(1),
     )
 
-    direction = _get_coxa_lower_direction(geo)
+    direction = _get_coxa_direction(geo)
 
-    start_position = e1.position() * 1 / 3 + e4.position() * 2 / 3
+    start_position = e1.position() * endite_buffer.x() + e4.position() * (1.0 - endite_buffer.x())
+    dist = _get_buffer_dist_z(geo, endite_buffer.y())
     target_position = start_position + direction * dist
     p = add_point(geo, target_position, ("id", _tmp_coxa_corner("bottom")))
     return p
@@ -181,12 +220,11 @@ def _add_bottom_right_face_point(geo: hou.Geometry) -> hou.Point:
 
 def _fill_back_face(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-    s3, es3, es4, c3, m1 = point_from_geo(
+    s3, es3, es4, m1 = point_from_geo(
         geo,
         _tmp_coxa_start(3),
         _tmp_coxa_support(2, 3),
         _tmp_coxa_support(2, 4),
-        _tmp_coxa_corner(3),
         basemaxillamembrane(1),
     )
     fill_face(geo, [es3, es4, m1, s3])
@@ -195,7 +233,7 @@ def _fill_back_face(node: hou.SopNode) -> None:
 def _fill_top_face(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     dist = geo.attribValue(_tmp_coxa_base_height())
-    direction = _get_coxa_upper_direction(geo)
+    direction = _get_coxa_direction(geo)
 
     e2, m2, m3, m4, es2, es3 = point_from_geo(
         geo,
@@ -216,14 +254,15 @@ def _fill_top_face(node: hou.SopNode) -> None:
 
 def _add_maxilla_quads(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
+    control_params = get_params(get_control(node), use_tuple=False)
     pos = _get_maxilla_pole(node)
     normal = _get_averaged_maxilla_quad_normal(geo, pos)
-    _add_maxilla_quads_to_geo(geo, pos, normal, 0.1)
+    _add_maxilla_quads_to_geo(geo, pos, normal, control_params.endite_flatness)
 
 def _get_maxilla_pole(node: hou.SopNode) -> hou.Vector3:
     geo: hou.Geometry = node.geometry()
-    parent = get_parent(node)
-    length_ratio = get_float_parm(parent, "maxilla_length_ratio")
+    leg = get_leg(node)
+    length_ratio = get_float_parm(leg, "maxilla_length_ratio")
 
     e1, e2, e3, es3, m2, ct2 = point_from_geo(
         geo,
@@ -307,7 +346,8 @@ def _add_maxilla_quads_to_geo(
 
 def _add_front_upper_face(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-    p = _add_front_face_point(geo)
+    control_params = get_params(get_control(node), use_tuple=False)
+    p = _add_front_face_point(geo, control_params.endite_buffer)
     es2, c6, m2 = point_from_geo(
         geo,
         _tmp_coxa_support(2, 2),
@@ -316,22 +356,26 @@ def _add_front_upper_face(node: hou.SopNode) -> None:
     )
     fill_face(geo, [es2, c6, m2, p])
 
-def _add_front_face_point(geo: hou.Geometry) -> hou.Point:
+def _add_front_face_point(
+    geo: hou.Geometry,
+    endite_buffer: hou.Vector2,
+) -> hou.Point:
     e1, e2 = point_from_geo(
         geo,
         _tmp_coxa_end(1),
         _tmp_coxa_end(2),
     )
-    dist = geo.attribValue(_tmp_coxa_base_height())
-    direction = _get_coxa_upper_direction(geo)
-    start = e1.position() * 1/3 + e2.position() * 2/3
+    dist = _get_buffer_dist_z(geo, endite_buffer.y())
+    direction = _get_coxa_direction(geo)
+    start = e1.position() * endite_buffer.x() + e2.position() * (1.0 - endite_buffer.x())
     target = start + direction * dist
     return add_point(geo, target, ("id", _tmp_coxa_corner("front")))
 
 
 def _add_front_loop_faces(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-    p = _add_loop_point(geo)
+    control_params = get_params(get_control(node), use_tuple=False)
+    p = _add_loop_point(geo, control_params.endite_buffer.y())
     es1, es2, es4, cf, cb = point_from_geo(
         geo,
         _tmp_coxa_support(2, 1),
@@ -343,13 +387,16 @@ def _add_front_loop_faces(node: hou.SopNode) -> None:
     fill_face(geo, [es2, cf, p, es1])
     fill_face(geo, [es1, p, cb, es4])
 
-def _add_loop_point(geo: hou.Geometry) -> hou.Point:
+def _add_loop_point(
+    geo: hou.Geometry,
+    endite_buffer_y: float,
+) -> hou.Point:
     e1, = point_from_geo(
         geo,
         _tmp_coxa_end(1),
     )
-    dist = geo.attribValue(_tmp_coxa_base_height())
-    direction = _get_coxa_upper_direction(geo)
+    dist = _get_buffer_dist_z(geo, endite_buffer_y)
+    direction = _get_coxa_direction(geo)
     target = e1.position() + direction * dist
     return add_point(geo, target, ("id", _tmp_coxa_corner("frontbottom")))
 
@@ -416,7 +463,7 @@ def _get_pedipalp_param(
     node: hou.SopNode,
 ) -> LegParam:
     geo = node.geometry()
-    leg = get_parent(node)
+    leg = get_leg(node)
 
     params = get_params(leg, use_tuple=False)
     control_params = get_params(get_control(leg), use_tuple=False)
@@ -469,6 +516,12 @@ def _add_base_corner_point(
         geo: hou.Geometry,
         dist: float,
 ) -> None:
+    """
+    Legacy method
+    :param geo:
+    :param dist:
+    :return:
+    """
     s3, e3, m1 = point_from_geo(
         geo,
         _tmp_coxa_start(3),
@@ -523,18 +576,24 @@ def _add_base_trapezoid(
 
 
 
-def _get_coxa_lower_direction(geo: hou.Geometry) -> hou.Vector3:
-    es4, c3 = point_from_geo(
-        geo,
-        _tmp_coxa_support(2, 4),
-        _tmp_coxa_corner(3),
-    )
-    return (c3.position() - es4.position()).normalized()
-
-def _get_coxa_upper_direction(geo: hou.Geometry) -> hou.Vector3:
+def _get_coxa_direction(geo: hou.Geometry) -> hou.Vector3:
     es3, e3 = point_from_geo(
         geo,
         _tmp_coxa_support(2, 3),
         _tmp_coxa_end(3),
     )
     return (es3.position() - e3.position()).normalized()
+
+
+def _get_buffer_dist_z(geo: hou.Geometry, endite_buffer_y: float) -> float:
+    e1, m1 = point_from_geo(
+        geo,
+        _tmp_coxa_end(1),
+        basemaxillamembrane(1),
+    )
+    return e1.position().distanceTo(m1.position()) * endite_buffer_y
+
+
+def get_leg(node: hou.Node) -> hou.OpNode:
+    subnet = node if node.isSubNetwork() else get_parent(node)
+    return get_parent(subnet)
