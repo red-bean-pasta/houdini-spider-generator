@@ -74,5 +74,5 @@ An agent like you have different thinking chains and preparation steps given a t
 - [Quicky]: Output as quick as possible. Common in simple and local method. You can think of it as [Static Pre] + [Minimal Post]. This mode resembles much more with traditional chat window, and expects limited even insufficient information, and more aggressive assumption and inference.
 
 It may actually help you to give better output by determining a mode for each quest yourself, so you can choose actually one if the user didn't specify.
-By default, the mode should be [Minimal Pre] if neither of you and the user specified.
+By default, the mode should be [Static Pre] if neither of you and the user specified.
 Output the mode at the beginning of every of your response, whether already specified, pretty obvious or not.
