@@ -1,4 +1,5 @@
 from enum import StrEnum, auto
+from typing import Any
 
 import hou
 
@@ -127,6 +128,13 @@ def _add_parameters(head: hou.SopNode) -> None:
     )
     add_float_param(
         head,
+        "flat_offset",
+        1,
+        0.0,
+        help="Offsets the top face along the Z axis, evaluated as a ratio against the base length",
+    )
+    add_float_param(
+        head,
         "top_support_loop_ratio",
         2,
         (0.2, 0.5),
@@ -226,101 +234,89 @@ def _add_corners_half(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
     points = points_by_id(geo)
-
-    sternumrim0 = sternum.sternumrim(0)
-    headchelicerae0 = headchelicerae(0)
-    basesternum0 = base_sops.basesternum(0)
-    basesternum1_2 = base_sops.basesternum(1, 2)
-    basesternum3 = base_sops.basesternum(3)
-    basesternum5_1 = base_sops.basesternum(5, 1)
-    baseend0 = base_sops.baseend(0)
-    expected_ids = (
-        sternumrim0,
-        headchelicerae0,
-        basesternum0,
-        basesternum1_2,
-        basesternum3,
-        basesternum5_1,
-        baseend0,
-    )
-    assert all(point_id in points for point_id in expected_ids), "Expected head reference points"
-
-    (
-        sternumrim0_point,
-        headchelicerae0_point,
-        basesternum0_point,
-        basesternum1_2_point,
-        basesternum3_point,
-        basesternum5_1_point,
-        baseend0_point,
-    ) = point_from_geo(geo, *expected_ids)
-    sternumrim0_pos = sternumrim0_point.position()
-    headchelicerae0_pos = headchelicerae0_point.position()
-    basesternum0_pos = basesternum0_point.position()
-    basesternum1_2_pos = basesternum1_2_point.position()
-    basesternum3_pos = basesternum3_point.position()
-    basesternum5_1_pos = basesternum5_1_point.position()
-    baseend0_pos = baseend0_point.position()
-
-    height = baseend0_pos[2] - headchelicerae0_pos[2]
+    ref = _get_corner_reference_positions(geo)
     params = get_params(parent)
-    height_ratio = params.height_ratio
-    flat_ratiox, flat_ratioy = params.flat_ratio
-    top_support_loop_ratio1, top_support_loop_ratio2 = params.top_support_loop_ratio
-    top_support_loop_ratio_mid = (top_support_loop_ratio1 + top_support_loop_ratio2) / 2.0
-    y_offset = hou.Vector3(0.0, height * height_ratio, 0.0)
-    z_offset = hou.Vector3(0.0, 0.0, height * flat_ratioy)
 
-    def align_front(position: hou.Vector3) -> hou.Vector3:
-        return position + y_offset - hou.Vector3(
-            0.0,
-            position[1] - sternumrim0_pos[1],
-            0.0,
-        )
-
-    headfront0_pos = align_front(headchelicerae0_pos)
-    headfront1_pos = align_front(basesternum1_2_pos)
-    headfront1_pos = hou.Vector3(
-        headfront1_pos[0] * flat_ratiox,
-        headfront1_pos[1],
-        headfront1_pos[2],
-    )
-    headback0_pos = headfront0_pos + z_offset
-    headback1_pos = headfront1_pos + z_offset
-    headtopmiddle1_pos = (headfront1_pos + headback1_pos) / 2.0
-    headtopmiddle0_pos = (headfront0_pos + headback0_pos) / 2.0
-
-    r1 = top_support_loop_ratio1
-    r2 = top_support_loop_ratio2
-    r_mid = top_support_loop_ratio_mid
-
-    headsupport0_pos = headfront0_pos * (1.0 - r1) + basesternum0_pos * r1
-    headsupport2_pos = headfront1_pos * (1.0 - r1) + basesternum1_2_pos * r1
-    headsupport1_pos = (headsupport0_pos + headsupport2_pos) / 2.0
-    headsupport3_pos = headtopmiddle1_pos * (1.0 - r_mid) + basesternum3_pos * r_mid
-    headsupport4_pos = headback1_pos * (1.0 - r2) + basesternum5_1_pos * r2
-    headsupport5_pos = headback0_pos * (1.0 - r2) + baseend0_pos * r2
+    top_corners = _compute_top_corners(ref, params)
+    support_points = _compute_support_points(ref, top_corners, params)
 
     point_data = [
         (point_id, point.position())
         for point_id, point in points.items()
-        if point_id not in (sternumrim0, basesternum0)
+        if point_id not in (sternum.sternumrim(0), base_sops.basesternum(0))
     ]
-    new_points = [
-        (headfront(0), headfront0_pos),
-        (headfront(1), headfront1_pos),
-        (headback(0), headback0_pos),
-        (headback(1), headback1_pos),
-        (headtopmiddle(1), headtopmiddle1_pos),
-        (headtopmiddle(0), headtopmiddle0_pos),
-        (headsupport(0), headsupport0_pos),
-        (headsupport(1), headsupport1_pos),
-        (headsupport(2), headsupport2_pos),
-        (headsupport(3), headsupport3_pos),
-        (headsupport(4), headsupport4_pos),
-        (headsupport(5), headsupport5_pos),
-    ]
+    new_points = list(top_corners.items()) + list(support_points.items())
     _add_points(geo, point_data + new_points)
+
+def _get_corner_reference_positions(geo: hou.Geometry) -> dict[str, hou.Vector3]:
+    points = points_by_id(geo)
+    expected_ids = (
+        sternum.sternumrim(0),
+        headchelicerae(0),
+        base_sops.basesternum(0),
+        base_sops.basesternum(1, 2),
+        base_sops.basesternum(3),
+        base_sops.basesternum(5, 1),
+        base_sops.baseend(0),
+    )
+    assert all(point_id in points for point_id in expected_ids), "Expected head reference points"
+    pts = point_from_geo(geo, *expected_ids)
+    return {pid: pt.position() for pid, pt in zip(expected_ids, pts)}
+
+def _compute_top_corners(
+    ref: dict[str, hou.Vector3],
+    params: Any,
+) -> dict[str, hou.Vector3]:
+    height = ref[base_sops.baseend(0)][2] - ref[headchelicerae(0)][2]
+    flat_ratiox, flat_ratioy = params.flat_ratio
+    y_offset = hou.Vector3(0.0, height * params.height_ratio, 0.0)
+    z_offset = hou.Vector3(0.0, 0.0, height * flat_ratioy)
+
+    base_length = abs(ref[sternum.sternumrim(0)].z() - ref[base_sops.baseend(0)].z())
+    flat_offset_z = hou.Vector3(0.0, 0.0, base_length * params.flat_offset)
+    sternumrim0_y = ref[sternum.sternumrim(0)][1]
+
+    def align_front(position: hou.Vector3) -> hou.Vector3:
+        return position + y_offset - hou.Vector3(0.0, position[1] - sternumrim0_y, 0.0)
+
+    hf0 = align_front(ref[headchelicerae(0)]) + flat_offset_z
+    hf1 = align_front(ref[base_sops.basesternum(1, 2)])
+    hf1 = hou.Vector3(hf1[0] * flat_ratiox, hf1[1], hf1[2]) + flat_offset_z
+    hb0 = hf0 + z_offset
+    hb1 = hf1 + z_offset
+    htm1 = (hf1 + hb1) / 2.0
+    htm0 = (hf0 + hb0) / 2.0
+    return {
+        headfront(0): hf0,
+        headfront(1): hf1,
+        headback(0): hb0,
+        headback(1): hb1,
+        headtopmiddle(1): htm1,
+        headtopmiddle(0): htm0,
+    }
+
+def _compute_support_points(
+    ref: dict[str, hou.Vector3],
+    top_corners: dict[str, hou.Vector3],
+    params: Any,
+) -> dict[str, hou.Vector3]:
+    r1, r2 = params.top_support_loop_ratio
+    r_mid = (r1 + r2) / 2.0
+
+    hs0 = top_corners[headfront(0)] * (1.0 - r1) + ref[base_sops.basesternum(0)] * r1
+    hs2 = top_corners[headfront(1)] * (1.0 - r1) + ref[base_sops.basesternum(1, 2)] * r1
+    hs1 = (hs0 + hs2) / 2.0
+    hs3 = top_corners[headtopmiddle(1)] * (1.0 - r_mid) + ref[base_sops.basesternum(3)] * r_mid
+    hs4 = top_corners[headback(1)] * (1.0 - r2) + ref[base_sops.basesternum(5, 1)] * r2
+    hs5 = top_corners[headback(0)] * (1.0 - r2) + ref[base_sops.baseend(0)] * r2
+    return {
+        headsupport(0): hs0,
+        headsupport(1): hs1,
+        headsupport(2): hs2,
+        headsupport(3): hs3,
+        headsupport(4): hs4,
+        headsupport(5): hs5,
+    }
 
 
 def _add_head_dent(node: hou.SopNode) -> None:
@@ -331,7 +327,8 @@ def _add_head_dent(node: hou.SopNode) -> None:
         headsupport(0),
     )
     dist = headfront0.position().distanceTo(headsupport0.position())
-    offset = hou.Vector3(0.0, -dist * 1/3, 0.0)
+    direction = (headsupport0.position() - headfront0.position()).normalized()
+    offset = direction * (dist * 1/3)
     offset_point(headfront0, offset)
     offset_point(headsupport0, offset)
 
