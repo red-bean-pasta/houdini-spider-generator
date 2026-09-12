@@ -344,5 +344,5 @@ this is only an example. bugs and errors expected. need format refactoring to fi
 help me add a new method in `topology.py` after `interpolate_conic` called `interpolate_elliptical`:
 1. it's not a strict conic anymore
 2. it takes arguments p0, p1, p2, normal0 and normal2. p1 doesn't have a normal, and should be the peak/tip of the interpolated elliptical shape.
-3. migrate `chelicerae.py` to use `interpolate_elliptical`.
+3. migrate `../../spider_generator/chelicerae.py` to use `interpolate_elliptical`.
 4. verify the result

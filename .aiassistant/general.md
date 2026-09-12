@@ -27,6 +27,7 @@ You can use MCP or `python.read` to read out-of-scope files.
 No Latex Output. Use only MarkDown. LaTex have problem rendering in PyCharm.
 You can use git stash, commit and branch. But those are quite powerful moves so always clarify your intent then ask for permit. 
 Response when you are confident enough. Don't be paranoid and spend forever verifying or inspecting. Those efforts are not appreciated.
+You can always record your thoughts, findings, summaries or any other necessary stuff to `.aiassistant/temp/`.
 
 # Examples
 ## Example for inspecting output HIP file

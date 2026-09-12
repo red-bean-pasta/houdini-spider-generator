@@ -25,7 +25,7 @@ The extracted helpers are module-level and placed after their parent methods, fo
 
 ## Verification
 
-After each refactoring step, `test_builder.py` regenerated `test.hip`. The first intermediate check cooked the affected base subtree; every later intermediate check cooked the full `/obj/spider` subtree before continuing. The final cumulative verification cooked 170 nodes and reported no node errors.
+After each refactoring step, `../../scripts/build_test_hip.py` regenerated `test.hip`. The first intermediate check cooked the affected base subtree; every later intermediate check cooked the full `/obj/spider` subtree before continuing. The final cumulative verification cooked 170 nodes and reported no node errors.
 
 The final command used the configured interpreter `/bin/hython` and explicitly checked both cook exceptions and each node's `errors()` result.
 

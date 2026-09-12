@@ -3,7 +3,7 @@ verify leg construction logic
 
 #### Background
 each leg segment can yaw and flex. unlike vector angle, the flex angle is treated more "biologically". therefore, when the segment is fully "folded", e.g., (0,0,1) and (0,0,-1), it's angle is 0 instead of 180 degrees.
-spider leg segment is made possible to yaw and flex by membrane. many methods in `leg.py` address how to calculate the mebrane.
+spider leg segment is made possible to yaw and flex by membrane. many methods in `../../spider_generator/leg.py` address how to calculate the mebrane.
 yaw is straight forward: when the segment is fully yawed, it's corner should not go through the former segment. therefore, the calculation is `half_width_latter * sin(yaw) <= membrane_width`. This is simply because the yaw angle (the angle between latter_segment_forward and former_segment_forward) is the same as the angle between latter_segment_left and former_segment_left, which can then derive the mambrane width, or `distance` in the code.
 as for flex, it's much more complicated. The wedge is always from top to bottom (the bottom is wedged off). In the code, the wedge angle refers to the "hallow" angle, so it's  the angle between segment_down and wedged_line, not the "remaining angle". 
 Therefore, the maximum flex doesn't determine the wedge angle needed, but the minimum flex. and if the min flex is above 180, there's no wedge needed. And the min_flex is at least `2 * (90 - wedge_angle)`, if membrane width is not considered. `2 * (90 - wedge_angle)` happens when two wedge surfaces are just onto each other.

@@ -2,9 +2,8 @@ import math
 
 import hou
 
-import base_sops
-import pedipalp
-from leg_builder import LegParam, build_leg
+from . import base_sops, pedipalp
+from .leg_builder import LegParam, build_leg
 from utilities.common import (
     add_float_param,
     add_heading,
@@ -18,7 +17,7 @@ from utilities.common import (
     remove_attrs,
     rotation_to,
 )
-from helper import prims_by_attr
+from .helper import prims_by_attr
 from utilities.nodes import (
     add_fuse,
     add_merge,
@@ -181,8 +180,8 @@ def _extract_right_coxa(node: hou.SopNode) -> None:
     assert len(socket_prims) == 8, f"Expected 8 right coxa socket prims, got {len(socket_prims)}"
 
     used_points = (
-        {v.point() for prim in socket_prims for v in prim.vertices()}
-        | pedipalp.prepare(geo)
+            {v.point() for prim in socket_prims for v in prim.vertices()}
+            | pedipalp.prepare(geo)
     )
     unused_points = [p for p in geo.points() if p not in used_points]
     geo.deletePoints(unused_points)

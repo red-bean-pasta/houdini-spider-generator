@@ -5,7 +5,7 @@ build membrnae topology on each leg segment's gap
 each leg segment is a flat pyramid shape due to wedge. they are also tubes because they have two open faces. let's annotate the side to the base/sternum/coxa as start, and the other as end. let's also say the point smaller in z, aka more forward, as 1, and the other as 2. so 
 
 #### Steps
-- read `leg.py`
+- read `../../spider_generator/leg.py`
 - add method `_fill_mebranes` after `_build_leg`: `_fill_mebranes(seg_pts: list[hou.Point]) -> list[hou.Point]`. `list[hou.Point]` are the ordered points from `_build_leg`;
 - in `_fill_mebranes`:
     - it should add four points per gap. gap is easy to derive: `gap_pts = seg_pts[3:-3]` and sliced every 8, i think;

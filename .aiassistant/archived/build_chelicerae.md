@@ -1,6 +1,6 @@
 ## Task 1
 
-build chelicerae mesh in the existing `chelicerae.py`, which currently only insets membrane but does no extrusion.
+build chelicerae mesh in the existing `../../spider_generator/chelicerae.py`, which currently only insets membrane but does no extrusion.
 
 #### Steps
 

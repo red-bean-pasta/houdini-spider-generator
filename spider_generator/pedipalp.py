@@ -2,9 +2,9 @@ import math
 
 import hou
 
-from base_sops import basemaxillamembrane
-from helper import add_id_point, affix_id, point_from_geo, position_from_geo, prims_by_attr, set_point_id, sopify_chain
-from leg_builder import LegParam, build_leg, Region
+from .base_sops import basemaxillamembrane
+from .helper import add_id_point, affix_id, point_from_geo, position_from_geo, prims_by_attr, set_point_id, sopify_chain
+from .leg_builder import LegParam, build_leg, Region
 from utilities.common import (
     MessagedResult,
     fill_face,

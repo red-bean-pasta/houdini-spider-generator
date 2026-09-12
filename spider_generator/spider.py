@@ -2,12 +2,9 @@ from enum import StrEnum, auto
 
 import hou
 
-import abdomen
-import base_sops
-import head
-import sternum
-from cephalothorax import build as build_cephalothorax
-from helper import (
+from . import abdomen, base_sops, head, sternum
+from .cephalothorax import build as build_cephalothorax
+from .helper import (
     add_id_point,
     affix_id,
     fill_face_with_attr,
@@ -16,8 +13,8 @@ from helper import (
     prims_by_attr,
     set_prim_attr_where_blank,
 )
-from leg import build as build_legs
-from pedicel import build as build_pedicel
+from .leg import build as build_legs
+from .pedicel import build as build_pedicel
 from utilities.common import (
     add_float_param,
     add_folder,

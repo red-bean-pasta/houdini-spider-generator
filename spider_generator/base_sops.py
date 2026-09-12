@@ -3,9 +3,9 @@ from enum import StrEnum, auto
 
 import hou
 
-import sternum
-from sternum import ID as STERNUM_ID
-from sternum import sternumrim
+from . import sternum
+from .sternum import ID as STERNUM_ID
+from .sternum import sternumrim
 from utilities.common import (
     add_prim_attr,
     fill_face,
@@ -13,8 +13,7 @@ from utilities.common import (
     get_parent,
     points_by_attr,
 )
-from helper import (
-    add_id_point,
+from .helper import (
     affix_id,
     deduplicate_id_attr,
     add_id_point,

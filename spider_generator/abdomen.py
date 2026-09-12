@@ -3,8 +3,8 @@ from enum import StrEnum, auto
 
 import hou
 
-import spider
-from helper import (
+from . import spider
+from .helper import (
     add_id_point,
     affix_id,
     point_from_geo,

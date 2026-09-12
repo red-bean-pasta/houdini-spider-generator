@@ -3,9 +3,8 @@ from typing import Any
 
 import hou
 
-import base_sops
-import sternum
-from helper import (
+from . import base_sops, sternum
+from .helper import (
     add_id_point,
     affix_id,
     deduplicate_id_attr,
@@ -204,8 +203,8 @@ def _extract_work_base(node: hou.SopNode) -> None:
         if point.position()[0] >= -1e-4
         and point.stringAttribValue("id") not in excluded_ids
         and (
-            point.stringAttribValue("id").startswith("base")
-            or point.stringAttribValue("id") == sternum.sternumrim(0)
+                   point.stringAttribValue("id").startswith("base")
+                   or point.stringAttribValue("id") == sternum.sternumrim(0)
         )
     ]
     point_data.append((headchelicerae(0), upper0_pos))

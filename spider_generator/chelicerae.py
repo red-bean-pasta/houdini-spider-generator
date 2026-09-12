@@ -5,9 +5,9 @@ from typing import Callable
 
 import hou
 
-import base_sops
-from head import headbasesupport, headchelicerae
-from helper import (
+from . import base_sops
+from .head import headbasesupport, headchelicerae
+from .helper import (
     add_id_point,
     affix_id,
     bridge_loops,

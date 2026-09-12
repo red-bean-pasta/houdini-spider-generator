@@ -14,9 +14,9 @@ The retopology is simple. but we'll talk about it later.
 #### Steps
 1. preparation
 - create a new file called `lip.py`
-- create a new subnet "lip" under cephalothorax subnet. put it under `fuse_base_and_head`. it should simply call `lip.build`. you can see `head.py` for reference on how to do this.
+- create a new subnet "lip" under cephalothorax subnet. put it under `fuse_base_and_head`. it should simply call `lip.build`. you can see `../../spider_generator/head.py` for reference on how to do this.
 - migrate `lip_extrusion_ratio` to `lip` subnet. not as CONTROL, but direct subnet level parameter. it can simply be renamed to `extrusion_ratio`.
-- clean up `head.py` since now it doesn't handle lip extrusion: unneeded point referencing etc. skip if there's nothing to do.
+- clean up `../../spider_generator/head.py` since now it doesn't handle lip extrusion: unneeded point referencing etc. skip if there's nothing to do.
 
 
 ## Task 2
@@ -37,7 +37,7 @@ bug: using distance will result the two other edges, (cheliceraemembraneupper1, 
 ## Task 3
 > finished
 
-refactor `head.py` so that the support loop does add public attributes instead of private ones. 
+refactor `../../spider_generator/head.py` so that the support loop does add public attributes instead of private ones. 
 I've already added wrapper method:
 ```
 def headbasesupport(*i: int | str) -> str:
@@ -46,7 +46,7 @@ def headbasesupport(*i: int | str) -> str:
 you need to refactor `_attribute_inset_points` so that it attributes everything instead of just the original `headcheliceraeupper*` attributes. `headcheliceraeupper*` is already deleted.
 the attribute is simple. if the original point is baseend0, then the inset point should be attributed as `headbasesupport("baseend0")`, returnning `headbasesupport_baseend0`
 
-This method will disrupt serveral downstream nodes: `lip.py` and `spider.py`. for example, `lip.py` uses `headcheliceraeupper` and `spider.py` doesn't utilize the new introduction of `headbasesupport_baseend0`. fix them.
+This method will disrupt serveral downstream nodes: `lip.py` and `../../spider_generator/spider.py`. for example, `lip.py` uses `headcheliceraeupper` and `../../spider_generator/spider.py` doesn't utilize the new introduction of `headbasesupport_baseend0`. fix them.
 
 
 ## Task 4
@@ -60,7 +60,7 @@ remove the two faces that need retopology and retopo them.
 - add item LIPSUPPORT
 - add wrapper method `lip_support(*i)`
 
-you can reference similar designs at `head.py`
+you can reference similar designs at `../../spider_generator/head.py`
 
 - refactor `_add_loops` to attribute added points. first loop is attributed as `lipsupport1_[1|0|-1]`
 

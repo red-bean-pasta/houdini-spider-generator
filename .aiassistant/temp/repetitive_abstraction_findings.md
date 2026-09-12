@@ -20,7 +20,7 @@ The scan found approximately 40 direct `geo.createPoint()` sites across nine mod
 
 **Recommendation**
 
-Build both parameter objects through `LegParam.from_specs(...)`. In `pedipalp.py`, slice the yaw and flex arrays to the same length as the pedipalp length-ratio array before passing them, preserving the current truncation behavior.
+Build both parameter objects through `LegParam.from_specs(...)`. In `../../spider_generator/pedipalp.py`, slice the yaw and flex arrays to the same length as the pedipalp length-ratio array before passing them, preserving the current truncation behavior.
 
 **Why it helps**
 
@@ -39,7 +39,7 @@ This removes duplicated construction and keeps the length-mismatch validation in
 
 **Suggested boundary**
 
-Add a helper such as `replace_points(geo, point_data, *, add_id=True)` to `helper.py`. It should clear the geometry, ensure the ID attribute when requested, create points, assign positions and IDs, and return the created points. The helper should accept already materialized positions because callers must finish reading old point positions before clearing the geometry.
+Add a helper such as `replace_points(geo, point_data, *, add_id=True)` to `../../spider_generator/helper.py`. It should clear the geometry, ensure the ID attribute when requested, create points, assign positions and IDs, and return the created points. The helper should accept already materialized positions because callers must finish reading old point positions before clearing the geometry.
 
 **Why it helps**
 
@@ -60,7 +60,7 @@ The recurring sequence is `geo.createPoint()`, `setPosition(...)`, then `setAttr
 
 **Recommendation**
 
-Standardize on the existing `utilities.common.add_point(...)` where its attribute form fits, or add an ID-specific `add_id_point(geo, position, point_id)` wrapper in `helper.py`. It should return the new point. The current `add_point` utility is already used in `pedipalp.py:217`, `pedipalp.py:249`, `pedipalp.py:338`, `pedipalp.py:372`, and `pedipalp.py:401`, so this would also remove the current inconsistency between modules.
+Standardize on the existing `utilities.common.add_point(...)` where its attribute form fits, or add an ID-specific `add_id_point(geo, position, point_id)` wrapper in `../../spider_generator/helper.py`. It should return the new point. The current `add_point` utility is already used in `pedipalp.py:217`, `pedipalp.py:249`, `pedipalp.py:338`, `pedipalp.py:372`, and `pedipalp.py:401`, so this would also remove the current inconsistency between modules.
 
 **Why it helps**
 
@@ -140,7 +140,7 @@ The repeated list comprehensions currently mix selection policy with the geometr
 - `chelicerae.py:207-220` converts three `point_from_geo(...)` results into position lists.
 - `head.py:251-264` converts looked-up points into a position dictionary.
 - `base_sops.py:68-70` performs the same point-to-position conversion while collecting the sternum rim.
-- Similar lookup-then-`.position()` sequences appear throughout `sternum.py`, `abdomen.py`, and `pedipalp.py`.
+- Similar lookup-then-`.position()` sequences appear throughout `../../spider_generator/sternum.py`, `../../spider_generator/abdomen.py`, and `../../spider_generator/pedipalp.py`.
 
 **Recommendation**
 
@@ -157,7 +157,7 @@ Use `position_from_geo(...)` whenever only positions are needed. This is a small
 
 **Suggested boundary**
 
-Add `translate_points(points, offset)` to `helper.py` or a geometry utility. It should apply `point.setPosition(point.position() + offset)` to each point.
+Add `translate_points(points, offset)` to `../../spider_generator/helper.py` or a geometry utility. It should apply `point.setPosition(point.position() + offset)` to each point.
 
 **Why it helps**
 
@@ -175,7 +175,7 @@ Each wrapper exists only to pass `node.geometry()` into `helper.rename_left_ids`
 
 **Suggested boundary**
 
-Add `rename_left_ids_node(node, affix_index=0)` to `helper.py`. Use it directly for head and abdomen. Keep a tiny local adapter for the chelicerae-specific `-1` argument if the node-building API needs a stable callback name.
+Add `rename_left_ids_node(node, affix_index=0)` to `../../spider_generator/helper.py`. Use it directly for head and abdomen. Keep a tiny local adapter for the chelicerae-specific `-1` argument if the node-building API needs a stable callback name.
 
 **Why it helps**
 
@@ -183,15 +183,15 @@ This removes two identical adapters without hiding the actual left-ID behavior. 
 
 ## Small same-file candidates
 
-- `chelicerae.py:80-85` has two identical `bottom_middle` and `upper_middle` functions differing only by the inserted label. A private `_middle_id(label, id_factory, ...)` helper would remove that duplication. Keep it in `chelicerae.py`; the naming convention is domain-specific and does not belong in a general utility.
+- `chelicerae.py:80-85` has two identical `bottom_middle` and `upper_middle` functions differing only by the inserted label. A private `_middle_id(label, id_factory, ...)` helper would remove that duplication. Keep it in `../../spider_generator/chelicerae.py`; the naming convention is domain-specific and does not belong in a general utility.
 - `sternum.py:212`, `sternum.py:220`, and `sternum.py:229` call `set_points_id([point], [point_id])` for one point. Use the existing `set_point_id(point, point_id)` helper for those cases and reserve `set_points_id` for actual batches.
 - `chelicerae.py:544-554` has three thin section-specific wrappers around `_add_intermediate_section`. This is already a reasonable abstraction because each wrapper gives `sopify` a meaningful graph-stage name; collapsing the wrappers into a data table would make the node pipeline harder to read.
 
 ## Repetition that should remain explicit
 
-- The long `sopify` chains in `base.py`, `head.py`, `chelicerae.py`, and `pedipalp.py` are repetitive by syntax, but each named variable corresponds to a visible Houdini graph stage. A generic chain runner would obscure stage names, intermediate outputs, and debug points.
+- The long `sopify` chains in `../../spider_generator/base.py`, `../../spider_generator/head.py`, `../../spider_generator/chelicerae.py`, and `../../spider_generator/pedipalp.py` are repetitive by syntax, but each named variable corresponds to a visible Houdini graph stage. A generic chain runner would obscure stage names, intermediate outputs, and debug points.
 - The `add_float_param` blocks are repetitive UI configuration, but labels, tuple sizes, ranges, and help text are part of each body-part module's public interface. A data-driven parameter registry could reduce lines, but it would make the UI definition harder to scan and is not an ideal first refactor.
-- The one-line ID factory functions in `base_sops.py`, `head.py`, `abdomen.py`, `pedicel.py`, `chelicerae.py`, `spider.py`, and `sternum.py` share a shape, but their explicit names are the readable domain vocabulary used throughout the geometry code. Replacing them with dynamic factories would save boilerplate at the cost of discoverability and typing.
+- The one-line ID factory functions in `../../spider_generator/base_sops.py`, `../../spider_generator/head.py`, `../../spider_generator/abdomen.py`, `../../spider_generator/pedicel.py`, `../../spider_generator/chelicerae.py`, `../../spider_generator/spider.py`, and `../../spider_generator/sternum.py` share a shape, but their explicit names are the readable domain vocabulary used throughout the geometry code. Replacing them with dynamic factories would save boilerplate at the cost of discoverability and typing.
 - `add_reloadable_subnet`, `add_merge`, `add_fuse`, `add_mirror`, `add_output`, and `sopify` already provide the right level of node-construction abstraction. Wrapping those calls again in a project-wide builder would mostly hide the Houdini network structure.
 
 ## Suggested implementation order

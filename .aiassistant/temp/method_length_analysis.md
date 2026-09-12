@@ -2,7 +2,7 @@
 
 ## Scope and method
 
-Reviewed the Python files in the generator project root, including `test_builder.py`, and excluded the `utilities` package. The `utilities` entry is a symlink to the external Houdini utility project, so its implementation was not included. `backup/*.hipnc`, `test.hip`, `test.hipnc`, `legacy/helper.h`, and archived assistant notes were treated as project artifacts rather than Python generator methods.
+Reviewed the Python files in the generator project root, including `../../scripts/build_test_hip.py`, and excluded the `utilities` package. The `utilities` entry is a symlink to the external Houdini utility project, so its implementation was not included. `backup/*.hipnc`, `test.hip`, `test.hipnc`, `legacy/helper.h`, and archived assistant notes were treated as project artifacts rather than Python generator methods.
 
 The scan covered 15 Python files and 5,560 lines. Function length was measured from the declaration through the next declaration or class at the same indentation level. The initial screen was methods of roughly 30 lines or more; each result was then judged by whether it contains multiple understandable phases that could be named. The line count includes signatures, comments, and blank lines.
 
@@ -167,7 +167,7 @@ These methods are long enough to benefit from named phases, but the improvement 
 Length alone does not make these methods poor extraction targets.
 
 - `base.build`, `abdomen.build`, `chelicerae.build`, `head.build`, `leg.build`, `pedicel.build`, `pedipalp.build`, and `spider.build` are Houdini graph orchestration methods. Their named intermediate nodes and ordered stages communicate the graph structure. Splitting them would likely hide the build pipeline without reducing domain complexity.
-- `_add_parameters` and `_add_controls` methods in `chelicerae.py`, `head.py`, `leg.py`, and `sternum.py` are long because they declare the public Houdini UI. The headings and help text already group the intent; child methods would add indirection without grouping geometry logic.
+- `_add_parameters` and `_add_controls` methods in `../../spider_generator/chelicerae.py`, `../../spider_generator/head.py`, `../../spider_generator/leg.py`, and `../../spider_generator/sternum.py` are long because they declare the public Houdini UI. The headings and help text already group the intent; child methods would add indirection without grouping geometry logic.
 - `leg_builder._solve_membrane_wedge_remain_rad`, `sternum._left_half`, and `head._compute_top_corners` are focused mathematical kernels. They contain several formulas, but the formulas describe one calculation and splitting them would make the data flow harder to trace.
 - `spider._open_cepha_pedicel` is 83 lines, but almost all of its body is context lookup followed by calls to already well-named child operations. It is an orchestration method with a long argument unpacking block. A context object could shorten it, but that would be a broader API change rather than a simple readability extraction.
 - `leg_builder._get_leg_points` is 48 lines and already delegates each segment transition to `_append_segment`; extracting the initial coxa literal would save lines but would not materially improve the method's purpose.

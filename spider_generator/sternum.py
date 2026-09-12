@@ -3,7 +3,7 @@ from enum import StrEnum, auto
 
 import hou
 
-from helper import (
+from .helper import (
     add_id_attr,
     affix_id,
     point_from_geo,

@@ -3,8 +3,8 @@ build leg segments as basic cubes with wedge
 
 ## Steps
 - read `instructions/general.md`;
-- read `chelicerae.py` for basic references to handy helper methods and dependencies, from line 1 to 174;
-- add following parameters to `leg.py`:
+- read `../../spider_generator/chelicerae.py` for basic references to handy helper methods and dependencies, from line 1 to 174;
+- add following parameters to `../../spider_generator/leg.py`:
     - float parameter joint_height_ratio
     - float parameter joint_lateral_spine_ratio
     - vector2 parameter joint_shrink_ratio

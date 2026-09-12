@@ -16,3 +16,6 @@ backup/
 
 *.hipnc
 *.hip
+
+test/
+.aiassistant/temp/

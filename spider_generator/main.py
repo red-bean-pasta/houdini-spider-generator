@@ -1,6 +1,6 @@
 import hou
 
-import spider
+from . import spider
 
 
 def build() -> hou.SopNode:

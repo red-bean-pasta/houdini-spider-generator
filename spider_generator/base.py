@@ -1,8 +1,8 @@
 import hou
 
-import base_sops
-from helper import sopify_chain
-from sternum import build as build_sternum
+from . import base_sops
+from .helper import sopify_chain
+from .sternum import build as build_sternum
 from utilities.common import add_float_param
 from utilities.nodes import (
     add_fuse,

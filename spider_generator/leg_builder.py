@@ -5,7 +5,7 @@ from typing import Self
 
 import hou
 
-from helper import bridge_loops, fill_face_with_attr
+from .helper import bridge_loops, fill_face_with_attr
 from utilities.common import (
     MessagedResult,
     add_prim_attr,

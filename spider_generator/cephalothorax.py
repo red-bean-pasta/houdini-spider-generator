@@ -1,9 +1,9 @@
 import hou
 
-import base_sops
-from base import build as build_base
-from chelicerae import build as build_chelicerae
-from head import build as build_head
+from . import base_sops
+from .base import build as build_base
+from .chelicerae import build as build_chelicerae
+from .head import build as build_head
 from utilities.common import add_float_param
 from utilities.nodes import (
     add_fuse,

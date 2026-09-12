@@ -4,7 +4,7 @@ update stale utility method references across this project
 
 #### Background
 
-the original utility class, `hom_helper`, `sop_helper` and `dev_helper` are now migrated to its own project. they are system linked under `./utilities` and get rearranged into six scripts. Some project specific helper methods are still retained and put in `helper.py`.
+the original utility class, `hom_helper`, `sop_helper` and `dev_helper` are now migrated to its own project. they are system linked under `./utilities` and get rearranged into six scripts. Some project specific helper methods are still retained and put in `../../spider_generator/helper.py`.
 
 
 #### Steps
