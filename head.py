@@ -111,13 +111,6 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
 def _add_parameters(head: hou.SopNode) -> None:
     add_float_param(
         head,
-        "chelicerae_height_ratio",
-        1,
-        0.35,
-        (0.0, None),
-    )
-    add_float_param(
-        head,
         "height_ratio",
         1,
         0.375,
@@ -126,9 +119,11 @@ def _add_parameters(head: hou.SopNode) -> None:
     add_float_param(
         head,
         "flat_ratio",
-        1,
-        0.4,
+        2,
+        (1.0, 0.4),
         (0.0, None),
+        naming_scheme=hou.parmNamingScheme.XYZW,
+        help="Controls head dimensions; X controls the width ratio along the X axis (relative to base sternum width), and Y controls the length/flatness ratio along the Z axis",
     )
     add_float_param(
         head,
@@ -140,9 +135,9 @@ def _add_parameters(head: hou.SopNode) -> None:
     )
     add_float_param(
         head,
-        "membrane_ratio",
+        "chelicerae_height_ratio",
         1,
-        0.035,
+        0.35,
         (0.0, None),
     )
     add_float_param(
@@ -153,6 +148,13 @@ def _add_parameters(head: hou.SopNode) -> None:
         (-10.0, 10.0),
         naming_scheme=hou.parmNamingScheme.XYZW,
         help="Lip refers to the touching line between chelicerae and head, and the ratio is relative to the base support loop (membrane) height",
+    )
+    add_float_param(
+        head,
+        "membrane_ratio",
+        1,
+        0.035,
+        (0.0, None),
     )
 
 
@@ -263,11 +265,11 @@ def _add_corners_half(node: hou.SopNode) -> None:
     height = baseend0_pos[2] - headchelicerae0_pos[2]
     params = get_params(parent)
     height_ratio = params.height_ratio
-    flat_ratio = params.flat_ratio
+    flat_ratiox, flat_ratioy = params.flat_ratio
     top_support_loop_ratio1, top_support_loop_ratio2 = params.top_support_loop_ratio
     top_support_loop_ratio_mid = (top_support_loop_ratio1 + top_support_loop_ratio2) / 2.0
     y_offset = hou.Vector3(0.0, height * height_ratio, 0.0)
-    z_offset = hou.Vector3(0.0, 0.0, height * flat_ratio)
+    z_offset = hou.Vector3(0.0, 0.0, height * flat_ratioy)
 
     def align_front(position: hou.Vector3) -> hou.Vector3:
         return position + y_offset - hou.Vector3(
@@ -278,6 +280,11 @@ def _add_corners_half(node: hou.SopNode) -> None:
 
     headfront0_pos = align_front(headchelicerae0_pos)
     headfront1_pos = align_front(basesternum1_2_pos)
+    headfront1_pos = hou.Vector3(
+        headfront1_pos[0] * flat_ratiox,
+        headfront1_pos[1],
+        headfront1_pos[2],
+    )
     headback0_pos = headfront0_pos + z_offset
     headback1_pos = headfront1_pos + z_offset
     headtopmiddle1_pos = (headfront1_pos + headback1_pos) / 2.0
