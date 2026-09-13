@@ -96,12 +96,13 @@ def _add_parameters(spider: hou.OpNode) -> None:
     )
     add_float_param(
         spider,
-        "pedicel_size_ratio",
+        "pedicel_opening_ratios",
         2,
         (0.5, 0.5),
         (0.0, 1.0),
         folder_label="Build",
-        help="Pedicel width and height ratio relative to the base pedicel opening.",
+        label="Pedicel Opening",
+        help="X sets the side and upper opening proportion. Y places the lower opening between the base end and sternum rim.",
     )
 
 
@@ -121,8 +122,8 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     parent = get_parent(node)
     params = get_params(parent)
-    pedicel_size_ratio = params.pedicel_size_ratio
-    pedicel_size_ratio_x, _ = pedicel_size_ratio
+    pedicel_opening_ratios = params.pedicel_opening_ratios
+    pedicel_opening_ratio_x, _ = pedicel_opening_ratios
 
     (
         baseend0,
@@ -149,14 +150,14 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
         head.headbasesupport(base_sops.basesternum(5, 2)),
     )
 
-    support_loop_width = _get_opening_support_loop_width(bs5_1, bs5_2, pedicel_size_ratio_x)
+    support_loop_width = _get_opening_support_loop_width(bs5_1, bs5_2, pedicel_opening_ratio_x)
 
     cp_outer_lower, right_inner, left_inner = _identify_pedicel_membrane_points(geo)
     cp_right, cp_left, cp_outer_right, cp_outer_left = _add_side_cepha_pedicel_points(
-        geo, baseend0, bs5_1, bs5_2, pedicel_size_ratio_x, support_loop_width
+        geo, baseend0, bs5_1, bs5_2, pedicel_opening_ratio_x, support_loop_width
     )
     cp_upper, cp_lower = _position_vertical_pedicel_points(
-        geo, baseend0, basesupportend0, headsupport5, sternumrim5, cp_outer_lower, pedicel_size_ratio, support_loop_width
+        geo, baseend0, basesupportend0, headsupport5, sternumrim5, cp_outer_lower, pedicel_opening_ratios, support_loop_width
     )
     _reconnect_lower_sternum_pedicel_loop(
         geo,
@@ -185,7 +186,7 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
         cp_outer_left,
         bs5_1,
         bs5_2,
-        pedicel_size_ratio_x,
+        pedicel_opening_ratio_x,
     )
     _retopo_head_back_faces(
         geo,
@@ -203,9 +204,9 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
 def _get_opening_support_loop_width(
     bs5_1: hou.Point,
     bs5_2: hou.Point,
-    pedicel_size_ratio_x: float,
+    pedicel_opening_ratio_x: float,
 ) -> float:
-    return bs5_1.position().x() * (1.0 - pedicel_size_ratio_x) * 0.035
+    return bs5_1.position().x() * (1.0 - pedicel_opening_ratio_x) * 0.035
 
 
 def _identify_pedicel_membrane_points(geo: hou.Geometry) -> tuple[hou.Point, hou.Point, hou.Point]:
@@ -275,10 +276,10 @@ def _position_vertical_pedicel_points(
     headsupport5: hou.Point,
     sternumrim5: hou.Point,
     cp_outer_lower: hou.Point,
-    pedicel_size_ratio: tuple[float, float],
+    pedicel_opening_ratios: tuple[float, float],
     support_width: float,
 ) -> tuple[hou.Point, hou.Point]:
-    ratio_x, ratio_y = pedicel_size_ratio
+    ratio_x, ratio_y = pedicel_opening_ratios
 
     p_end = baseend0.position()
     p_head = headsupport5.position()

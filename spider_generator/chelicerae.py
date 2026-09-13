@@ -153,6 +153,8 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
         1,
         0.035,
         (0.0, None),
+        label="Membrane Width",
+        help="Shared cephalothorax setting. Each region applies it against its own local membrane scale.",
     )
     add_heading(
         chelicerae,
@@ -164,21 +166,24 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
         2,
         (0.25, 0.25),
         (0.0, None),
-        label="Ratio",
+        label="End Section Size",
+        help="X scales width and Y scales height relative to the start section.",
     )
     add_float_param(
         chelicerae,
         "end_section_offset",
         3,
         (0.2, 3.5, 0.5),
-        label="Offset",
+        label="End Section Offset",
+        help="Offsets the end section in its local width, height, and length directions.",
     )
     add_float_param(
         chelicerae,
         "end_section_rotation",
         2,
         (-90.0, 0.0),
-        label="Rotation",
+        label="End Section Rotation",
+        help="X and Y set the two local rotation directions.",
     )
     add_heading(
         chelicerae,
@@ -190,14 +195,16 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
         2,
         (1.0, 1.2),
         (0.0, None),
-        label="Ratio",
+        label="Middle Section Size",
+        help="X scales width and Y scales height relative to the start section.",
     )
     add_float_param(
         chelicerae,
         "middle_section_offset",
         2,
         (0.1, 1.0),
-        label="Offset",
+        label="Middle Section Offset",
+        help="Moves the middle section through its local width and length plane.",
     )
     add_float_param(
         chelicerae,
@@ -205,7 +212,8 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
         1,
         0.5,
         (0.0, 1.0),
-        label="Height Ratio",
+        label="Middle Section Height",
+        help="Vertical placement between the start and end sections.",
     )
 
 

@@ -93,7 +93,7 @@ def build_coxa_flaps(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
 
-    flap_ratio = get_float_parm(parent, "coxa_height_ratio")
+    flap_ratio = get_float_parm(parent, "coxa_flap_extension_ratio")
 
     flap_edges = [
         tuple(edge.points())
@@ -195,7 +195,7 @@ def cleanup_connected_side_flap_ids(node: hou.SopNode) -> None:
 def rotate_coxa_flaps(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
-    angle = get_float_parm(parent, "coxa_rotation_angle")
+    angle = get_float_parm(parent, "coxa_flap_rise_angle")
     clamped_angle = max(0.0, min(90.0, angle))
 
     rad = math.radians(clamped_angle)

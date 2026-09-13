@@ -55,14 +55,16 @@ def add_parameters(subnet: hou.OpNode) -> None:
         (0.8, 3.75, 3, 2.5, 1.5),
         (0.0, None),
         hou.parmNamingScheme.Base1,
-        help="Ratio relative to pedipalp's own coxa length.",
+        label="Pedipalp Lengths",
+        help="One length ratio per post-coxa pedipalp segment, measured against pedipalp coxa length.",
     )
     add_float_param(
         subnet,
-        "maxilla_length_ratio",
+        "endite_length_ratio",
         default=1.0,
         min_max=(0.0, None),
-        help="Relative to the distance from base base to coxa end."
+        label="Endite Length",
+        help="Extension from the endite membrane attachment toward the coxa.",
     )
 
 
@@ -116,16 +118,20 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
     control = parent.createNode("null", "CONTROL")
     add_float_param(
         control,
-        "endite_buffer",
+        "endite_buffer_ratios",
         size=2,
         default=(0.2, 0.2),
         min_max=(0.0, 1.0),
+        label="Endite Buffer",
+        help="X positions the buffer across the coxa end; Y sets its lengthwise reach.",
     )
     add_float_param(
         control,
-        "endite_flatness",
+        "endite_surface_size_ratio",
         default=0.1,
         min_max=(0.0, 1.0),
+        label="Endite Surface Size",
+        help="Size of the added endite surface faces.",
     )
     return control
 
@@ -194,7 +200,7 @@ def _prepare_coxa_corners(
 def _fill_bottom_right_face(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     control_params = get_params(get_control(node), use_tuple=False)
-    c4 = _add_bottom_right_face_point(geo, control_params.endite_buffer)
+    c4 = _add_bottom_right_face_point(geo, control_params.endite_buffer_ratios)
     es4, c2, m1 = point_from_geo(
         geo,
         _tmp_coxa_support(2, 4),
@@ -262,12 +268,12 @@ def _add_maxilla_quads(node: hou.SopNode) -> None:
     control_params = get_params(get_control(node), use_tuple=False)
     pos = _get_maxilla_pole(node)
     normal = _get_averaged_maxilla_quad_normal(geo, pos)
-    _add_maxilla_quads_to_geo(geo, pos, normal, control_params.endite_flatness)
+    _add_maxilla_quads_to_geo(geo, pos, normal, control_params.endite_surface_size_ratio)
 
 def _get_maxilla_pole(node: hou.SopNode) -> hou.Vector3:
     geo: hou.Geometry = node.geometry()
     leg = get_leg(node)
-    length_ratio = get_float_parm(leg, "maxilla_length_ratio")
+    length_ratio = get_float_parm(leg, "endite_length_ratio")
 
     e1, e2, e3, es3, m2, ct2 = point_from_geo(
         geo,
@@ -352,7 +358,7 @@ def _add_maxilla_quads_to_geo(
 def _add_front_upper_face(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     control_params = get_params(get_control(node), use_tuple=False)
-    p = _add_front_face_point(geo, control_params.endite_buffer)
+    p = _add_front_face_point(geo, control_params.endite_buffer_ratios)
     es2, c6, m2 = point_from_geo(
         geo,
         _tmp_coxa_support(2, 2),
@@ -380,7 +386,7 @@ def _add_front_face_point(
 def _add_front_loop_faces(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     control_params = get_params(get_control(node), use_tuple=False)
-    p = _add_loop_point(geo, control_params.endite_buffer.y())
+    p = _add_loop_point(geo, control_params.endite_buffer_ratios.y())
     es1, es2, es4, cf, cb = point_from_geo(
         geo,
         _tmp_coxa_support(2, 1),
@@ -475,11 +481,11 @@ def _get_pedipalp_param(
 
     coxa_size = _get_pedipalp_coxa_size(
         geo,
-        params.front_coxa_size_ratio,
+        params.front_coxa_width_length_ratios,
     )
     length_ratios = tuple(params.pedipalp_segment_length_ratios)
-    max_segment_yaws = tuple(params.max_segment_yaws[1:])[:len(length_ratios)]
-    min_segment_flexes = tuple(params.min_segment_flexes[1:])[:len(length_ratios)]
+    max_segment_yaws = tuple(params.max_yaw_angles)[:len(length_ratios)]
+    min_segment_flexes = tuple(params.min_flex_angles)[:len(length_ratios)]
 
     return LegParam.from_specs(
         coxa_size=coxa_size,
@@ -487,10 +493,10 @@ def _get_pedipalp_param(
         max_segment_yaws=max_segment_yaws,
         min_segment_flexes=min_segment_flexes,
         height_ratio=control_params.segment_height_ratio,
-        spine_ratio=control_params.segment_lateral_ratio,
-        shrink_ratios=control_params.segment_shrink_ratios,
-        minimum_membrane=control_params.minimum_membrane_spec,
-        support_loop_ratio=control_params.support_loop_ratio,
+        spine_ratio=control_params.segment_bulge_bias_ratio,
+        shrink_ratios=control_params.segment_taper_ratios,
+        minimum_membrane=control_params.joint_clearance_limits,
+        support_loop_ratio=control_params.joint_support_loop_ratio,
         tarsus_wedge_angle=control_params.tarsus_wedge_angle,
     )
 

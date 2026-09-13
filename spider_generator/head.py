@@ -123,30 +123,35 @@ def _add_parameters(head: hou.SopNode) -> None:
         1,
         0.375,
         (0.0, None),
+        label="Top Height",
+        help="Top-face height relative to the base-to-chelicerae reference span.",
     )
     add_float_param(
         head,
-        "flat_ratio",
+        "top_width_length_ratios",
         2,
         (1.0, 0.4),
         (0.0, None),
         naming_scheme=hou.parmNamingScheme.XYZW,
-        help="Controls head dimensions; X controls the width ratio along the X axis (relative to base sternum width), and Y controls the length/flatness ratio along the Z axis",
+        label="Top Width / Length",
+        help="X sets top width. Y sets the top face’s front-to-back length and flatness.",
     )
     add_float_param(
         head,
-        "flat_offset",
+        "top_face_offset_ratio",
         1,
         0.0,
-        help="Offsets the top face along the Z axis, evaluated as a ratio against the base length",
+        label="Top Face Offset",
+        help="Lengthwise skew of the top face relative to base length.",
     )
     add_float_param(
         head,
-        "top_support_loop_ratio",
+        "top_support_loop_ratios",
         2,
         (0.2, 0.5),
         naming_scheme=hou.parmNamingScheme.Base1,
-        help="Affects how sharp or boxy the head looks; the first is for front ratio and the second for behind",
+        label="Top Support Loop",
+        help="X adjusts the forward portion; Y adjusts the rear portion between the top face and base-side loop.",
     )
     add_float_param(
         head,
@@ -154,6 +159,8 @@ def _add_parameters(head: hou.SopNode) -> None:
         1,
         0.35,
         (0.0, None),
+        label="Chelicerae Height",
+        help="Vertical placement of the upper chelicerae line relative to the base.",
     )
     add_float_param(
         head,
@@ -162,7 +169,8 @@ def _add_parameters(head: hou.SopNode) -> None:
         (5.0, 1.0),
         (-10.0, 10.0),
         naming_scheme=hou.parmNamingScheme.XYZW,
-        help="Lip refers to the touching line between chelicerae and head, and the ratio is relative to the base support loop (membrane) height",
+        label="Lip Extrusion",
+        help="X is lengthwise extrusion; Y is vertical extrusion.",
     )
     add_float_param(
         head,
@@ -170,6 +178,8 @@ def _add_parameters(head: hou.SopNode) -> None:
         1,
         0.035,
         (0.0, None),
+        label="Membrane Width",
+        help="Shared cephalothorax setting. Each region applies it against its own local membrane scale.",
     )
 
 
@@ -263,12 +273,12 @@ def _compute_top_corners(
     params: Any,
 ) -> dict[str, hou.Vector3]:
     height = ref[base_sops.baseend(0)][2] - ref[headchelicerae(0)][2]
-    flat_ratiox, flat_ratioy = params.flat_ratio
+    flat_ratiox, flat_ratioy = params.top_width_length_ratios
     y_offset = hou.Vector3(0.0, height * params.height_ratio, 0.0)
     z_offset = hou.Vector3(0.0, 0.0, height * flat_ratioy)
 
     base_length = abs(ref[sternum.sternumrim(0)].z() - ref[base_sops.baseend(0)].z())
-    flat_offset_z = hou.Vector3(0.0, 0.0, base_length * params.flat_offset)
+    flat_offset_z = hou.Vector3(0.0, 0.0, base_length * params.top_face_offset_ratio)
     sternumrim0_y = ref[sternum.sternumrim(0)][1]
 
     def align_front(position: hou.Vector3) -> hou.Vector3:
@@ -295,7 +305,7 @@ def _compute_support_points(
     top_corners: dict[str, hou.Vector3],
     params: Any,
 ) -> dict[str, hou.Vector3]:
-    r1, r2 = params.top_support_loop_ratio
+    r1, r2 = params.top_support_loop_ratios
     r_mid = (r1 + r2) / 2.0
 
     hs0 = top_corners[headfront(0)] * (1.0 - r1) + ref[base_sops.basesternum(0)] * r1

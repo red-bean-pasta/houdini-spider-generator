@@ -96,17 +96,21 @@ def build(spider_node: hou.OpNode, cephalothorax: hou.SopNode) -> hou.SopNode:
 def _add_parameters(abdomen: hou.SopNode) -> None:
     add_float_param(
         abdomen,
-        "size_ratio",
+        "size_ratios",
         3,
         (1.2, 1.0, 1.2),
         (0.0, None),
+        label="Width / Height / Length",
+        help="X, Y, and Z scale abdomen width, height, and length against the cephalothorax.",
     )
     add_float_param(
         abdomen,
-        "plateau_duration",
+        "width_hold_ratios",
         2,
         (0.1, 0.5),
         (0.0, None),
+        label="Constant Width Range",
+        help="X and Y mark where the constant-width region starts and ends along abdomen length.",
     )
 
 
@@ -114,10 +118,12 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
     control = parent.createNode("null", "CONTROL")
     add_float_param(
         control,
-        "end_ratio",
+        "end_size_ratio",
         1,
         0.2,
         (0.0, None),
+        label="End Size",
+        help="Terminal width and height relative to the abdomen’s maximum size.",
     )
     return control
 
@@ -175,9 +181,9 @@ def _add_width_frame(node: hou.SopNode) -> None:
     params = get_params(parent)
     control_params = get_params(get_control(node))
 
-    size_ratio_x, _, size_ratio_z = params.size_ratio
-    plateau_start, plateau_end = params.plateau_duration
-    end_ratio = control_params.end_ratio
+    size_ratio_x, _, size_ratio_z = params.size_ratios
+    plateau_start, plateau_end = params.width_hold_ratios
+    end_ratio = control_params.end_size_ratio
 
     length = cl * size_ratio_z
     half_width = cw * size_ratio_x / 2.0
@@ -217,9 +223,9 @@ def _add_height_frame(node: hou.SopNode) -> None:
     params = get_params(parent)
     control_params = get_params(get_control(node))
 
-    _, size_ratio_y, size_ratio_z = params.size_ratio
-    plateau_start, plateau_end = params.plateau_duration
-    end_ratio = control_params.end_ratio
+    _, size_ratio_y, size_ratio_z = params.size_ratios
+    plateau_start, plateau_end = params.width_hold_ratios
+    end_ratio = control_params.end_size_ratio
 
     length = cl * size_ratio_z
     height = ch * size_ratio_y

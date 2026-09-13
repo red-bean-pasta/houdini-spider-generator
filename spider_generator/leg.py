@@ -60,19 +60,23 @@ def _add_parameters(legs: hou.OpNode) -> None:
     )
     add_float_param(
         legs,
-        "min_segment_flexes",
-        7,
-        (140, 180, 200, 30, 95, 150, 170),
+        "min_flex_angles",
+        6,
+        (180, 200, 30, 95, 150, 170),
         (0.0, None),
         hou.parmNamingScheme.Base1,
+        label="Minimum Flex Angles",
+        help="One minimum flex angle per post-coxa segment joint.",
     )
     add_float_param(
         legs,
-        "max_segment_yaws",
-        7,
-        (15, 25, 0, 0, 0, 0, 20),
+        "max_yaw_angles",
+        6,
+        (25, 0, 0, 0, 0, 20),
         (0.0, None),
         hou.parmNamingScheme.Base1,
+        label="Maximum Yaw Angles",
+        help="One maximum yaw angle per post-coxa segment joint.",
     )
     add_heading(
         legs,
@@ -80,11 +84,12 @@ def _add_parameters(legs: hou.OpNode) -> None:
     )
     add_float_param(
         legs,
-        "front_coxa_size_ratio",
+        "front_coxa_width_length_ratios",
         2,
         (0.75, 0.7),
         (0.0, None),
-        help="Width and length relative to the base sockets' size.",
+        label="Front Coxa Width / Length",
+        help="X scales coxa width and Y scales coxa length from the front socket width.",
     )
     add_float_param(
         legs,
@@ -93,7 +98,8 @@ def _add_parameters(legs: hou.OpNode) -> None:
         (0.8, 3.75, 3, 2.5, 2.25, 1.5),
         (0.0, None),
         hou.parmNamingScheme.Base1,
-        help="Ratio relative to coxa length.",
+        label="Front Leg Lengths",
+        help="One length ratio per post-coxa segment, measured against front coxa length.",
     )
     add_heading(
         legs,
@@ -101,19 +107,23 @@ def _add_parameters(legs: hou.OpNode) -> None:
     )
     add_float_param(
         legs,
-        "leg_width_ratios",
+        "other_leg_width_ratios",
         3,
         (0.9, 0.9, 0.95),
         (0.0, None),
         hou.parmNamingScheme.Base1,
+        label="Other Leg Widths",
+        help="Coxa-width scale for legs 2–4 relative to the front coxa.",
     )
     add_float_param(
         legs,
-        "leg_length_ratios",
+        "other_leg_length_ratios",
         3,
         (0.85, 0.85, 1.1),
         (0.0, None),
         hou.parmNamingScheme.Base1,
+        label="Other Leg Lengths",
+        help="Coxa-length scale for legs 2–4 relative to the front coxa.",
     )
     pedipalp.add_parameters(legs)
 
@@ -122,11 +132,12 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
     control = parent.createNode("null", "CONTROL")
     add_float_param(
         control,
-        "support_loop_ratio",
+        "joint_support_loop_ratio",
         1,
         0.015,
         (0.0, 1.0),
-        help="Ratio relative to coxa width, fixed across segments.",
+        label="Joint Support Loop",
+        help="Inset width at coxa sockets and segment joints, relative to coxa width.",
     )
     add_float_param(
         control,
@@ -134,32 +145,37 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
         1,
         1.15,
         (0.0, None),
+        label="Segment Height",
+        help="Height-to-width proportion of the post-coxa segments.",
     )
     add_float_param(
         control,
-        "segment_lateral_ratio",
+        "segment_bulge_bias_ratio",
         1,
         0.5,
         (0.0, None),
-        help="The top to the thickest part : the thickest part to the bottom",
+        label="Segment Bulge Bias",
+        help="Moves the segment’s fullest area between its upper and lower sides.",
     )
     add_float_param(
         control,
-        "segment_shrink_ratios",
+        "segment_taper_ratios",
         2,
         (0.95, 0.875),
         (0.0, None),
         hou.parmNamingScheme.Base1,
-        help="1 for in-segment section shrinking; 2 for between-section.",
+        label="Segment Taper",
+        help="X sets taper along a segment; Y sets the size change at each joint.",
     )
     add_float_param(
         control,
-        "minimum_membrane_spec",
+        "joint_clearance_limits",
         2,
         (1.0, 5.0),
-        (0.0, None),
+        (0.0, 45.0),
         hou.parmNamingScheme.Base1,
-        help="Membrane distance in ratio to the latter segment's width; Wedge angle in degrees",
+        label="Joint Clearance Limits",
+        help="X is minimum membrane separation in scene units. Y is minimum flex angle; keep it strictly between 0° and 45°.",
     )
     add_float_param(
         control,
@@ -167,6 +183,8 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
         1,
         45.0,
         (-60.0, 60.0),
+        label="Tarsus Wedge",
+        help="Terminal tarsus wedge angle.",
     )
     return control
 
@@ -288,15 +306,15 @@ def _get_leg_param(
     control_params = get_params(get_control(parent), use_tuple=False)
 
     front_socket_width, _ = get_front_coxa_socket_size(geo)
-    front_coxa_width = front_socket_width * params.front_coxa_size_ratio.x()
-    front_coxa_length = front_socket_width * params.front_coxa_size_ratio.y()
+    front_coxa_width = front_socket_width * params.front_coxa_width_length_ratios.x()
+    front_coxa_length = front_socket_width * params.front_coxa_width_length_ratios.y()
 
     if leg_index == 0:
         coxa_width = front_coxa_width
         coxa_length = front_coxa_length
     else:
-        coxa_width = front_coxa_width * params.leg_width_ratios[leg_index - 1]
-        coxa_length = front_coxa_length * params.leg_length_ratios[leg_index - 1]
+        coxa_width = front_coxa_width * params.other_leg_width_ratios[leg_index - 1]
+        coxa_length = front_coxa_length * params.other_leg_length_ratios[leg_index - 1]
 
     coxa_height = coxa_width
     coxa_size = (coxa_width, coxa_height, coxa_length)
@@ -304,13 +322,13 @@ def _get_leg_param(
     return LegParam.from_specs(
         coxa_size=coxa_size,
         length_ratios=tuple(params.front_segment_length_ratios),
-        max_segment_yaws=tuple(params.max_segment_yaws[1:]),
-        min_segment_flexes=tuple(params.min_segment_flexes[1:]),
+        max_segment_yaws=tuple(params.max_yaw_angles),
+        min_segment_flexes=tuple(params.min_flex_angles),
         height_ratio=control_params.segment_height_ratio,
-        spine_ratio=control_params.segment_lateral_ratio,
-        shrink_ratios=control_params.segment_shrink_ratios,
-        minimum_membrane=control_params.minimum_membrane_spec,
-        support_loop_ratio=control_params.support_loop_ratio,
+        spine_ratio=control_params.segment_bulge_bias_ratio,
+        shrink_ratios=control_params.segment_taper_ratios,
+        minimum_membrane=control_params.joint_clearance_limits,
+        support_loop_ratio=control_params.joint_support_loop_ratio,
         tarsus_wedge_angle=control_params.tarsus_wedge_angle,
     )
 
@@ -345,7 +363,7 @@ def _adjust_coxa(
     eb2 = coxa_start_support_pts[2]
     eb1 = coxa_start_support_pts[3]
 
-    support_loop_ratio = get_float_parm(get_control(node), "support_loop_ratio")
+    support_loop_ratio = get_float_parm(get_control(node), "joint_support_loop_ratio")
     buffer_ratio = _get_coxa_buffer_ratio(
         socket_points,
         coxa_start_pts,

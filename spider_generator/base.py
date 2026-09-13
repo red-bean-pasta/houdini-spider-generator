@@ -57,17 +57,21 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
 def _add_parameters(base: hou.SopNode) -> None:
     add_float_param(
         base,
-        "coxa_height_ratio",
+        "coxa_flap_extension_ratio",
         1,
         1.2,
         (0.0, None),
+        label="Coxa Flap Extension",
+        help="Outward reach from the sternum rim, relative to rim-edge length.",
     )
     add_float_param(
         base,
-        "coxa_rotation_angle",
+        "coxa_flap_rise_angle",
         1,
         36,
         (0.0, 90.0),
+        label="Coxa Flap Rise",
+        help="0° lies in the sternum plane; 90° raises the flap edge vertically.",
     )
     add_float_param(
         base,
@@ -75,4 +79,6 @@ def _add_parameters(base: hou.SopNode) -> None:
         1,
         0.035,
         (0.0, None),
+        label="Membrane Width",
+        help="Shared cephalothorax setting. Each region applies it against its own local membrane scale.",
     )

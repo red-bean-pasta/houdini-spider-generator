@@ -81,40 +81,48 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
 def _add_parameters(sternum: hou.SopNode) -> None:
     add_float_param(
         sternum,
-        "width_length_ratio",
+        "front_back_length_ratios",
         2,
         (2.0, 1.825),
         (0.0, None),
-        help="Front (anterior) length ratio and back (posterior) length ratio relative to half-width",
+        label="Front / Back Length",
+        help="X is anterior length; Y is posterior length. Both are relative to sternum half-width.",
     )
     add_float_param(
         sternum,
-        "top_width_ratio",
+        "front_width_ratio",
         1,
         0.5,
         (0.0, 1.0),
+        label="Front Width",
+        help="Anterior width relative to the sternum’s widest span.",
     )
     add_float_param(
         sternum,
-        "width_depth_ratio",
+        "spine_depth_ratio",
         1,
         0.5,
         (0.0, None),
+        label="Spine Depth",
+        help="Maximum center-spine depression relative to sternum half-width.",
     )
     add_float_param(
         sternum,
-        "spine_descend_handle",
+        "spine_descent_power",
         1,
         0.75,
         (0.0, None),
+        label="Spine Descent",
+        help="1 is linear; lower values deepen sooner and higher values deepen later.",
     )
     add_float_param(
         sternum,
-        "spine_loop_ratio",
+        "spine_loop_position_ratio",
         1,
         1.0,
         (0.0, 1.0),
-        help="Ratio along radial spokes from spine to rim for the intermediate spine loop",
+        label="Spine Loop Position",
+        help="Position from center spine toward rim. At 1, the intermediate loop is omitted.",
     )
     add_float_param(
         sternum,
@@ -122,6 +130,8 @@ def _add_parameters(sternum: hou.SopNode) -> None:
         1,
         0.035,
         (0.0, None),
+        label="Membrane Width",
+        help="Shared cephalothorax setting. Each region applies it against its own local membrane scale.",
     )
 
 
@@ -132,13 +142,17 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
         "half_width",
         1,
         100.0,
+        label="Half Width",
+        help="Scene-unit half-width that establishes the sternum scale.",
     )
     add_float_param(
         control,
-        "leg_angle",
+        "posterior_outline_angle",
         1,
         165.0,
         (0.0, 180.0),
+        label="Posterior Outline Angle",
+        help="Interior angle that shapes the rear sternum outline.",
     )
     return control
 
@@ -150,14 +164,14 @@ def _left_half(node: hou.SopNode) -> None:
     params = get_params(parent, use_tuple=False)
     control_params = get_params(get_control(node), use_tuple=False)
 
-    front_ratio, back_ratio = params.width_length_ratio
-    angle = math.radians(control_params.leg_angle)
+    front_ratio, back_ratio = params.front_back_length_ratios
+    angle = math.radians(control_params.posterior_outline_angle)
     w = control_params.half_width
 
     forward_height = w * front_ratio
     back_half = w * back_ratio
     length = math.sqrt(back_half * back_half + w * w) / (2.0 * math.sin(angle / 2.0))
-    top_width = w * params.top_width_ratio
+    top_width = w * params.front_width_ratio
 
     p0 = hou.Vector3(0.0, 0.0, -forward_height)
     p1 = hou.Vector3(top_width, 0.0, -forward_height)
@@ -260,8 +274,8 @@ def _descend_sternum_spine(node: hou.SopNode) -> None:
     params = get_params(parent, use_tuple=False)
     control_params = get_params(get_control(node), use_tuple=False)
 
-    depth = control_params.half_width * params.width_depth_ratio
-    power = params.spine_descend_handle
+    depth = control_params.half_width * params.spine_depth_ratio
+    power = params.spine_descent_power
     points = points_by_id(geo)
 
     top, middle, bottom = position_from_geo(
@@ -301,7 +315,7 @@ def _get_eased_depth(
 def _build_sternum_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
-    t = get_float_parm(parent, "spine_loop_ratio")
+    t = get_float_parm(parent, "spine_loop_position_ratio")
     assert 0.0 < t <= 1.0
 
     sort_by_z = lambda p: p.position().z()
