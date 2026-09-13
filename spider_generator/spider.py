@@ -21,13 +21,17 @@ from utilities.common import (
     fill_face,
     get_params,
     get_parent,
+    title_case,
 )
 from utilities.nodes import (
     add_fuse,
     add_merge,
     add_outside_recalculation,
     add_reload_button,
-    sopify,
+    PropagateFormatter,
+    propagate_parameters_from_children,
+    propagate_subnets,
+    sopify, propagate_controls,
 )
 from utilities.topology import fill_pentagon, offset_point
 
@@ -72,6 +76,9 @@ def build(parent: hou.OpNode) -> hou.SopNode:
     recalculated = add_outside_recalculation(spider, "recalculate_normals", fused)
     _add_subdivide(spider, "subdivision", recalculated, depth=3)
 
+    _propagate_subnets(spider)
+    _propagate_controls(spider)
+
     recalculated.setDisplayFlag(True)
     recalculated.setRenderFlag(True)
     spider.layoutChildren()
@@ -96,6 +103,16 @@ def _add_parameters(spider: hou.OpNode) -> None:
     )
     add_float_param(
         spider,
+        "membrane_ratio",
+        1,
+        0.035,
+        (0.0, None),
+        folder_label="Build",
+        label="Membrane Width",
+        help="Shared membrane setting. Each region applies it against its own local membrane scale.",
+    )
+    add_float_param(
+        spider,
         "pedicel_opening_ratios",
         2,
         (0.5, 0.5),
@@ -104,6 +121,17 @@ def _add_parameters(spider: hou.OpNode) -> None:
         label="Pedicel Opening",
         help="X sets the side and upper opening proportion. Y places the lower opening between the base end and sternum rim.",
     )
+
+def _propagate_subnets(spider: hou.SopNode) -> None:
+    subnets = propagate_subnets(spider, dest_group="Build", skip_params="membrane_ratio")
+    for subnet in subnets:
+        membrane_ratio = subnet.parm("membrane_ratio")
+        if membrane_ratio is not None:
+            membrane_ratio.set(spider.parm("membrane_ratio"))
+
+def _propagate_controls(spider: hou.SopNode) -> None:
+    add_folder(spider, "advanced")
+    propagate_controls(spider, depth=None, dest_group="Advanced",)
 
 
 def _add_subdivide(

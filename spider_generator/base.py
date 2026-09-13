@@ -9,7 +9,7 @@ from utilities.nodes import (
     add_merge,
     add_output,
     add_reloadable_subnet,
-    propagate_parameters,
+    propagate_subnets,
     sopify,
 )
 
@@ -19,8 +19,6 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     _add_parameters(base)
 
     sternum = build_sternum(base)
-    propagate_parameters(base, sternum, skip_params="membrane_ratio")
-    sternum.parm("membrane_ratio").set(base.parm("membrane_ratio"))
 
     flap_regions = sopify_chain(
         base,
@@ -50,6 +48,7 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     buffered = sopify(base, fuse, base_sops.extrude_base_buffer)
     add_output(base, "OUT_BASE", buffered)
 
+    _propagate_subnets(base)
     base.layoutChildren()
     return base
 
@@ -82,3 +81,11 @@ def _add_parameters(base: hou.SopNode) -> None:
         label="Membrane Width",
         help="Shared cephalothorax setting. Each region applies it against its own local membrane scale.",
     )
+
+
+def _propagate_subnets(base: hou.SopNode) -> None:
+    subnets = propagate_subnets(base, skip_params="membrane_ratio")
+    for subnet in subnets:
+        membrane_ratio = subnet.parm("membrane_ratio")
+        if membrane_ratio is not None:
+            membrane_ratio.set(base.parm("membrane_ratio"))

@@ -11,7 +11,7 @@ from utilities.nodes import (
     add_output,
     add_outside_recalculation,
     add_reloadable_subnet,
-    propagate_parameters,
+    propagate_subnets,
 )
 
 
@@ -20,22 +20,20 @@ def build(spider: hou.OpNode) -> hou.SopNode:
     _add_parameters(cephalothorax)
 
     base = build_base(cephalothorax)
-    _link_membrane_ratio(cephalothorax, base)
 
     head = build_head(cephalothorax, base)
-    _link_membrane_ratio(cephalothorax, head)
 
     b_h_merge = add_merge(cephalothorax, "merge_base_and_head", base, head)
     b_h_fuse = add_fuse(cephalothorax, "fuse_base_and_head", b_h_merge)
 
     chelicerae = build_chelicerae(cephalothorax, b_h_fuse)
-    _link_membrane_ratio(cephalothorax, chelicerae)
 
     recalculate = add_outside_recalculation(cephalothorax, "recalculate_normals", chelicerae)
     positioned = _position_cephalothorax(cephalothorax, recalculate)
 
     _ = add_output(cephalothorax, "OUT_CEPHALOTHORAX", positioned)
 
+    _propagate_subnets(cephalothorax)
     cephalothorax.layoutChildren()
     return cephalothorax
 
@@ -52,9 +50,12 @@ def _add_parameters(cephalothorax: hou.SopNode) -> None:
     )
 
 
-def _link_membrane_ratio(parent: hou.SopNode, child: hou.SopNode) -> None:
-    propagate_parameters(parent, child, skip_params="membrane_ratio")
-    child.parm("membrane_ratio").set(parent.parm("membrane_ratio"))
+def _propagate_subnets(cephalothorax: hou.SopNode) -> None:
+    subnets = propagate_subnets(cephalothorax, skip_params="membrane_ratio")
+    for subnet in subnets:
+        membrane_ratio = subnet.parm("membrane_ratio")
+        if membrane_ratio is not None:
+            membrane_ratio.set(cephalothorax.parm("membrane_ratio"))
 
 
 def _position_cephalothorax(parent: hou.SopNode, source: hou.SopNode) -> hou.SopNode:
