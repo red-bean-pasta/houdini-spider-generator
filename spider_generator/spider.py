@@ -2,6 +2,22 @@ from enum import StrEnum, auto
 
 import hou
 
+from utilities.common import (
+    add_float_param,
+    add_folder,
+    fill_face,
+    get_params,
+    get_parent,
+)
+from utilities.nodes import (
+    add_fuse,
+    add_merge,
+    add_outside_recalculation,
+    add_reload_button,
+    propagate_subnets,
+    sopify, propagate_controls,
+)
+from utilities.topology import fill_pentagon, offset_point
 from . import abdomen, base_sops, head, sternum
 from .cephalothorax import build as build_cephalothorax
 from .helper import (
@@ -15,25 +31,6 @@ from .helper import (
 )
 from .leg import build as build_legs
 from .pedicel import build as build_pedicel
-from utilities.common import (
-    add_float_param,
-    add_folder,
-    fill_face,
-    get_params,
-    get_parent,
-    title_case,
-)
-from utilities.nodes import (
-    add_fuse,
-    add_merge,
-    add_outside_recalculation,
-    add_reload_button,
-    PropagateFormatter,
-    propagate_parameters_from_children,
-    propagate_subnets,
-    sopify, propagate_controls,
-)
-from utilities.topology import fill_pentagon, offset_point
 
 
 class ID(StrEnum):
@@ -103,16 +100,6 @@ def _add_parameters(spider: hou.OpNode) -> None:
     )
     add_float_param(
         spider,
-        "membrane_ratio",
-        1,
-        0.035,
-        (0.0, None),
-        folder_label="Build",
-        label="Membrane Width",
-        help="Shared membrane setting. Each region applies it against its own local membrane scale.",
-    )
-    add_float_param(
-        spider,
         "pedicel_opening_ratios",
         2,
         (0.5, 0.5),
@@ -123,11 +110,7 @@ def _add_parameters(spider: hou.OpNode) -> None:
     )
 
 def _propagate_subnets(spider: hou.SopNode) -> None:
-    subnets = propagate_subnets(spider, dest_group="Build", skip_params="membrane_ratio")
-    for subnet in subnets:
-        membrane_ratio = subnet.parm("membrane_ratio")
-        if membrane_ratio is not None:
-            membrane_ratio.set(spider.parm("membrane_ratio"))
+    propagate_subnets(spider, dest_group="Build")
 
 def _propagate_controls(spider: hou.SopNode) -> None:
     add_folder(spider, "advanced")
@@ -307,7 +290,7 @@ def _position_vertical_pedicel_points(
     pedicel_opening_ratios: tuple[float, float],
     support_width: float,
 ) -> tuple[hou.Point, hou.Point]:
-    ratio_x, ratio_y = pedicel_opening_ratios
+    _, ratio_y = pedicel_opening_ratios
 
     p_end = baseend0.position()
     p_head = headsupport5.position()
@@ -326,9 +309,7 @@ def _position_vertical_pedicel_points(
     assert abs(dy) > 1e-6, "Expected non-zero y delta between baseend0 and headback0"
     t = target_height / dy
     offset = t * (p_head - p_end)
-    new_end = p_end + offset
-
-    p_upper = new_end * (1 - ratio_x) + p_end * ratio_x
+    p_upper = p_end + offset
     pos_baseend0 = p_upper + dir_upper * support_width
     baseend0_offset = pos_baseend0 - p_end
 

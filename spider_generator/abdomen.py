@@ -107,7 +107,7 @@ def _add_parameters(abdomen: hou.SopNode) -> None:
         abdomen,
         "width_hold_ratios",
         2,
-        (0.1, 0.5),
+        (0.1, 0.6),
         (0.0, None),
         label="Constant Width Range",
         help="X and Y mark where the constant-width region starts and ends along abdomen length.",

@@ -86,7 +86,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
         legs,
         "front_coxa_width_length_ratios",
         2,
-        (0.75, 0.7),
+        (1, 1.6),
         (0.0, None),
         label="Front Coxa Width / Length",
         help="X scales coxa width and Y scales coxa length from the front socket width.",
@@ -95,7 +95,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
         legs,
         "front_segment_length_ratios",
         6,
-        (0.8, 3.75, 3, 2.5, 2.25, 1.5),
+        (0.33, 1.5, 0.9, 1.2, 1, 0.7),
         (0.0, None),
         hou.parmNamingScheme.Base1,
         label="Front Leg Lengths",
@@ -109,7 +109,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
         legs,
         "other_leg_width_ratios",
         3,
-        (0.9, 0.9, 0.95),
+        (0.8, 0.7, 0.8),
         (0.0, None),
         hou.parmNamingScheme.Base1,
         label="Other Leg Widths",
@@ -119,7 +119,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
         legs,
         "other_leg_length_ratios",
         3,
-        (0.85, 0.85, 1.1),
+        (0.88, 0.9, 1.1),
         (0.0, None),
         hou.parmNamingScheme.Base1,
         label="Other Leg Lengths",
@@ -161,7 +161,7 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
         control,
         "segment_taper_ratios",
         2,
-        (0.95, 0.875),
+        (0.98, 0.875),
         (0.0, None),
         hou.parmNamingScheme.Base1,
         label="Segment Taper",
@@ -281,8 +281,9 @@ def _extrude_legs(
 
         top_mid = (pos_top_sz + pos_top_bz) / 2.0
         btm_mid = (pos_btm_sz + pos_btm_bz) / 2.0
-        origin = top_mid
         direction = hou.Vector3(top_mid.x() - btm_mid.x(), 0.0, top_mid.z() - btm_mid.z()).normalized()
+        bottom_z_offset = (btm_mid - top_mid).dot(direction)
+        origin = top_mid + direction * bottom_z_offset
 
         param = _get_leg_param(node, i)
         (seg_pts, thickness_pts, mem_pts), warnings = build_leg(geo, param)

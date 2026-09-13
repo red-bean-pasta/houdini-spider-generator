@@ -4,7 +4,6 @@ from . import base_sops
 from .base import build as build_base
 from .chelicerae import build as build_chelicerae
 from .head import build as build_head
-from utilities.common import add_float_param
 from utilities.nodes import (
     add_fuse,
     add_merge,
@@ -17,7 +16,6 @@ from utilities.nodes import (
 
 def build(spider: hou.OpNode) -> hou.SopNode:
     cephalothorax = add_reloadable_subnet(spider, "cephalothorax")
-    _add_parameters(cephalothorax)
 
     base = build_base(cephalothorax)
 
@@ -38,24 +36,8 @@ def build(spider: hou.OpNode) -> hou.SopNode:
     return cephalothorax
 
 
-def _add_parameters(cephalothorax: hou.SopNode) -> None:
-    add_float_param(
-        cephalothorax,
-        "membrane_ratio",
-        1,
-        0.035,
-        (0.0, None),
-        label="Membrane Width",
-        help="Shared cephalothorax setting. Each region applies it against its own local membrane scale.",
-    )
-
-
 def _propagate_subnets(cephalothorax: hou.SopNode) -> None:
-    subnets = propagate_subnets(cephalothorax, skip_params="membrane_ratio")
-    for subnet in subnets:
-        membrane_ratio = subnet.parm("membrane_ratio")
-        if membrane_ratio is not None:
-            membrane_ratio.set(cephalothorax.parm("membrane_ratio"))
+    propagate_subnets(cephalothorax)
 
 
 def _position_cephalothorax(parent: hou.SopNode, source: hou.SopNode) -> hou.SopNode:

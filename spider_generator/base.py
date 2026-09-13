@@ -58,7 +58,7 @@ def _add_parameters(base: hou.SopNode) -> None:
         base,
         "coxa_flap_extension_ratio",
         1,
-        1.2,
+        1.63,
         (0.0, None),
         label="Coxa Flap Extension",
         help="Outward reach from the sternum rim, relative to rim-edge length.",
@@ -67,7 +67,7 @@ def _add_parameters(base: hou.SopNode) -> None:
         base,
         "coxa_flap_rise_angle",
         1,
-        36,
+        12,
         (0.0, 90.0),
         label="Coxa Flap Rise",
         help="0° lies in the sternum plane; 90° raises the flap edge vertically.",
@@ -76,7 +76,7 @@ def _add_parameters(base: hou.SopNode) -> None:
         base,
         "membrane_ratio",
         1,
-        0.035,
+        0.07,
         (0.0, None),
         label="Membrane Width",
         help="Shared cephalothorax setting. Each region applies it against its own local membrane scale.",
@@ -84,8 +84,4 @@ def _add_parameters(base: hou.SopNode) -> None:
 
 
 def _propagate_subnets(base: hou.SopNode) -> None:
-    subnets = propagate_subnets(base, skip_params="membrane_ratio")
-    for subnet in subnets:
-        membrane_ratio = subnet.parm("membrane_ratio")
-        if membrane_ratio is not None:
-            membrane_ratio.set(base.parm("membrane_ratio"))
+    propagate_subnets(base)

@@ -83,7 +83,7 @@ def _add_parameters(sternum: hou.SopNode) -> None:
         sternum,
         "front_back_length_ratios",
         2,
-        (2.0, 1.825),
+        (1.85, 1.6),
         (0.0, None),
         label="Front / Back Length",
         help="X is anterior length; Y is posterior length. Both are relative to sternum half-width.",
@@ -92,7 +92,7 @@ def _add_parameters(sternum: hou.SopNode) -> None:
         sternum,
         "front_width_ratio",
         1,
-        0.5,
+        0.455,
         (0.0, 1.0),
         label="Front Width",
         help="Anterior width relative to the sternum’s widest span.",
@@ -101,7 +101,7 @@ def _add_parameters(sternum: hou.SopNode) -> None:
         sternum,
         "spine_depth_ratio",
         1,
-        0.5,
+        0.35,
         (0.0, None),
         label="Spine Depth",
         help="Maximum center-spine depression relative to sternum half-width.",
@@ -128,7 +128,7 @@ def _add_parameters(sternum: hou.SopNode) -> None:
         sternum,
         "membrane_ratio",
         1,
-        0.035,
+        0.02,
         (0.0, None),
         label="Membrane Width",
         help="Shared cephalothorax setting. Each region applies it against its own local membrane scale.",
@@ -149,7 +149,7 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
         control,
         "posterior_outline_angle",
         1,
-        165.0,
+        150.0,
         (0.0, 180.0),
         label="Posterior Outline Angle",
         help="Interior angle that shapes the rear sternum outline.",
@@ -170,7 +170,7 @@ def _left_half(node: hou.SopNode) -> None:
 
     forward_height = w * front_ratio
     back_half = w * back_ratio
-    length = math.sqrt(back_half * back_half + w * w) / (2.0 * math.sin(angle / 2.0))
+    back_length = math.sqrt(back_half * back_half + w * w) / (2.0 * math.sin(angle / 2.0))
     top_width = w * params.front_width_ratio
 
     p0 = hou.Vector3(0.0, 0.0, -forward_height)
@@ -181,15 +181,16 @@ def _left_half(node: hou.SopNode) -> None:
     p3_p5_p4 = (math.pi - angle) / 2.0
     o_p3_p5 = math.atan2(back_half, w)
     o_p3_p4 = p3_p5_p4 + o_p3_p5
-    p4 = p3 + length * hou.Vector3(-math.cos(o_p3_p4), 0.0, math.sin(o_p3_p4))
+    p4 = p3 + back_length * hou.Vector3(-math.cos(o_p3_p4), 0.0, math.sin(o_p3_p4))
 
     p1_p3_x = p3[0] - p1[0]
     p1_p3_z = p3[2] - p1[2]
     p1_p3_length = math.sqrt(p1_p3_x * p1_p3_x + p1_p3_z * p1_p3_z)
+    front_length = p1_p3_length / (2.0 * math.sin(angle / 2.0))
 
     midpoint_x = (p1[0] + p3[0]) / 2.0
     midpoint_z = (p1[2] + p3[2]) / 2.0
-    midpoint_p2 = math.sqrt(length * length - p1_p3_length * p1_p3_length / 4.0)
+    midpoint_p2 = math.sqrt(front_length * front_length - p1_p3_length * p1_p3_length / 4.0)
 
     p2 = hou.Vector3(
         midpoint_x + p1_p3_z / p1_p3_length * midpoint_p2,
@@ -401,17 +402,11 @@ def _outset_sternum_loop(node: hou.SopNode) -> None:
     membrane_width = params.membrane_ratio * control_params.half_width
     support_dist = membrane_width
     dist = membrane_width
-    dy = membrane_width
 
     _add_sternum_loop(geo, support_dist)
-    intermediate_points = _add_sternum_loop(geo, dist)
     _add_sternum_loop(geo, dist)
 
     _adjust_midpoints_after_outset(geo)
-
-    for pt in intermediate_points:
-        pos = pt.position()
-        pt.setPosition((pos[0], pos[1] + dy, pos[2]))
 
 def _add_sternum_loop(geo: hou.Geometry, dist: float) -> list[hou.Point]:
     outset(list(geo.prims()), dist, use_ratio=False)
