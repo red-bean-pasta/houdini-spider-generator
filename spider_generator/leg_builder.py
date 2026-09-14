@@ -21,13 +21,14 @@ class Region(StrEnum):
 
 @dataclass
 class LegParam:
-    coxa_size: tuple[float, float, float]
+    coxa_width_length: tuple[float, float]
     length_ratios: tuple[float, ...] | list[float]
     yaw_flex_specs: tuple[tuple[float, float], ...]
 
     tarsus_wedge_angle: float = 45.0
 
-    height_ratio: float = 1.15
+    coxa_trochanter_height_ratio: float = 0.63
+    other_segment_height_ratio: float = 1.15
     spine_ratio: float = 0.5
     shrink_ratios: tuple[float, float] = (0.95, 0.875)
     support_loop_ratio: float = 0.015
@@ -42,7 +43,7 @@ class LegParam:
     @classmethod
     def from_specs(
         cls,
-        coxa_size: tuple[float, float, float],
+        coxa_width_length: tuple[float, float],
         length_ratios: tuple[float, ...] | list[float],
         max_segment_yaws: tuple[float, ...] | list[float],
         min_segment_flexes: tuple[float, ...] | list[float],
@@ -56,7 +57,7 @@ class LegParam:
         )
         segment_specs = tuple(zip(max_segment_yaws, min_segment_flexes))
         return cls(
-            coxa_size=coxa_size,
+            coxa_width_length=coxa_width_length,
             length_ratios=length_ratios,
             yaw_flex_specs=segment_specs,
             **kwargs,
@@ -102,7 +103,8 @@ def _get_leg_points(
 ) -> MessagedResult[list[list[hou.Vector3]]]:
     assert len(param.yaw_flex_specs) == len(param.length_ratios)
 
-    coxa_width, coxa_height, coxa_length = param.coxa_size
+    coxa_width, coxa_length = param.coxa_width_length
+    coxa_height = coxa_width * param.coxa_trochanter_height_ratio
     half_w = coxa_width / 2.0
     top_y = 0.0
     btm_y = -coxa_height
@@ -127,7 +129,11 @@ def _get_leg_points(
             if i > 0 else
             param.length_ratios[0] / 1.0
         )
-        cur_height_ratio = 1.0 if i == 0 else param.height_ratio
+        cur_height_ratio = (
+            param.coxa_trochanter_height_ratio
+            if i == 0 else
+            param.other_segment_height_ratio
+        )
         (former_wedged, latter), seg_messages = _append_segment(
             segments[-1],
             cur_height_ratio,
@@ -278,9 +284,9 @@ def _calc_segment_offset_and_wedge(
 
     (offset_x, wedge_angle), messages = _calc_membrane_spec(max_yaw, min_flex, segment_size, minimum_membrane)
 
-    offset_y = (former_height - latter_height) * spine_ratio
-    if offset_y > 0:
-        offset_y *= -1
+    # Keep the spine position (the point at spine_ratio from the top) aligned
+    # across the joint, moving the latter segment in either vertical direction.
+    offset_y = (latter_height - former_height) * spine_ratio
 
     wedged_x = abs(offset_y) * math.tan(math.radians(wedge_angle))
     offset_x -= wedged_x

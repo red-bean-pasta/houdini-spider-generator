@@ -479,7 +479,7 @@ def _get_pedipalp_param(
     params = get_params(leg, use_tuple=False)
     control_params = get_params(get_control(leg), use_tuple=False)
 
-    coxa_size = _get_pedipalp_coxa_size(
+    coxa_width_length = _get_pedipalp_coxa_width_length(
         geo,
         params.front_coxa_width_length_ratios,
     )
@@ -488,11 +488,12 @@ def _get_pedipalp_param(
     min_segment_flexes = tuple(params.min_flex_angles)[:len(length_ratios)]
 
     return LegParam.from_specs(
-        coxa_size=coxa_size,
+        coxa_width_length=coxa_width_length,
         length_ratios=length_ratios,
         max_segment_yaws=max_segment_yaws,
         min_segment_flexes=min_segment_flexes,
-        height_ratio=control_params.segment_height_ratio,
+        coxa_trochanter_height_ratio=control_params.coxa_trochanter_height_ratio,
+        other_segment_height_ratio=control_params.other_segment_height_ratio,
         spine_ratio=control_params.segment_bulge_bias_ratio,
         shrink_ratios=control_params.segment_taper_ratios,
         minimum_membrane=control_params.joint_clearance_limits,
@@ -500,15 +501,14 @@ def _get_pedipalp_param(
         tarsus_wedge_angle=control_params.tarsus_wedge_angle,
     )
 
-def _get_pedipalp_coxa_size(
+def _get_pedipalp_coxa_width_length(
     geo: hou.Geometry,
-    front_coxa_size_ratio: hou.Vector2,
-) -> tuple[float, float, float]:
+    front_coxa_width_length_ratio: hou.Vector2,
+) -> tuple[float, float]:
     m3, m4 = position_from_geo(geo, basemaxillamembrane(3), basemaxillamembrane(4))
     width = m3.distanceTo(m4)
-    height = width
-    length = front_coxa_size_ratio.y() / front_coxa_size_ratio.x() * width
-    return width, height, length
+    length = front_coxa_width_length_ratio.y() / front_coxa_width_length_ratio.x() * width
+    return width, length
 
 def _get_pedipalp_points(
     geo: hou.Geometry,

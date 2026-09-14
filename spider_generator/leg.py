@@ -141,12 +141,21 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
     )
     add_float_param(
         control,
-        "segment_height_ratio",
+        "coxa_trochanter_height_ratio",
+        1,
+        0.63,
+        (0.0, None),
+        label="Coxa-Trochanter Height",
+        help="Height-to-width proportion of the trochanter segment.",
+    )
+    add_float_param(
+        control,
+        "other_segment_height_ratio",
         1,
         1.15,
         (0.0, None),
-        label="Segment Height",
-        help="Height-to-width proportion of the post-coxa segments.",
+        label="Other Segment Height",
+        help="Height-to-width proportion of post-trochanter segments.",
     )
     add_float_param(
         control,
@@ -185,6 +194,15 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
         (-60.0, 60.0),
         label="Tarsus Wedge",
         help="Terminal tarsus wedge angle.",
+    )
+    add_float_param(
+        control,
+        "coxa_start_wedge_angle",
+        1,
+        45.0,
+        (0.0, 90.0),
+        label="Coxa Start Wedge",
+        help="Wedge angle used to place the coxa socket's lower support.",
     )
     return control
 
@@ -317,15 +335,15 @@ def _get_leg_param(
         coxa_width = front_coxa_width * params.other_leg_width_ratios[leg_index - 1]
         coxa_length = front_coxa_length * params.other_leg_length_ratios[leg_index - 1]
 
-    coxa_height = coxa_width
-    coxa_size = (coxa_width, coxa_height, coxa_length)
+    coxa_width_length = (coxa_width, coxa_length)
 
     return LegParam.from_specs(
-        coxa_size=coxa_size,
+        coxa_width_length=coxa_width_length,
         length_ratios=tuple(params.front_segment_length_ratios),
         max_segment_yaws=tuple(params.max_yaw_angles),
         min_segment_flexes=tuple(params.min_flex_angles),
-        height_ratio=control_params.segment_height_ratio,
+        coxa_trochanter_height_ratio=control_params.coxa_trochanter_height_ratio,
+        other_segment_height_ratio=control_params.other_segment_height_ratio,
         spine_ratio=control_params.segment_bulge_bias_ratio,
         shrink_ratios=control_params.segment_taper_ratios,
         minimum_membrane=control_params.joint_clearance_limits,
@@ -351,18 +369,14 @@ def _adjust_coxa(
     coxa_start_support_pts = coxa_points[4:8]
     coxa_end_pts = coxa_points[12:16]
 
+    coxa_start_wedge_angle = get_float_parm(get_control(node), "coxa_start_wedge_angle")
     adjusted_support_positions = _get_adjusted_coxa_support_positions(
         socket_points,
         coxa_end_pts,
+        coxa_start_wedge_angle,
     )
     for point, position in zip(coxa_start_support_pts, adjusted_support_positions):
         point.setPosition(position)
-
-    # eu: end upper, eb: end bottom
-    eu2 = coxa_start_support_pts[0]
-    eu1 = coxa_start_support_pts[1]
-    eb2 = coxa_start_support_pts[2]
-    eb1 = coxa_start_support_pts[3]
 
     support_loop_ratio = get_float_parm(get_control(node), "joint_support_loop_ratio")
     buffer_ratio = _get_coxa_buffer_ratio(
@@ -385,14 +399,15 @@ def _adjust_coxa(
 def _get_adjusted_coxa_support_positions(
     socket_points: list[hou.Point],
     coxa_end_points: list[hou.Point],
+    coxa_start_wedge_angle: float,
 ) -> tuple[hou.Vector3, hou.Vector3, hou.Vector3, hou.Vector3]:
     # su: socket upper, sb: socket bottom
     pos_su1, pos_su2, pos_sb1, pos_sb2 = points_to_positions(socket_points)
     # pos_bu: base upper, pos_bb: base bottom
     pos_bu2, pos_bu1, pos_bb2, pos_bb1 = points_to_positions(coxa_end_points)
 
-    pos_ab1 = _get_adjusted_bottom_coxa_position(pos_sb1, pos_bb1)
-    pos_ab2 = _get_adjusted_bottom_coxa_position(pos_sb2, pos_bb2)
+    pos_ab1 = _get_adjusted_bottom_coxa_position(pos_sb1, pos_bb1, coxa_start_wedge_angle)
+    pos_ab2 = _get_adjusted_bottom_coxa_position(pos_sb2, pos_bb2, coxa_start_wedge_angle)
     pos_au1 = (pos_su1 + pos_bu1) * 0.5
     pos_au2 = (pos_su2 + pos_bu2) * 0.5
     return pos_au2, pos_au1, pos_ab2, pos_ab1
@@ -401,13 +416,18 @@ def _get_adjusted_coxa_support_positions(
 def _get_adjusted_bottom_coxa_position(
     socket_position: hou.Vector3,
     base_position: hou.Vector3,
+    wedge_angle: float,
 ) -> hou.Vector3:
     y_delta = abs(socket_position.y() - base_position.y())
     xz_delta = math.sqrt(
         (base_position.x() - socket_position.x()) ** 2
         + (base_position.z() - socket_position.z()) ** 2
     )
-    ratio = (y_delta / xz_delta) if xz_delta > 1e-6 else 0.5
+    ratio = (
+        y_delta * math.tan(math.radians(wedge_angle)) / xz_delta
+        if xz_delta > 1e-6 else
+        0.5
+    )
     return hou.Vector3(
         socket_position.x() + (base_position.x() - socket_position.x()) * ratio,
         base_position.y(),
