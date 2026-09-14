@@ -86,7 +86,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
         legs,
         "front_coxa_width_length_ratios",
         2,
-        (1, 1.6),
+        (0.75, 1.2),
         (0.0, None),
         label="Front Coxa Width / Length",
         help="X scales coxa width and Y scales coxa length from the front socket width.",
