@@ -174,6 +174,44 @@ def connect_side_flaps(node: hou.SopNode) -> None:
             second.setPosition(midpoint)
 
 
+def adjust_front_and_end_flaps(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    for side in (1, -1):
+        target, opposite, sternum_middle, base_middle = point_from_geo(
+            geo,
+            basesternum(side, 2),
+            basesternum(side * 2, 1),
+            sternum.sternummiddle(side),
+            basesternummiddle(side),
+        )
+        _reflect_point_across_edge(target, opposite, (sternum_middle, base_middle))
+
+    for side, target_minor in ((1, 1), (-1, 2)):
+        target, opposite, sternum_middle, base_middle = point_from_geo(
+            geo,
+            basesternum(5, target_minor),
+            basesternum(side * 4, 2),
+            sternum.sternummiddle(side * 4),
+            basesternummiddle(side * 4),
+        )
+        _reflect_point_across_edge(target, opposite, (sternum_middle, base_middle))
+
+
+def _reflect_point_across_edge(
+    target: hou.Point,
+    opposite: hou.Point,
+    edge: tuple[hou.Point, hou.Point],
+) -> None:
+    edge_start, edge_end = (point.position() for point in edge)
+    edge_vector = edge_end - edge_start
+    edge_length_squared = edge_vector.dot(edge_vector)
+    assert edge_length_squared > 1e-12, "Expected distinct flap-edge endpoints"
+
+    source_offset = opposite.position() - edge_start
+    projection = edge_start + edge_vector * (source_offset.dot(edge_vector) / edge_length_squared)
+    target.setPosition(projection * 2.0 - opposite.position())
+
+
 def cleanup_connected_side_flap_ids(node: hou.SopNode) -> None:
     geo = node.geometry()
     points = points_by_id(geo)
@@ -295,6 +333,20 @@ def fill_pedicel_membrane(node: hou.SopNode) -> None:
 
     px0 = add_id_point(geo, p5_position + px_offset, "baseend0")
     fill_face_with_attr(geo, [px0, e5_1, p5, e5_2], "region", Region.BASEPEDICELMEMBRANE)
+
+
+def adjust_mouth(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    center, right, left = point_from_geo(
+        geo,
+        basesternum(0),
+        basesternum(1, 1),
+        basesternum(-1, 1),
+    )
+    ratio = 1 / 3
+    center_position = center.position()
+    for point in (right, left):
+        point.setPosition(point.position() * ratio + center_position * (1 - ratio))
 
 
 def inset_membrane(node: hou.SopNode) -> None:

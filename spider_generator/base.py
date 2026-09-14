@@ -26,7 +26,11 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
         (base_sops.extract_sternum_rim, base_sops.build_coxa_flaps, base_sops.add_flap_regions),
     )
     fuse_flaps = add_fuse(base, "fuse_coxa_flaps", flap_regions)
-    connected = sopify(base, fuse_flaps, base_sops.connect_side_flaps)
+    connected = sopify_chain(
+        base,
+        fuse_flaps,
+        (base_sops.connect_side_flaps, base_sops.adjust_front_and_end_flaps),
+    )
     fuse_connected = add_fuse(base, "fuse_connected_side_flaps", connected)
     pedicel = sopify_chain(
         base,
@@ -41,7 +45,11 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     )
 
     fused_pedicel = add_fuse(base, "fuse_pedicel_membrane", pedicel)
-    membrane = sopify(base, fused_pedicel, base_sops.inset_membrane)
+    membrane = sopify_chain(
+        base,
+        fused_pedicel,
+        (base_sops.adjust_mouth, base_sops.inset_membrane),
+    )
 
     merge = add_merge(base, "merge_sternum_and_coxa", membrane, sternum)
     fuse = add_fuse(base, "fuse_sternum_and_coxa", merge)
