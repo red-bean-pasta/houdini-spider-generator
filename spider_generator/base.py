@@ -3,15 +3,14 @@ import hou
 from . import base_sops
 from .helper import sopify_chain
 from .sternum import build as build_sternum
-from utilities.common import add_float_param
-from utilities.nodes import (
+from houkit.noder import (
     add_fuse,
     add_merge,
     add_output,
     add_reloadable_subnet,
-    propagate_subnets,
     sopify,
 )
+from houkit.parameterizer import add_float_parm, promote_subnets
 
 
 def build(cephalothorax: hou.SopNode) -> hou.SopNode:
@@ -62,7 +61,7 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
 
 
 def _add_parameters(base: hou.SopNode) -> None:
-    add_float_param(
+    add_float_parm(
         base,
         "coxa_flap_extension_ratio",
         1,
@@ -71,7 +70,7 @@ def _add_parameters(base: hou.SopNode) -> None:
         label="Coxa Flap Extension",
         help="Outward reach from the sternum rim, relative to rim-edge length.",
     )
-    add_float_param(
+    add_float_parm(
         base,
         "coxa_flap_rise_angle",
         1,
@@ -80,7 +79,7 @@ def _add_parameters(base: hou.SopNode) -> None:
         label="Coxa Flap Rise",
         help="0° lies in the sternum plane; 90° raises the flap edge vertically.",
     )
-    add_float_param(
+    add_float_parm(
         base,
         "membrane_ratio",
         1,
@@ -92,4 +91,4 @@ def _add_parameters(base: hou.SopNode) -> None:
 
 
 def _propagate_subnets(base: hou.SopNode) -> None:
-    propagate_subnets(base)
+    promote_subnets(base)

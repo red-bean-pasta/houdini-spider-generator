@@ -18,24 +18,18 @@ from .helper import (
     replace_points,
     set_point_id,
 )
-from utilities.common import (
-    add_float_param,
-    add_prim_attr,
-    fill_face,
-    get_float_parm,
-    get_params,
-    get_parent,
-    points_by_attr,
-)
-from utilities.nodes import (
+from houkit.attributer import add_prim_attrib, points_by_attrib
+from houkit.noder import (
     add_fuse,
     add_merge,
     add_mirror,
     add_output,
     add_reloadable_subnet,
+    get_parent,
     sopify,
 )
-from utilities.topology import fill_pentagon, inset, offset_point
+from houkit.parameterizer import add_float_parm, get_float_parm, get_parms
+from houkit.topology import fill_face, fill_pentagon, inset, offset_point
 
 
 class ID(StrEnum):
@@ -117,7 +111,7 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
 
 
 def _add_parameters(head: hou.SopNode) -> None:
-    add_float_param(
+    add_float_parm(
         head,
         "height_ratio",
         1,
@@ -126,7 +120,7 @@ def _add_parameters(head: hou.SopNode) -> None:
         label="Top Height",
         help="Top-face height relative to the base-to-chelicerae reference span.",
     )
-    add_float_param(
+    add_float_parm(
         head,
         "top_width_length_ratios",
         2,
@@ -136,7 +130,7 @@ def _add_parameters(head: hou.SopNode) -> None:
         label="Top Width / Length",
         help="X sets top width. Y sets the top face’s front-to-back length and flatness.",
     )
-    add_float_param(
+    add_float_parm(
         head,
         "top_face_offset_ratio",
         1,
@@ -144,7 +138,7 @@ def _add_parameters(head: hou.SopNode) -> None:
         label="Top Face Offset",
         help="Lengthwise skew of the top face relative to base length.",
     )
-    add_float_param(
+    add_float_parm(
         head,
         "top_support_loop_ratios",
         2,
@@ -153,7 +147,7 @@ def _add_parameters(head: hou.SopNode) -> None:
         label="Top Support Loop",
         help="X adjusts the forward portion; Y adjusts the rear portion between the top face and base-side loop.",
     )
-    add_float_param(
+    add_float_parm(
         head,
         "chelicerae_height_ratio",
         1,
@@ -162,7 +156,7 @@ def _add_parameters(head: hou.SopNode) -> None:
         label="Chelicerae Height",
         help="Vertical placement of the upper chelicerae line relative to the base.",
     )
-    add_float_param(
+    add_float_parm(
         head,
         "lip_extrusion_ratio",
         2,
@@ -172,7 +166,7 @@ def _add_parameters(head: hou.SopNode) -> None:
         label="Lip Extrusion",
         help="X is lengthwise extrusion; Y is vertical extrusion.",
     )
-    add_float_param(
+    add_float_parm(
         head,
         "membrane_ratio",
         1,
@@ -240,7 +234,7 @@ def _add_corners_half(node: hou.SopNode) -> None:
     parent = get_parent(node)
     points = points_by_id(geo)
     ref = _get_corner_reference_positions(geo)
-    params = get_params(parent)
+    params = get_parms(parent)
 
     top_corners = _compute_top_corners(ref, params)
     support_points = _compute_support_points(ref, top_corners, params)
@@ -349,7 +343,7 @@ def _curve_lip(node: hou.SopNode) -> None:
 
 def _fill_back_loop_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
-    add_prim_attr(geo, "region", "")
+    add_prim_attrib(geo, "region", "")
 
     _fill_head_front_faces(geo)
     _add_head_front_pentagon(geo)
@@ -408,7 +402,6 @@ def _add_head_front_pentagon(geo: hou.Geometry) -> None:
         headsupport(0),
     )
     midpoint, floatpoint = fill_pentagon(
-        geo,
         [hf0, hf1, hs2, hs1, hs0],
         (hf0, hs0),
     )
@@ -577,19 +570,15 @@ def _fill_head_side_layer_faces(
     current_front, current_middle, current_back = head_side_points
     for layer, (next_front, next_middle, next_back) in enumerate(side_points):
         fill_face(
-            geo,
             [current_front, front_points[layer], front_points[layer + 1], next_front],
         )
         fill_face(
-            geo,
             [current_front, next_front, next_middle, current_middle],
         )
         fill_face(
-            geo,
             [current_middle, next_middle, next_back, current_back],
         )
         fill_face(
-            geo,
             [current_back, next_back, back_points[layer + 1], back_points[layer]],
         )
         current_front = next_front
@@ -606,8 +595,8 @@ def _fill_head_side_end_faces(
     current_points: tuple[hou.Point, hou.Point, hou.Point],
 ) -> None:
     current_front, current_middle, current_back = current_points
-    fill_face(geo, [current_front, front_points[-1], center, current_middle])
-    fill_face(geo, [current_middle, center, back_points[-1], current_back])
+    fill_face([current_front, front_points[-1], center, current_middle])
+    fill_face([current_middle, center, back_points[-1], current_back])
 
 def _sorted_right_side_points(geo: hou.Geometry) -> list[hou.Point]:
     candidates = [
@@ -666,7 +655,7 @@ def _get_membrane_ratio(node: hou.SopNode) -> float:
 
 
 def _attribute_inset_points(geo: hou.Geometry) -> None:
-    points = points_by_attr(geo, "id", True)
+    points = points_by_attrib(geo, "id", True)
     for point_id, matching in points.items():
         if not point_id or len(matching) != 2:
             continue
@@ -677,7 +666,7 @@ def _attribute_inset_points(geo: hou.Geometry) -> None:
 def _extrude_lip(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
-    ratio_x, ratio_y = get_params(parent).lip_extrusion_ratio
+    ratio_x, ratio_y = get_parms(parent).lip_extrusion_ratio
 
     # h0: headbasesupport(0), c0: headchelicerae(0)
     h0, c0 = point_from_geo(

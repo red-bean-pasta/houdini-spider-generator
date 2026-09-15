@@ -2,22 +2,16 @@ from enum import StrEnum, auto
 
 import hou
 
-from utilities.common import (
-    add_float_param,
-    add_folder,
-    fill_face,
-    get_params,
-    get_parent,
-)
-from utilities.nodes import (
+from houkit.noder import (
     add_fuse,
     add_merge,
-    add_outside_recalculation,
+    add_recalculate_normal,
     add_reload_button,
-    propagate_subnets,
-    sopify, propagate_controls,
+    get_parent,
+    sopify,
 )
-from utilities.topology import fill_pentagon, offset_point
+from houkit.parameterizer import add_float_parm, add_folder, get_parms, promote_controls, promote_subnets
+from houkit.topology import fill_face, fill_pentagon, offset_point
 from . import abdomen, base_sops, head, sternum
 from .cephalothorax import build as build_cephalothorax
 from .helper import (
@@ -70,7 +64,7 @@ def build(parent: hou.OpNode) -> hou.SopNode:
     merged_all = add_merge(spider, "merge_main_and_legs", removed_sockets, legs)
     fused = add_fuse(spider, "fuse_main_and_legs", merged_all)
 
-    recalculated = add_outside_recalculation(spider, "recalculate_normals", fused)
+    recalculated = add_recalculate_normal(spider, "recalculate_normals", fused)
     _add_subdivide(spider, "subdivision", recalculated, depth=3)
 
     _propagate_subnets(spider)
@@ -98,7 +92,7 @@ def _add_parameters(spider: hou.OpNode) -> None:
         spider,
         "build",
     )
-    add_float_param(
+    add_float_parm(
         spider,
         "pedicel_opening_ratios",
         2,
@@ -110,11 +104,11 @@ def _add_parameters(spider: hou.OpNode) -> None:
     )
 
 def _propagate_subnets(spider: hou.SopNode) -> None:
-    propagate_subnets(spider, dest_group="Build")
+    promote_subnets(spider, dest_group="Build")
 
 def _propagate_controls(spider: hou.SopNode) -> None:
     add_folder(spider, "advanced")
-    propagate_controls(spider, depth=None, dest_group="Advanced",)
+    promote_controls(spider, depth=None, dest_group="Advanced",)
 
 
 def _add_subdivide(
@@ -132,7 +126,7 @@ def _add_subdivide(
 def _open_cepha_pedicel(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     parent = get_parent(node)
-    params = get_params(parent)
+    params = get_parms(parent)
     pedicel_opening_ratios = params.pedicel_opening_ratios
     pedicel_opening_ratio_x, _ = pedicel_opening_ratios
 
@@ -338,11 +332,11 @@ def _reconnect_lower_sternum_pedicel_loop(
     p_prims = list(cp_outer_lower.prims())
     geo.deletePrims(p_prims, keep_points=True)
 
-    fill_pentagon(geo, [cp_outer_right, bs5_1, right_inner, s5, cp_outer_lower], (cp_outer_lower, s5), reverse=True)
-    fill_pentagon(geo, [cp_outer_left, bs5_2, left_inner, s5, cp_outer_lower], (cp_outer_lower, s5), reverse=False)
+    fill_pentagon([cp_outer_right, bs5_1, right_inner, s5, cp_outer_lower], (cp_outer_lower, s5), reverse_order=True)
+    fill_pentagon([cp_outer_left, bs5_2, left_inner, s5, cp_outer_lower], (cp_outer_lower, s5), reverse_order=False)
 
-    fill_face(geo, [cp_lower, cp_right, cp_outer_right, cp_outer_lower], reverse=False)
-    fill_face(geo, [cp_lower, cp_left, cp_outer_left, cp_outer_lower], reverse=True)
+    fill_face([cp_lower, cp_right, cp_outer_right, cp_outer_lower], reverse=False)
+    fill_face([cp_lower, cp_left, cp_outer_left, cp_outer_lower], reverse=True)
 
 
 def _reconnect_upper_sternum_pedicel_loop(
@@ -488,16 +482,14 @@ def _retopo_head_back_faces(
     geo.deletePrims(prims_to_delete, keep_points=True)
 
     fill_pentagon(
-        geo,
         [headsupport4, headsupport5, basesupportend0, p_right, basesupportsternum5_1],
         (headsupport5, basesupportend0),
-        reverse=False,
+        reverse_order=False,
     )
     fill_pentagon(
-        geo,
         [headsupport_minus4, headsupport5, basesupportend0, p_left, basesupportsternum5_2],
         (headsupport5, basesupportend0),
-        reverse=True,
+        reverse_order=True,
     )
 
     set_prim_attr_where_blank(geo, "region", head.Region.HEADBACK)

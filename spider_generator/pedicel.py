@@ -10,13 +10,13 @@ from .helper import (
     replace_points,
     set_prim_attr_where_blank,
 )
-from utilities.common import add_prim_attr
-from utilities.nodes import (
+from houkit.attributer import add_prim_attrib
+from houkit.noder import (
     add_output,
     add_reloadable_subnet,
     sopify,
 )
-from utilities.topology import fill_pentagon_with_buffer
+from houkit.topology import fill_pentagon_with_buffer
 
 
 class ID(StrEnum):
@@ -111,7 +111,7 @@ def _connect_pedicel(node: hou.SopNode) -> None:
     )
 
     ratio = 1.0 - 0.035
-    add_prim_attr(geo, "region", "")
+    add_prim_attrib(geo, "region", "")
 
     quadrant_configs = (
         # 1. Upper Right
@@ -154,12 +154,11 @@ def _connect_pedicel(node: hou.SopNode) -> None:
 
     for points, split_edge, buffer_edge, reverse, mid_id, float_id in quadrant_configs:
         mid_pt, float_pt, _, _ = fill_pentagon_with_buffer(
-            geo,
             points,
             split_edge,
             ratio,
             buffer_edge,
-            reverse=reverse,
+            reverse_order=reverse,
         )
         mid_pt.setAttribValue("id", mid_id)
         float_pt.setAttribValue("id", float_id)

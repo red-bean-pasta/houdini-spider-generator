@@ -1,32 +1,29 @@
 import math
 from enum import StrEnum, auto
+from typing import Collection
 
 import hou
 
+from houkit.attributer import add_prim_attrib, deduplicate_point_attribs, points_by_attrib
+from houkit.noder import get_parent
+from houkit.parameterizer import get_float_parm
+from houkit.topology import fill_face, outset
 from . import sternum
-from .sternum import ID as STERNUM_ID
-from .sternum import sternumrim
-from utilities.common import (
-    add_prim_attr,
-    fill_face,
-    get_float_parm,
-    get_parent,
-    points_by_attr,
-)
 from .helper import (
     affix_id,
     deduplicate_id_attr,
     add_id_point,
     fill_face_with_attr,
     get_id_range,
+    inset_inner_prims,
     point_from_geo,
     points_by_id,
     prims_by_attr,
     replace_points,
     unique_points_start_with_id,
 )
-from utilities.identifying import deduplicate_point_attributes
-from utilities.topology import inset, outset
+from .sternum import ID as STERNUM_ID
+from .sternum import sternumrim
 
 
 class ID(StrEnum):
@@ -34,6 +31,7 @@ class ID(StrEnum):
     BASESTERNUMMIDDLE = auto()
     BASEMAXILLA = auto()
     BASEMAXILLAMEMBRANE = auto()
+    BASEMOUTHMEMBRANE = auto()
     BASEEND = auto()
 
 
@@ -59,6 +57,8 @@ def basemaxilla(*i: int | str) -> str:
     return affix_id(ID.BASEMAXILLA, *i)
 def basemaxillamembrane(*i: int | str) -> str:
     return affix_id(ID.BASEMAXILLAMEMBRANE, *i)
+def basemouthmembrane(*i: int | str) -> str:
+    return affix_id(ID.BASEMOUTHMEMBRANE, *i)
 def baseend(*i: int | str) -> str:
     return affix_id(ID.BASEEND, *i)
 def outer_loop_ids() -> tuple[str, ...]:
@@ -141,12 +141,12 @@ def _extrude_edge_outward(
 
     outer_start = add_id_point(geo, start_position + offset, _get_extruded_id(start))
     outer_end = add_id_point(geo, end_position + offset, _get_extruded_id(end))
-    fill_face(geo, [start, end, outer_end, outer_start], True)
+    fill_face([start, end, outer_end, outer_start], True)
 
 
 def add_flap_regions(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-    add_prim_attr(geo, "region", "")
+    add_prim_attrib(geo, "region", "")
     for prim in geo.prims():
         prim.setAttribValue("region", Region.COXA)
     for prim in (geo.prim(0), geo.prim(1)):
@@ -294,7 +294,7 @@ def fill_maxilla(node: hou.SopNode) -> None:
     ends = point_from_geo(geo, basesternum(1, 2), basesternum(-1, 2))
     centers = point_from_geo(geo, basesternum(0), basesternum(0))
     pivots = point_from_geo(geo, sternumrim(1), sternumrim(-1))
-    add_prim_attr(geo, "region", "")
+    add_prim_attrib(geo, "region", "")
 
     for side, (start, end, center, pivot) in enumerate(zip(starts, ends, centers, pivots)):
         start_position = start.position()
@@ -365,6 +365,7 @@ def inset_membrane(node: hou.SopNode) -> None:
         ratio,
         follow_existing_edge=False,
     )
+    _classify_mouth_membrane_points(geo)
     _inset_membrane_region(
         geo,
         Region.MAXILLA,
@@ -385,7 +386,7 @@ def _inset_coxa_membranes(geo: hou.Geometry, points: dict[str, hou.Point], ratio
         bsm = points[basesternummiddle(idx)]
         dist = ratio * sm.position().distanceTo(bsm.position())
         prims = prims_by_attr(sm.prims(), "region", Region.COXA)
-        inner_prims = inset(prims, dist, use_ratio=False, follow_existing_edge=True)
+        inner_prims = inset_inner_prims(geo, prims, dist, use_ratio=False, follow_existing_edge=True)
         for prim in inner_prims:
             prim.setAttribValue("region", Region.COXASOCKET)
 
@@ -404,22 +405,36 @@ def _inset_membrane_region(
     inner_pt, outer_pt = baseline
     dist = ratio * inner_pt.position().distanceTo(outer_pt.position())
     prims = prims_by_attr(geo, "region", region)
-    inner_prims = inset(prims, dist, use_ratio=False, follow_existing_edge=follow_existing_edge)
+    inner_prims = inset_inner_prims(
+        geo,
+        prims,
+        dist,
+        use_ratio=False,
+        follow_existing_edge=follow_existing_edge,
+    )
     for prim in inner_prims:
         prim.setAttribValue("region", socket_region)
     for prim in prims_by_attr(geo, "region", region):
         prim.setAttribValue("region", membrane_region)
 
 def _classify_maxilla_membrane_points(geo: hou.Geometry) -> None:
-    points_by_id_dict = points_by_attr(geo, "id", skip_blank=True)
+    points_by_id_dict = points_by_attrib(geo, "id", skip_blank=True)
     for side in (1, -1):
         for index, name in enumerate(
             (sternumrim(side), basesternum(side, 1), basemaxilla(side), basesternum(side, 2)),
             start=1
         ):
-            pts = points_by_id_dict[name]
-            inset_pt = max(pts, key=lambda pt: pt.number())
-            inset_pt.setAttribValue("id", basemaxillamembrane(side * index))
+            _id_last_point(points_by_id_dict[name], basemaxillamembrane(side * index))
+
+
+def _classify_mouth_membrane_points(geo: hou.Geometry) -> None:
+    pts = points_by_attrib(geo, "id", skip_blank=True)
+    for side in (1, -1):
+        _id_last_point(pts[sternumrim(side)], basemouthmembrane("lower", side))
+        _id_last_point(pts[basesternum(side, 1)], basemouthmembrane("upper", side))
+
+    _id_last_point(pts[sternumrim(0)], basemouthmembrane("lower", 0))
+    _id_last_point(pts[basesternum(0)], basemouthmembrane("upper", 0))
 
 
 def extrude_base_buffer(node: hou.SopNode) -> None:
@@ -427,8 +442,17 @@ def extrude_base_buffer(node: hou.SopNode) -> None:
     parent = get_parent(node)
 
     dist = get_float_parm(parent, "membrane_ratio") * 50
-    outer_prims = outset(list(geo.prims()), dist, use_ratio=False)
+    outer_prims = [
+        prim
+        for component in outset(list(geo.prims()), dist, use_ratio=False).values()
+        for prim in component
+    ]
     for prim in outer_prims:
         prim.setAttribValue("region", Region.BASEBUFFERMEMBRANE)
 
-    deduplicate_point_attributes(geo, "id", outer_loop_ids(), keep_first=False)
+    deduplicate_point_attribs(geo, "id", outer_loop_ids(), keep_first=False)
+
+
+def _id_last_point(points: Collection[hou.Point], value: str) -> None:
+    p = max(points, key=lambda point: point.number())
+    p.setAttribValue("id", value)

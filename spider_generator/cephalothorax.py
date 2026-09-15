@@ -4,14 +4,15 @@ from . import base_sops
 from .base import build as build_base
 from .chelicerae import build as build_chelicerae
 from .head import build as build_head
-from utilities.nodes import (
+from .mouth import build as build_mouth
+from houkit.noder import (
     add_fuse,
     add_merge,
     add_output,
-    add_outside_recalculation,
+    add_recalculate_normal,
     add_reloadable_subnet,
-    propagate_subnets,
 )
+from houkit.parameterizer import promote_subnets
 
 
 def build(spider: hou.OpNode) -> hou.SopNode:
@@ -24,9 +25,10 @@ def build(spider: hou.OpNode) -> hou.SopNode:
     b_h_merge = add_merge(cephalothorax, "merge_base_and_head", base, head)
     b_h_fuse = add_fuse(cephalothorax, "fuse_base_and_head", b_h_merge)
 
-    chelicerae = build_chelicerae(cephalothorax, b_h_fuse)
+    mouth = build_mouth(cephalothorax, b_h_fuse)
+    chelicerae = build_chelicerae(cephalothorax, mouth)
 
-    recalculate = add_outside_recalculation(cephalothorax, "recalculate_normals", chelicerae)
+    recalculate = add_recalculate_normal(cephalothorax, "recalculate_normals", chelicerae)
     positioned = _position_cephalothorax(cephalothorax, recalculate)
 
     _ = add_output(cephalothorax, "OUT_CEPHALOTHORAX", positioned)
@@ -37,7 +39,7 @@ def build(spider: hou.OpNode) -> hou.SopNode:
 
 
 def _propagate_subnets(cephalothorax: hou.SopNode) -> None:
-    propagate_subnets(cephalothorax)
+    promote_subnets(cephalothorax)
 
 
 def _position_cephalothorax(parent: hou.SopNode, source: hou.SopNode) -> hou.SopNode:

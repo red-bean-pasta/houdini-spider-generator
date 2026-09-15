@@ -18,7 +18,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 from spider_generator import main
-from utilities.developing import save
+from houkit.developing import save
 
 
 def build() -> None:

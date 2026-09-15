@@ -5,13 +5,10 @@ from typing import Self
 
 import hou
 
-from .helper import bridge_loops, fill_face_with_attr
-from utilities.common import (
-    MessagedResult,
-    add_prim_attr,
-    points_to_positions,
-)
-from utilities.topology import loop_cut
+from .helper import bridge_loops, fill_face_with_attr, points_from_loop_cut
+from houkit.attributer import add_prim_attrib
+from houkit.models import Moject
+from houkit.topology import loop_cut, points_to_positions
 
 
 class Region(StrEnum):
@@ -67,8 +64,8 @@ class LegParam:
 def build_leg(
     geo: hou.Geometry,
     param: LegParam,
-) -> MessagedResult[tuple[list[hou.Point], list[hou.Point], list[hou.Point]]]:
-    add_prim_attr(geo, "region", "")
+) -> Moject[tuple[list[hou.Point], list[hou.Point], list[hou.Point]]]:
+    add_prim_attrib(geo, "region", "")
 
     seg_pts, warnings = _build_segment_tubes(geo, param)
     thickness_pts = _add_segment_thickness(geo, seg_pts, param.support_loop_ratio)
@@ -76,13 +73,13 @@ def build_leg(
     mem_pts = _fill_membranes(geo, thickness_pts)
     all_mem_pts = _add_membrane_loop_cuts(geo, seg_pts, thickness_pts, mem_pts, param.support_loop_ratio)
     _close_tarsus(geo, all_seg_pts, param.tarsus_wedge_angle)
-    return MessagedResult((all_seg_pts, thickness_pts, all_mem_pts), warnings)
+    return Moject((all_seg_pts, thickness_pts, all_mem_pts), warnings)
 
 
 def _build_segment_tubes(
     geo: hou.Geometry,
     param: LegParam,
-) -> MessagedResult[list[hou.Point]]:
+) -> Moject[list[hou.Point]]:
     segments, messages = _get_leg_points(param)
 
     seg_pts: list[hou.Point] = []
@@ -96,11 +93,11 @@ def _build_segment_tubes(
         end_loop = [cur_seg_pts[4], cur_seg_pts[5], cur_seg_pts[7], cur_seg_pts[6]]
         bridge_loops(geo, start_loop, end_loop, primitive_attr=("region", Region.LEGSEGMENT))
 
-    return MessagedResult(seg_pts, messages)
+    return Moject(seg_pts, messages)
 
 def _get_leg_points(
     param: LegParam,
-) -> MessagedResult[list[list[hou.Vector3]]]:
+) -> Moject[list[list[hou.Vector3]]]:
     assert len(param.yaw_flex_specs) == len(param.length_ratios)
 
     coxa_width, coxa_length = param.coxa_width_length
@@ -149,7 +146,7 @@ def _get_leg_points(
         segments.append(latter)
 
     assert len(segments) == len(param.yaw_flex_specs) + 1
-    return MessagedResult(segments, messages)
+    return Moject(segments, messages)
 
 def _append_segment(
     former_positions: list[hou.Vector3],
@@ -160,7 +157,7 @@ def _append_segment(
     max_yaw: float,
     min_flex: float,
     minimum_membrane: tuple[float, float],
-) -> MessagedResult[tuple[list[hou.Vector3], list[hou.Vector3]]]:
+) -> Moject[tuple[list[hou.Vector3], list[hou.Vector3]]]:
     assert len(former_positions) == 8, f"Expected 8 positions for former segment, got {len(former_positions)}"
 
     # former_positions are ordered:
@@ -216,7 +213,7 @@ def _append_segment(
         wedge_angle,
     )
 
-    return MessagedResult((former_positions_list, latter_segment), messages)
+    return Moject((former_positions_list, latter_segment), messages)
 
 
 def _build_latter_segment_positions(
@@ -279,7 +276,7 @@ def _calc_segment_offset_and_wedge(
     spine_ratio: float,
     segment_size: tuple[tuple[float, float], tuple[float, float]],
     minimum_membrane: tuple[float, float],
-) -> MessagedResult[tuple[hou.Vector2, float]]:
+) -> Moject[tuple[hou.Vector2, float]]:
     (former_width, former_height), (latter_width, latter_height) = segment_size
 
     (offset_x, wedge_angle), messages = _calc_membrane_spec(max_yaw, min_flex, segment_size, minimum_membrane)
@@ -292,7 +289,7 @@ def _calc_segment_offset_and_wedge(
     offset_x -= wedged_x
     offset_x = max(offset_x, minimum_membrane[0])
 
-    return MessagedResult((hou.Vector2(offset_x, offset_y), wedge_angle), messages)
+    return Moject((hou.Vector2(offset_x, offset_y), wedge_angle), messages)
 
 def _calc_membrane_spec(
     max_yaw_deg: float,
@@ -301,7 +298,7 @@ def _calc_membrane_spec(
     min_return: tuple[float, float],
     max_wedge_deg: float = 45,
     max_distance_ratio: float = 1.0,
-) -> MessagedResult[tuple[float, float]]:
+) -> Moject[tuple[float, float]]:
     max_yaw_deg = abs(max_yaw_deg)
     assert min_flex_deg > 0
     assert max_yaw_deg <= 90
@@ -316,7 +313,7 @@ def _calc_membrane_spec(
 
     if min_flex_deg >= 180:
         angle = min_angle
-        return MessagedResult((distance, angle), messages)
+        return Moject((distance, angle), messages)
 
     min_height = min(former_height, latter_height)
     angle, wedge_messages = _solve_membrane_wedge_deg(
@@ -339,7 +336,7 @@ def _calc_membrane_spec(
     )
     messages.extend(limit_messages)
 
-    return MessagedResult((limited_distance, limited_angle), messages)
+    return Moject((limited_distance, limited_angle), messages)
 
 
 def _apply_membrane_spec_limits(
@@ -385,7 +382,7 @@ def _solve_membrane_wedge_deg(
     min_height: float,
     tolerance: float = 1e-5,
     iterations: int = 50,
-) -> MessagedResult[float]:
+) -> Moject[float]:
     wedge_rad, messages = _solve_membrane_wedge_rad(
         math.radians(min_flex),
         membrane_thickness,
@@ -393,7 +390,7 @@ def _solve_membrane_wedge_deg(
         tolerance,
         iterations,
     )
-    return MessagedResult(math.degrees(wedge_rad), messages)
+    return Moject(math.degrees(wedge_rad), messages)
 
 def _solve_membrane_wedge_rad(
     min_flex: float,
@@ -401,7 +398,7 @@ def _solve_membrane_wedge_rad(
     min_height: float,
     tolerance: float = 1e-5,
     iterations: int = 50,
-) -> MessagedResult[float]:
+) -> Moject[float]:
     remain_rad, messages = _solve_membrane_wedge_remain_rad(
         min_flex,
         membrane_thickness,
@@ -409,7 +406,7 @@ def _solve_membrane_wedge_rad(
         tolerance,
         iterations,
     )
-    return MessagedResult(math.pi / 2 - remain_rad, messages)
+    return Moject(math.pi / 2 - remain_rad, messages)
 
 def _solve_membrane_wedge_remain_rad(
     min_flex: float,
@@ -417,7 +414,7 @@ def _solve_membrane_wedge_remain_rad(
     min_height: float,
     tolerance: float = 1e-5,
     iterations: int = 50,
-) -> MessagedResult[float]:
+) -> Moject[float]:
     """
     :solve:
         u: pi / 2 - wedge_angle
@@ -439,7 +436,7 @@ def _solve_membrane_wedge_remain_rad(
 
         f = math.tan(w) - k * math.sin(u)
         if abs(f) < tolerance:
-            return MessagedResult(u)
+            return Moject(u)
         df = 2.0 / (cos_w * cos_w) - k * math.cos(u)
         assert abs(df) >= tolerance, "Derivative too small"
         u -= f / df
@@ -449,7 +446,7 @@ def _solve_membrane_wedge_remain_rad(
         f"(final residual: {abs(f):.4e}, min_flex: {math.degrees(min_flex):.2f}°, "
         f"membrane_thickness: {membrane_thickness:.4f}, min_height: {min_height:.4f})."
     )
-    return MessagedResult(u, [msg])
+    return Moject(u, [msg])
 
 def _solve_membrane_thickness_deg(
     needed_angle: float,
@@ -593,7 +590,7 @@ def _fill_membranes(
     if not thickness_pts:
         return []
 
-    add_prim_attr(geo, "region", "")
+    add_prim_attrib(geo, "region", "")
     assert len(thickness_pts) % 8 == 0, f"Expected thickness_pts length to be a multiple of 8, got {len(thickness_pts)}"
 
     membrane_points: list[hou.Point] = []
@@ -731,12 +728,14 @@ def _add_tube_loop_cut(
     edge = geo.findEdge(s0, e0)
     assert edge is not None, f"Expected edge between {s0} and {e0}"
     prim = [p for p in edge.prims() if s1 in p.points()][0]
-    cut_pts, _ = loop_cut(
+    cut_edges = loop_cut(
         prim,
         s0,
         e0,
         cut_length,
         use_ratio=False,
     )
+    cut_pts = points_from_loop_cut(cut_edges)
+    assert len(cut_pts) == 4, f"Expected four points from tube loop cut, got {len(cut_pts)}"
     m0, m1, m3, m2 = cut_pts
     return [m0, m1, m2, m3]

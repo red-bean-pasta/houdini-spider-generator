@@ -13,7 +13,9 @@ from .helper import (
     bridge_loops,
     deduplicate_id_attr,
     fill_face_with_attr,
+    inset_inner_prims,
     point_from_geo,
+    points_from_loop_cut,
     position_from_geo,
     prims_by_attr,
     rename_left_ids,
@@ -22,30 +24,22 @@ from .helper import (
     set_points_id,
     sopify_chain,
 )
-from utilities.common import (
-    add_float_param,
-    add_heading,
-    add_prim_attr,
-    fill_face,
-    find_prim,
-    get_float_parm,
-    get_params,
-    get_parent,
-    get_prim_centroid,
-    points_by_attr,
-    rotation_to,
-)
-from utilities.nodes import (
+from houkit.attributer import add_prim_attrib, points_by_attrib
+from houkit.geomath import interpolate_elliptical, rotation_to
+from houkit.noder import (
     add_fuse,
     add_merge,
     add_mirror,
     add_output,
     add_reloadable_subnet,
+    get_parent,
     sopify,
 )
-from utilities.topology import (
-    inset,
-    interpolate_elliptical,
+from houkit.parameterizer import add_float_parm, add_heading, get_float_parm, get_parms
+from houkit.topology import (
+    fill_face,
+    find_prim,
+    get_prim_centroid,
     loop_cut,
     merge_points,
     offset_point,
@@ -147,7 +141,7 @@ def build(cephalothorax: hou.SopNode, source: hou.SopNode) -> hou.SopNode:
 
 
 def _add_parameters(chelicerae: hou.SopNode) -> None:
-    add_float_param(
+    add_float_parm(
         chelicerae,
         "membrane_ratio",
         1,
@@ -160,7 +154,7 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
         chelicerae,
         "End Section",
     )
-    add_float_param(
+    add_float_parm(
         chelicerae,
         "end_section_ratio",
         2,
@@ -169,7 +163,7 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
         label="End Section Size",
         help="X scales width and Y scales height relative to the start section.",
     )
-    add_float_param(
+    add_float_parm(
         chelicerae,
         "end_section_offset",
         3,
@@ -177,7 +171,7 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
         label="End Section Offset",
         help="Offsets the end section in its local width, height, and length directions.",
     )
-    add_float_param(
+    add_float_parm(
         chelicerae,
         "end_section_rotation",
         2,
@@ -189,7 +183,7 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
         chelicerae,
         "Middle Section",
     )
-    add_float_param(
+    add_float_parm(
         chelicerae,
         "middle_section_ratio",
         2,
@@ -198,7 +192,7 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
         label="Middle Section Size",
         help="X scales width and Y scales height relative to the start section.",
     )
-    add_float_param(
+    add_float_parm(
         chelicerae,
         "middle_section_offset",
         2,
@@ -206,7 +200,7 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
         label="Middle Section Offset",
         help="Moves the middle section through its local width and length plane.",
     )
-    add_float_param(
+    add_float_parm(
         chelicerae,
         "middle_section_height_ratio",
         1,
@@ -246,7 +240,7 @@ def _build_geometry(node: hou.SopNode) -> None:
     all_points = replace_points(geo, all_point_data)
     base_points = all_points[:len(base_ids)]
     upper_points = all_points[len(base_ids):]
-    add_prim_attr(geo, "region", "")
+    add_prim_attrib(geo, "region", "")
 
     fill_face_with_attr(
         geo,
@@ -271,8 +265,8 @@ def _retain_headbase_faces(
     hb1 = add_id_point(geo, headbase_positions[1], headbasesupport(headchelicerae(1)))
     hb2 = add_id_point(geo, headbase_positions[2], headbasesupport(headchelicerae(2)))
 
-    fill_face(geo, [h0, h1, hb1, hb0])
-    fill_face(geo, [h1, h2, hb2, hb1])
+    fill_face([h0, h1, hb1, hb0])
+    fill_face([h1, h2, hb2, hb1])
 
 
 def _inset_flaps(node: hou.SopNode) -> None:
@@ -349,7 +343,7 @@ def _remove_left_membrane(node: hou.SopNode) -> None:
 def _add_start_membrane(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     parent = get_parent(node)
-    params = get_params(parent, use_tuple=False)
+    params = get_parms(parent, use_tuple=False)
 
     b0, u0, m6 = point_from_geo(
         geo,
@@ -387,7 +381,7 @@ def _add_start_membrane(node: hou.SopNode) -> None:
         for j, (start, offset) in enumerate(zip(membrane_points, offsets), start=1)
     ]
 
-    fill_face(geo, pts, True)
+    fill_face(pts, True)
 
 
 def _inset_start_membrane(node: hou.SopNode) -> None:
@@ -427,7 +421,7 @@ def _adjust_start_section_left(node: hou.SopNode) -> None:
 def _add_end_section(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     parent = get_parent(node)
-    params = get_params(parent, use_tuple=False)
+    params = get_parms(parent, use_tuple=False)
     end_section_ratio = params.end_section_ratio
 
     start_section, end_pivot, end_rot_matrix, end_surface_normal = _get_end_section_frame(geo, parent)
@@ -447,7 +441,7 @@ def _add_end_section(node: hou.SopNode) -> None:
         for j, pos in enumerate(c3_positions, start=1)
     ]
 
-    add_prim_attr(geo, "region", "")
+    add_prim_attrib(geo, "region", "")
     fill_face_with_attr(geo, c3_pts, "region", Region.FANG, True)
 
 
@@ -490,7 +484,7 @@ def _get_start_section_frame(geo: hou.Geometry) -> Section:
 
 
 def _get_end_section_frame(geo: hou.Geometry, parent: hou.OpNode) -> tuple[Section, hou.Vector3, hou.Matrix3, hou.Vector3]:
-    params = get_params(parent, use_tuple=False)
+    params = get_parms(parent, use_tuple=False)
     end_section_offset = params.end_section_offset
     end_section_rotation = params.end_section_rotation
 
@@ -553,7 +547,7 @@ def _add_intermediate_section(
     geo: hou.Geometry = node.geometry()
     parent = get_parent(node)
 
-    params = get_params(parent, use_tuple=False)
+    params = get_parms(parent, use_tuple=False)
     end_section_ratio = params.end_section_ratio
     middle_section_offset = params.middle_section_offset
     middle_section_height_ratio = params.middle_section_height_ratio
@@ -598,7 +592,7 @@ def _add_intermediate_section(
         assert pos.x() >= 0.0, f"Section loop point at factor {factor} crossed symmetry plane (x={pos.x():.4f} < 0.0). Adjust parameters or ratio."
 
     pts = _add_intermediate_section_points(geo, positions, id_factory)
-    fill_face(geo, pts, True)
+    fill_face(pts, True)
 
 
 def _get_middle_section_pivot(
@@ -723,13 +717,13 @@ def _connect_membrane_to_start_support(geo: hou.Geometry) -> None:
     )
 
     # Medial face: (m1, m6, ss2, ss1)
-    fill_face(geo, [m1, m6, ss2, ss1], True)
+    fill_face([m1, m6, ss2, ss1], True)
     # Top face: (m6, m4, ss3, ss2)
-    fill_face(geo, [m6, m4, ss3, ss2], True)
+    fill_face([m6, m4, ss3, ss2], True)
     # Lateral face: (m4, m3, ss4, ss3)
-    fill_face(geo, [m4, m3, ss4, ss3], True)
+    fill_face([m4, m3, ss4, ss3], True)
     # Bottom face: (m3, m1, ss1, ss4)
-    fill_face(geo, [m3, m1, ss1, ss4], True)
+    fill_face([m3, m1, ss1, ss4], True)
 
 
 def _bridge_chelicerae_section_loops(geo: hou.Geometry) -> None:
@@ -775,7 +769,7 @@ def _middle_loop_cut(node: hou.SopNode) -> None:
     )
     top_edge = geo.findEdge(s2, s3)
     assert top_edge is not None, "Expected top edge between cheliceraestart(2) and cheliceraestart(3)"
-    added_points, _ = loop_cut(top_edge.prims()[0], s2, s3, 1 / 3, use_ratio=True)
+    added_points = points_from_loop_cut(loop_cut(top_edge.prims()[0], s2, s3, 1 / 3, use_ratio=True))
     cut_ids = [
         bottom_middle(cheliceraemembrane, 1),
         bottom_middle(cheliceraestartmembranesupport, 1),
@@ -911,7 +905,7 @@ def _inset_chelicerae_support_loop(node: hou.SopNode) -> None:
     )
     start_membrane_gap = start_membrane_support.position().distanceTo(start_point.position())
     dist = start_membrane_gap / 3.0
-    inset(support_prims, dist, use_ratio=False)
+    inset_inner_prims(geo, support_prims, dist, use_ratio=False)
 
     _adjust_chelicerae_support_loop(node)
     deduplicate_id_attr(geo, None, keep_first=True)
@@ -963,7 +957,7 @@ def _get_chelicerae_support_strip_prims(geo: hou.Geometry) -> list[hou.Prim]:
 def _adjust_chelicerae_support_loop(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     # This method adjusts the points position so the topology becomes more natural and smooth at certain places
-    by_id = points_by_attr(geo, "id", skip_blank=True)
+    by_id = points_by_attrib(geo, "id", skip_blank=True)
     _adjust_right_chelicerae_support_points(by_id)
     _adjust_right_chelicerae_membrane_points(by_id)
     _adjust_left_chelicerae_support_points(by_id)
@@ -1105,7 +1099,8 @@ def _inset_and_recess(
         recess_dist: float,
         delete_inset_prims: bool = False,
 ) -> list[hou.Prim]:
-    inner = inset(prims, inset_dist, use_ratio=False)
+    geo = prims[0].geometry()
+    inner = inset_inner_prims(geo, prims, inset_dist, use_ratio=False)
     norm = inner[0].normal()
     inner_pts = list({pt.number(): pt for prim in inner for pt in prim.points()}.values())
     if delete_inset_prims:
@@ -1126,5 +1121,5 @@ def _add_support_loop(
     edge = geo.findEdge(start_point, end_point)
     assert edge is not None, "Expected start membrane support edge"
     prim = edge.prims()[0]
-    added_points, _ = loop_cut(prim, start_point, end_point, ratio, use_ratio=True)
+    added_points = points_from_loop_cut(loop_cut(prim, start_point, end_point, ratio, use_ratio=True))
     return added_points

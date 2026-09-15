@@ -4,29 +4,21 @@ import hou
 
 from . import base_sops, pedipalp
 from .leg_builder import LegParam, build_leg
-from utilities.common import (
-    add_float_param,
-    add_heading,
-    add_prim_attr,
-    fill_face,
-    get_control,
-    get_float_parm,
-    get_params,
-    get_parent,
-    points_to_positions,
-    remove_attrs,
-    rotation_to,
-)
-from .helper import prims_by_attr
-from utilities.nodes import (
+from houkit.attributer import add_prim_attrib, remove_attribs
+from houkit.geomath import rotation_to
+from houkit.noder import (
     add_fuse,
     add_merge,
     add_mirror,
     add_output,
     add_reloadable_subnet,
+    get_control,
+    get_parent,
     sopify,
 )
-from utilities.topology import fill_pentagon_with_buffer
+from houkit.parameterizer import add_float_parm, add_heading, get_float_parm, get_parms
+from houkit.topology import fill_face, fill_pentagon_with_buffer, points_to_positions
+from .helper import prims_by_attr
 
 
 def build(
@@ -58,7 +50,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
         legs,
         "Basic",
     )
-    add_float_param(
+    add_float_parm(
         legs,
         "min_flex_angles",
         6,
@@ -68,7 +60,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
         label="Minimum Flex Angles",
         help="One minimum flex angle per post-coxa segment joint.",
     )
-    add_float_param(
+    add_float_parm(
         legs,
         "max_yaw_angles",
         6,
@@ -82,7 +74,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
         legs,
         "Front Leg",
     )
-    add_float_param(
+    add_float_parm(
         legs,
         "front_coxa_width_length_ratios",
         2,
@@ -91,7 +83,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
         label="Front Coxa Width / Length",
         help="X scales coxa width and Y scales coxa length from the front socket width.",
     )
-    add_float_param(
+    add_float_parm(
         legs,
         "front_segment_length_ratios",
         6,
@@ -105,7 +97,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
         legs,
         "Other Main Legs",
     )
-    add_float_param(
+    add_float_parm(
         legs,
         "other_leg_width_ratios",
         3,
@@ -115,7 +107,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
         label="Other Leg Widths",
         help="Coxa-width scale for legs 2–4 relative to the front coxa.",
     )
-    add_float_param(
+    add_float_parm(
         legs,
         "other_leg_length_ratios",
         3,
@@ -130,7 +122,7 @@ def _add_parameters(legs: hou.OpNode) -> None:
 
 def _add_controls(parent: hou.SopNode) -> hou.SopNode:
     control = parent.createNode("null", "CONTROL")
-    add_float_param(
+    add_float_parm(
         control,
         "joint_support_loop_ratio",
         1,
@@ -139,7 +131,7 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
         label="Joint Support Loop",
         help="Inset width at coxa sockets and segment joints, relative to coxa width.",
     )
-    add_float_param(
+    add_float_parm(
         control,
         "coxa_trochanter_height_ratio",
         1,
@@ -148,7 +140,7 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
         label="Coxa-Trochanter Height",
         help="Height-to-width proportion of the trochanter segment.",
     )
-    add_float_param(
+    add_float_parm(
         control,
         "other_segment_height_ratio",
         1,
@@ -157,7 +149,7 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
         label="Other Segment Height",
         help="Height-to-width proportion of post-trochanter segments.",
     )
-    add_float_param(
+    add_float_parm(
         control,
         "segment_bulge_bias_ratio",
         1,
@@ -166,7 +158,7 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
         label="Segment Bulge Bias",
         help="Moves the segment’s fullest area between its upper and lower sides.",
     )
-    add_float_param(
+    add_float_parm(
         control,
         "segment_taper_ratios",
         2,
@@ -176,7 +168,7 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
         label="Segment Taper",
         help="X sets taper along a segment; Y sets the size change at each joint.",
     )
-    add_float_param(
+    add_float_parm(
         control,
         "joint_clearance_limits",
         2,
@@ -186,7 +178,7 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
         label="Joint Clearance Limits",
         help="X is minimum membrane separation in scene units. Y is minimum flex angle; keep it strictly between 0° and 45°.",
     )
-    add_float_param(
+    add_float_parm(
         control,
         "tarsus_wedge_angle",
         1,
@@ -195,7 +187,7 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
         label="Tarsus Wedge",
         help="Terminal tarsus wedge angle.",
     )
-    add_float_param(
+    add_float_parm(
         control,
         "coxa_start_wedge_angle",
         1,
@@ -321,8 +313,8 @@ def _get_leg_param(
     geo = node.geometry()
     parent = get_parent(node)
 
-    params = get_params(parent, use_tuple=False)
-    control_params = get_params(get_control(parent), use_tuple=False)
+    params = get_parms(parent, use_tuple=False)
+    control_params = get_parms(get_control(parent, "CONTROL"), use_tuple=False)
 
     front_socket_width, _ = get_front_coxa_socket_size(geo)
     front_coxa_width = front_socket_width * params.front_coxa_width_length_ratios.x()
@@ -363,13 +355,13 @@ def _adjust_coxa(
     assert len(socket_midpoints) == 2, f"Expected 2 socket midpoints, got {len(socket_midpoints)}"
 
     geo = node.geometry()
-    add_prim_attr(geo, "region", "")
+    add_prim_attrib(geo, "region", "")
 
     coxa_start_pts = coxa_points[:4]
     coxa_start_support_pts = coxa_points[4:8]
     coxa_end_pts = coxa_points[12:16]
 
-    coxa_start_wedge_angle = get_float_parm(get_control(node), "coxa_start_wedge_angle")
+    coxa_start_wedge_angle = get_float_parm(get_control(node, "CONTROL"), "coxa_start_wedge_angle")
     adjusted_support_positions = _get_adjusted_coxa_support_positions(
         socket_points,
         coxa_end_pts,
@@ -378,7 +370,7 @@ def _adjust_coxa(
     for point, position in zip(coxa_start_support_pts, adjusted_support_positions):
         point.setPosition(position)
 
-    support_loop_ratio = get_float_parm(get_control(node), "joint_support_loop_ratio")
+    support_loop_ratio = get_float_parm(get_control(node, "CONTROL"), "joint_support_loop_ratio")
     buffer_ratio = _get_coxa_buffer_ratio(
         socket_points,
         coxa_start_pts,
@@ -466,7 +458,6 @@ def _build_coxa_socket_faces(
 
     # Upper pentagon: su1, s_mu, su2, eu2, eu1
     mid_u, _, b_eu2, b_eu1 = fill_pentagon_with_buffer(
-        geo,
         [su1, s_mu, su2, eu2, eu1],
         (eu2, eu1),
         buffer_ratio,
@@ -474,7 +465,6 @@ def _build_coxa_socket_faces(
     )
     # Bottom pentagon: sb2, s_mb, sb1, eb1, eb2
     mid_b, _, b_eb1, b_eb2 = fill_pentagon_with_buffer(
-        geo,
         [sb2, s_mb, sb1, eb1, eb2],
         (eb1, eb2),
         buffer_ratio,
@@ -482,17 +472,17 @@ def _build_coxa_socket_faces(
     )
 
     # Back side (+Z): split into 2 quads by (b_eu2, b_eb2)
-    fill_face(geo, [sb2, su2, b_eu2, b_eb2])
-    fill_face(geo, [b_eb2, b_eu2, eu2, eb2])
+    fill_face([sb2, su2, b_eu2, b_eb2])
+    fill_face([b_eb2, b_eu2, eu2, eb2])
 
     # Front side (-Z): split into 3 quads by (mid_u, mid_b) and (b_eu1, b_eu1)
-    fill_face(geo, [su1, sb1, mid_b, mid_u])
-    fill_face(geo, [mid_u, mid_b, b_eb1, b_eu1])
-    fill_face(geo, [b_eu1, b_eb1, eb1, eu1])
+    fill_face([su1, sb1, mid_b, mid_u])
+    fill_face([mid_u, mid_b, b_eb1, b_eu1])
+    fill_face([b_eu1, b_eb1, eb1, eu1])
 
 
 def _remove_tmp_attributes(node: hou.SopNode) -> None:
-    remove_attrs(node.geometry(), global_attribs=("tmp_coxa_corners", "tmp_coxa_midpoints"))
+    remove_attribs(node.geometry(), global_attributes=("tmp_coxa_corners", "tmp_coxa_midpoints"))
 
 
 def get_front_coxa_socket_size(geo: hou.Geometry) -> tuple[float, float]:

@@ -14,26 +14,20 @@ from .helper import (
     replace_points,
     set_points_id,
 )
-from utilities.common import (
-    add_float_param,
-    add_prim_attr,
-    fill_face,
-    get_control,
-    get_float_parm,
-    get_params,
-    get_parent,
-    is_equal_approx,
-)
-from utilities.identifying import deduplicate_point_attributes
-from utilities.nodes import (
+from houkit.attributer import add_prim_attrib, deduplicate_point_attribs
+from houkit.geomath import is_equal_approx
+from houkit.noder import (
     add_fuse,
     add_merge,
     add_mirror,
     add_output,
     add_reloadable_subnet,
+    get_control,
+    get_parent,
     sopify,
 )
-from utilities.topology import outset
+from houkit.parameterizer import add_float_parm, get_float_parm, get_parms
+from houkit.topology import fill_face, outset
 
 
 class ID(StrEnum):
@@ -79,7 +73,7 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
 
 
 def _add_parameters(sternum: hou.SopNode) -> None:
-    add_float_param(
+    add_float_parm(
         sternum,
         "front_back_length_ratios",
         2,
@@ -88,7 +82,7 @@ def _add_parameters(sternum: hou.SopNode) -> None:
         label="Front / Back Length",
         help="X is anterior length; Y is posterior length. Both are relative to sternum half-width.",
     )
-    add_float_param(
+    add_float_parm(
         sternum,
         "front_width_ratio",
         1,
@@ -97,16 +91,16 @@ def _add_parameters(sternum: hou.SopNode) -> None:
         label="Front Width",
         help="Anterior width relative to the sternum’s widest span.",
     )
-    add_float_param(
+    add_float_parm(
         sternum,
         "spine_depth_ratio",
         1,
-        0.35,
+        0.25,
         (0.0, None),
         label="Spine Depth",
         help="Maximum center-spine depression relative to sternum half-width.",
     )
-    add_float_param(
+    add_float_parm(
         sternum,
         "spine_descent_power",
         1,
@@ -115,7 +109,7 @@ def _add_parameters(sternum: hou.SopNode) -> None:
         label="Spine Descent",
         help="1 is linear; lower values deepen sooner and higher values deepen later.",
     )
-    add_float_param(
+    add_float_parm(
         sternum,
         "spine_loop_position_ratio",
         1,
@@ -124,7 +118,7 @@ def _add_parameters(sternum: hou.SopNode) -> None:
         label="Spine Loop Position",
         help="Position from center spine toward rim. At 1, the intermediate loop is omitted.",
     )
-    add_float_param(
+    add_float_parm(
         sternum,
         "membrane_ratio",
         1,
@@ -137,7 +131,7 @@ def _add_parameters(sternum: hou.SopNode) -> None:
 
 def _add_controls(parent: hou.SopNode) -> hou.SopNode:
     control = parent.createNode("null", "CONTROL")
-    add_float_param(
+    add_float_parm(
         control,
         "half_width",
         1,
@@ -145,7 +139,7 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
         label="Half Width",
         help="Scene-unit half-width that establishes the sternum scale.",
     )
-    add_float_param(
+    add_float_parm(
         control,
         "posterior_outline_angle",
         1,
@@ -161,8 +155,8 @@ def _left_half(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
 
-    params = get_params(parent, use_tuple=False)
-    control_params = get_params(get_control(node), use_tuple=False)
+    params = get_parms(parent, use_tuple=False)
+    control_params = get_parms(get_control(node, "CONTROL"), use_tuple=False)
 
     front_ratio, back_ratio = params.front_back_length_ratios
     angle = math.radians(control_params.posterior_outline_angle)
@@ -272,8 +266,8 @@ def _descend_sternum_spine(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
 
-    params = get_params(parent, use_tuple=False)
-    control_params = get_params(get_control(node), use_tuple=False)
+    params = get_parms(parent, use_tuple=False)
+    control_params = get_parms(get_control(node, "CONTROL"), use_tuple=False)
 
     depth = control_params.half_width * params.spine_depth_ratio
     power = params.spine_descent_power
@@ -336,9 +330,9 @@ def _build_base_faces(
     left: list[hou.Point],
 ) -> None:
     for index in range(len(center) - 2):
-        fill_face(geo, [center[index], right[index], right[index + 1], center[index + 1]], True)
-        fill_face(geo, [center[index], center[index + 1], left[index + 1], left[index]], True)
-    fill_face(geo, [center[-2], right[-1], center[-1], left[-1]], True)
+        fill_face([center[index], right[index], right[index + 1], center[index + 1]], True)
+        fill_face([center[index], center[index + 1], left[index + 1], left[index]], True)
+    fill_face([center[-2], right[-1], center[-1], left[-1]], True)
 
 def _build_subdivided_spine_faces(
     geo: hou.Geometry,
@@ -363,32 +357,32 @@ def _build_subdivided_spine_faces(
     m3_l = loop_l[0]
 
     # Front 3 faces (Right)
-    fill_face(geo, [center[1], m1, m2_r, m3_r], True)
-    fill_face(geo, [m3_r, m2_r, right[0], right[1]], True)
-    fill_face(geo, [m2_r, m1, center[0], right[0]], True)
+    fill_face([center[1], m1, m2_r, m3_r], True)
+    fill_face([m3_r, m2_r, right[0], right[1]], True)
+    fill_face([m2_r, m1, center[0], right[0]], True)
 
     # Front 3 faces (Left)
-    fill_face(geo, [center[1], m3_l, m2_l, m1], True)
-    fill_face(geo, [m3_l, left[1], left[0], m2_l], True)
-    fill_face(geo, [m2_l, left[0], center[0], m1], True)
+    fill_face([center[1], m3_l, m2_l, m1], True)
+    fill_face([m3_l, left[1], left[0], m2_l], True)
+    fill_face([m2_l, left[0], center[0], m1], True)
 
     # Side quads along spokes
     for i in range(len(loop_r) - 1):
-        fill_face(geo, [center[i + 1], loop_r[i], loop_r[i + 1], center[i + 2]], True)
-        fill_face(geo, [loop_r[i], right[i + 1], right[i + 2], loop_r[i + 1]], True)
-        fill_face(geo, [center[i + 1], center[i + 2], loop_l[i + 1], loop_l[i]], True)
-        fill_face(geo, [loop_l[i], loop_l[i + 1], left[i + 2], left[i + 1]], True)
+        fill_face([center[i + 1], loop_r[i], loop_r[i + 1], center[i + 2]], True)
+        fill_face([loop_r[i], right[i + 1], right[i + 2], loop_r[i + 1]], True)
+        fill_face([center[i + 1], center[i + 2], loop_l[i + 1], loop_l[i]], True)
+        fill_face([loop_l[i], loop_l[i + 1], left[i + 2], left[i + 1]], True)
 
     # Rear diamond quads
-    fill_face(geo, [center[-2], loop_r[-1], loop_c, loop_l[-1]], True)
-    fill_face(geo, [loop_r[-1], right[-1], center[-1], loop_c], True)
-    fill_face(geo, [loop_l[-1], loop_c, center[-1], left[-1]], True)
+    fill_face([center[-2], loop_r[-1], loop_c, loop_l[-1]], True)
+    fill_face([loop_r[-1], right[-1], center[-1], loop_c], True)
+    fill_face([loop_l[-1], loop_c, center[-1], left[-1]], True)
 
 
 def _add_prim_regions(node: hou.SopNode) -> None:
     geo = node.geometry()
 
-    add_prim_attr(geo, "region", "")
+    add_prim_attrib(geo, "region", "")
     for prim in geo.prims():
         prim.setAttribValue("region", "sternum")
 
@@ -396,8 +390,8 @@ def _add_prim_regions(node: hou.SopNode) -> None:
 def _outset_sternum_loop(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
-    params = get_params(parent, use_tuple=False)
-    control_params = get_params(get_control(node), use_tuple=False)
+    params = get_parms(parent, use_tuple=False)
+    control_params = get_parms(get_control(node, "CONTROL"), use_tuple=False)
 
     membrane_width = params.membrane_ratio * control_params.half_width
     support_dist = membrane_width
@@ -410,8 +404,8 @@ def _outset_sternum_loop(node: hou.SopNode) -> None:
 
 def _add_sternum_loop(geo: hou.Geometry, dist: float) -> list[hou.Point]:
     outset(list(geo.prims()), dist, use_ratio=False)
-    deduplicate_point_attributes(geo, "id", (ID.STERNUMSPINE,), keep_first=True)
-    deduplicate_point_attributes(geo, "id", outer_loop_ids(), keep_first=False)
+    deduplicate_point_attribs(geo, "id", (ID.STERNUMSPINE,), keep_first=True)
+    deduplicate_point_attribs(geo, "id", outer_loop_ids(), keep_first=False)
     return [
         pt for pt in geo.points()
         if pt.attribValue("id").startswith(outer_loop_ids())
