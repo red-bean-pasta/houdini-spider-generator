@@ -2,10 +2,10 @@ import math
 
 import hou
 
-from helper import bridge_loops
 from houkit.models import Moject
 
 from ..attributes import LegParam, Region
+from ...helper import bridge_loops
 
 def build_segment_tubes(
     geo: hou.Geometry,
@@ -403,4 +403,3 @@ def _solve_membrane_thickness_rad(
     """
     # d / tan(needed_angle) = l = min_height / cos(wedge_angle)
     return min_height / math.cos(wedge_angle) * math.tan(needed_angle)
-

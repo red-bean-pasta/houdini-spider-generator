@@ -1,7 +1,7 @@
 from hou import SopNode
 
-from . import coxa, geometry
-from .pedipalp import geometry, faces
+from . import coxa, geometry as leg_geometry
+from .pedipalp import faces, geometry as pedipalp_geometry
 
 
 def extract_right_coxa(node: SopNode) -> None:
@@ -9,7 +9,7 @@ def extract_right_coxa(node: SopNode) -> None:
 
 
 def extrude_legs(node: SopNode) -> None:
-    geometry.extrude_legs(node)
+    leg_geometry.extrude_legs(node)
 
 
 def remove_tmp_attributes(node: SopNode) -> None:
@@ -17,27 +17,27 @@ def remove_tmp_attributes(node: SopNode) -> None:
 
 
 def remove_noise_points(node: SopNode) -> None:
-    geometry.remove_noise_points(node)
+    pedipalp_geometry.remove_noise_points(node)
 
 
 def build_basic(node: SopNode) -> None:
-    geometry.build_basic(node)
+    pedipalp_geometry.build_basic(node)
 
 
 def trim_bottom_side_length(node: SopNode) -> None:
-    geometry.trim_bottom_side_length(node)
+    pedipalp_geometry.trim_bottom_side_length(node)
 
 
 def position_basic(node: SopNode) -> None:
-    geometry.position_basic(node)
+    pedipalp_geometry.position_basic(node)
 
 
 def delete_start_coxa_supports(node: SopNode) -> None:
-    geometry.delete_start_coxa_supports(node)
+    pedipalp_geometry.delete_start_coxa_supports(node)
 
 
 def prepare_coxa_base_trapezoid(node: SopNode) -> None:
-    geometry.prepare_coxa_base_trapezoid(node)
+    pedipalp_geometry.prepare_coxa_base_trapezoid(node)
 
 
 def fill_bottom_right_face(node: SopNode) -> None:
@@ -69,4 +69,4 @@ def fill_maxilla_faces(node: SopNode) -> None:
 
 
 def remove_pedipalp_tmp_attributes(node: SopNode) -> None:
-    geometry.remove_tmp_attributes(node)
+    pedipalp_geometry.remove_tmp_attributes(node)

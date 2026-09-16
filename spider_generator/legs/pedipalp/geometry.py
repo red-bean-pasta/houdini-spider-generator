@@ -1,17 +1,16 @@
 import hou
 
-from bases.attributes import basemaxillamembrane
-from helper import add_id_point, points_from_geo, positions_from_geo, prims_by_attr, set_point_id
+from ...bases.attributes import basemaxillamembrane
+from ...helper import add_id_point, points_from_geo, positions_from_geo, prims_by_attr, set_point_id
 from houkit.attributer import add_global_attrib, points_by_attrib, points_start_with, remove_attribs
 from houkit.geomath import rotation_to
 from houkit.models import Moject
 from houkit.noder import get_control
 from houkit.parameterizer import get_float_parm, get_parms
 from houkit.topology import fill_face
-from legs.attributes import LegParam, Region
-from legs.cubes import build_leg
-from .attributes import tmp_coxa_base_height, tmp_coxa_corner, tmp_coxa_end, tmp_coxa_start, tmp_coxa_support, \
-    tmp_front_socket_width
+from ..attributes import LegParam, Region
+from ..cubes import build_leg
+from .attributes import tmp_coxa_base_height, tmp_coxa_corner, tmp_coxa_end, tmp_coxa_start, tmp_coxa_support, tmp_front_socket_width
 from .helper import get_leg
 
 

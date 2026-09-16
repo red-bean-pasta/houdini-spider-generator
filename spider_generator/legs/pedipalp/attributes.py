@@ -1,4 +1,4 @@
-from helper import affix_id
+from ...helper import affix_id
 
 def tmp_coxa_start(*i) -> str:
     return affix_id("tmp_pedipalpcoxastart", *i)

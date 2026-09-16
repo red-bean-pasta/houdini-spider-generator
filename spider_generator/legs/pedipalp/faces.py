@@ -4,8 +4,8 @@ from houkit.geomath import get_line_face_intersection
 from houkit.noder import get_control
 from houkit.parameterizer import get_float_parm, get_parms
 from houkit.topology import fill_face
-from bases.attributes import basemaxillamembrane
-from helper import add_id_point, points_from_geo, positions_from_geo
+from ...bases.attributes import basemaxillamembrane
+from ...helper import add_id_point, points_from_geo, positions_from_geo
 from .attributes import tmp_coxa_base_height, tmp_coxa_corner, tmp_coxa_end, tmp_coxa_start, tmp_coxa_support, tmp_maxilla_pole
 from .geometry import get_buffer_dist_z, get_coxa_direction
 from .helper import get_leg

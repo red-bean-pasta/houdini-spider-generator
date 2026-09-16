@@ -6,7 +6,7 @@ from houkit.attributer import remove_attribs
 from houkit.topology import points_to_positions
 
 def extract_right_coxa(node: hou.SopNode) -> None:
-    from legs.pedipalp.builder import prepare
+    from .pedipalp.builder import prepare
 
     geo = node.geometry()
     socket_prims = [

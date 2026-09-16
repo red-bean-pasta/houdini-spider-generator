@@ -2,9 +2,9 @@ import hou
 
 from houkit.noder import add_fuse, add_output, add_reloadable_subnet
 from houkit.parameterizer import add_float_parm, add_heading
-from bases.attributes import basemaxillamembrane
-from helper import points_from_geo, sopify_chain
-from legs import topology
+from ...bases.attributes import basemaxillamembrane
+from ...helper import points_from_geo, sopify_chain
+from .. import topology
 
 def add_parameters(subnet: hou.OpNode) -> None:
     add_heading(
