@@ -1,5 +1,5 @@
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, Iterator
 
 import hou
 
@@ -11,7 +11,7 @@ from houkit.attributer import (
     set_point_attrib,
     set_points_attrib,
     unique_points_by_attrib,
-    unique_points_start_with,
+    unique_points_start_with, points_by_attrib,
 )
 from houkit.formatter import affix_text
 from houkit.noder import sopify

@@ -83,7 +83,7 @@ def _add_parameters(base: hou.SopNode) -> None:
         base,
         "membrane_ratio",
         1,
-        0.07,
+        0.02,
         (0.0, None),
         label="Membrane Width",
         help="Shared cephalothorax setting. Each region applies it against its own local membrane scale.",
