@@ -2,7 +2,7 @@ import math
 
 import hou
 
-from houkit.attributer import add_global_attrib, points_by_attrib, points_start_with
+from houkit.attributer import add_global_attrib, points_by_attrib, points_start_with, remove_attribs
 from houkit.geomath import get_line_face_intersection, rotation_to
 from houkit.models import Moject
 from houkit.noder import (
@@ -30,6 +30,8 @@ def _tmp_coxa_corner(*i) -> str:
     return affix_id("tmp_pedipalpcoxacorner", *i)
 def _tmp_coxa_base_height() -> str:
     return "tmp_maxillabaseheight"
+def _tmp_front_socket_width() -> str:
+    return "tmp_frontsocketwidth"
 def _tmp_maxilla_pole(*i) -> str:
     return affix_id("tmp_maxillapole", *i)
 
@@ -41,18 +43,26 @@ def add_parameters(subnet: hou.OpNode) -> None:
     )
     add_float_parm(
         subnet,
+        "pedipalp_coxa_length",
+        default=0.8,
+        min_max=(0.0, None),
+        label="Coxa Length",
+        help="Coxa length evaluated against front leg coxa length.",
+    )
+    add_float_parm(
+        subnet,
         "pedipalp_segment_length_ratios",
         5,
-        (0.8, 3.75, 3, 2.5, 1.5),
+        (0.17, 0.8, 0.4, 0.45, 0.4),
         (0.0, None),
         hou.parmNamingScheme.Base1,
-        label="Pedipalp Lengths",
+        label="Other Segment Lengths",
         help="One length ratio per post-coxa pedipalp segment, measured against pedipalp coxa length.",
     )
     add_float_parm(
         subnet,
         "endite_length_ratio",
-        default=1.0,
+        default=0.95,
         min_max=(0.0, None),
         label="Endite Length",
         help="Extension from the endite membrane attachment toward the coxa.",
@@ -86,6 +96,7 @@ def build(
         (
             _remove_noise_points,
             _build_basic,
+            _trim_bottom_side_length,
             _position_basic,
             _delete_start_coxa_supports,
             _prepare_coxa_base_trapezoid,
@@ -131,6 +142,9 @@ def _remove_noise_points(
     node: hou.SopNode,
 ) -> None:
     geo = node.geometry()
+    from .leg import get_front_coxa_socket_size
+    front_socket_width, _ = get_front_coxa_socket_size(geo)
+    add_global_attrib(geo, _tmp_front_socket_width(), front_socket_width)
     pts = points_by_attrib(geo, "id", False)
     geo.deletePoints(list(pts[""]))
 
@@ -141,6 +155,27 @@ def _build_basic(
     _, warnings = _build_cubes(node)
     for w in warnings:
         node.addWarning(w)
+
+
+def _trim_bottom_side_length(
+    node: hou.SopNode,
+) -> None:
+    geo = node.geometry()
+    m1, m3 = points_from_geo(
+        geo,
+        basemaxillamembrane(1),
+        basemaxillamembrane(3),
+    )
+    v = m3.position() - m1.position()
+    trim_length = hou.Vector3(v.x(), 0.0, v.z()).length()
+
+    pedipalp_pts = _get_pedipalp_points(geo)
+    for pt in pedipalp_pts:
+        pid = pt.stringAttribValue("id")
+        if pid.startswith(_tmp_coxa_start()) or pid.startswith(_tmp_coxa_support(1)):
+            continue
+        pos = pt.position()
+        pt.setPosition(hou.Vector3(pos.x(), pos.y(), pos.z() + trim_length))
 
 
 def _position_basic(
@@ -439,6 +474,7 @@ def _remove_tmp_attributes(node: hou.SopNode) -> None:
     pts = points_start_with(geo, "id", "tmp_")
     for p in pts:
         set_point_id(p, "")
+    remove_attribs(geo, global_attributes=(_tmp_front_socket_width(),))
 
 
 
@@ -480,7 +516,8 @@ def _get_pedipalp_param(
 
     coxa_width_length = _get_pedipalp_coxa_width_length(
         geo,
-        params.front_coxa_width_length_ratios,
+        params.front_coxa_width_length_ratios.y(),
+        params.pedipalp_coxa_length,
     )
     length_ratios = tuple(params.pedipalp_segment_length_ratios)
     max_segment_yaws = tuple(params.max_yaw_angles)[:len(length_ratios)]
@@ -502,11 +539,14 @@ def _get_pedipalp_param(
 
 def _get_pedipalp_coxa_width_length(
     geo: hou.Geometry,
-    front_coxa_width_length_ratio: hou.Vector2,
+    front_coxa_length_ratio: float,
+    pedipalp_coxa_length: float,
 ) -> tuple[float, float]:
     m3, m4 = positions_from_geo(geo, basemaxillamembrane(3), basemaxillamembrane(4))
     width = m3.distanceTo(m4)
-    length = front_coxa_width_length_ratio.y() / front_coxa_width_length_ratio.x() * width
+    front_socket_width = geo.attribValue(_tmp_front_socket_width())
+    front_coxa_length = front_socket_width * front_coxa_length_ratio
+    length = front_coxa_length * pedipalp_coxa_length
     return width, length
 
 def _get_pedipalp_points(

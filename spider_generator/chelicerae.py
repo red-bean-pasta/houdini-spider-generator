@@ -196,7 +196,7 @@ def _add_parameters(chelicerae: hou.SopNode) -> None:
         chelicerae,
         "middle_section_offset",
         2,
-        (0.1, 2.0),
+        (0.1, 2.25),
         label="Middle Section Offset",
         help="Moves the middle section through its local width and length plane.",
     )
