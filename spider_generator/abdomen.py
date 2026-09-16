@@ -22,8 +22,8 @@ from . import spider
 from .helper import (
     add_id_point,
     affix_id,
-    point_from_geo,
-    position_from_geo,
+    points_from_geo,
+    positions_from_geo,
     points_by_id,
     rename_left_ids_node,
     replace_points,
@@ -267,7 +267,7 @@ def _add_middle_frame(node: hou.SopNode, negative: bool = False) -> None:
     sign = -1 if negative else 1
     side_attr = abdomensidelower if negative else abdomensideupper
 
-    o, v1, h1 = position_from_geo(
+    o, v1, h1 = positions_from_geo(
         geo,
         abdomenorigin(),
         abdomenverticalrim(sign * 1),
@@ -277,7 +277,7 @@ def _add_middle_frame(node: hou.SopNode, negative: bool = False) -> None:
 
     s_points = [s1]
     for i in range(2, 5):
-        vi, hi = position_from_geo(
+        vi, hi = positions_from_geo(
             geo,
             abdomenverticalrim(sign * i),
             abdomenhorizontalrim(i),
@@ -294,7 +294,7 @@ def _fill_right_side_faces(node: hou.SopNode) -> None:
     points = points_by_id(geo)
     add_prim_attrib(geo, "region", "")
 
-    o, e = point_from_geo(geo, abdomenorigin(), abdomenend())
+    o, e = points_from_geo(geo, abdomenorigin(), abdomenend())
     v = lambda i: points[abdomenverticalrim(i)]
     vn = lambda i: points[abdomenverticalrim(-i)]
     h = lambda i: points[abdomenhorizontalrim(i)]

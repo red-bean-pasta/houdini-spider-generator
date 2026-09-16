@@ -3,16 +3,9 @@ import textwrap
 from pathlib import Path
 
 
-def _find_project_root() -> Path:
-    """Find the project root independently of the current working directory."""
-    script_directory = Path(__file__).resolve().parent
-    for directory in (script_directory, *script_directory.parents):
-        if (directory / "pyproject.toml").is_file():
-            return directory
+from houkit.developings.reloader import find_project_root
 
-    raise FileNotFoundError(f"Could not find project root above {script_directory}")
-
-PROJECT_ROOT = _find_project_root()
+PROJECT_ROOT = find_project_root(__file__)
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -61,4 +54,5 @@ def _find_test_output_path() -> Path:
 
 if __name__ == "__main__":
     output_path = _find_test_output_path()
+    output_path.unlink(missing_ok=True)
     save(output_path, build)

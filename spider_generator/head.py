@@ -9,8 +9,8 @@ from .helper import (
     affix_id,
     deduplicate_id_attr,
     fill_face_by_id_with_attr,
-    point_from_geo,
-    position_from_geo,
+    points_from_geo,
+    positions_from_geo,
     points_by_id,
     rename_left_ids_node,
     set_prim_attr_where_blank,
@@ -219,7 +219,7 @@ def _extract_work_base(node: hou.SopNode) -> None:
 
 def _get_chelicerae_upper_positions(geo: hou.Geometry, parent: hou.OpNode) -> tuple[hou.Vector3, hou.Vector3, hou.Vector3]:
     chelicerae_height_ratio = get_float_parm(parent, "chelicerae_height_ratio")
-    basesternum0, basemaxilla1 = point_from_geo(geo, base_sops.basesternum(0), base_sops.basemaxilla(1))
+    basesternum0, basemaxilla1 = points_from_geo(geo, base_sops.basesternum(0), base_sops.basemaxilla(1))
     height = basemaxilla1.position().distanceTo(basesternum0.position()) * chelicerae_height_ratio
     height_offset = hou.Vector3(0.0, height, 0.0)
 
@@ -259,7 +259,7 @@ def _get_corner_reference_positions(geo: hou.Geometry) -> dict[str, hou.Vector3]
         base_sops.baseend(0),
     )
     assert all(point_id in points for point_id in expected_ids), "Expected head reference points"
-    positions = position_from_geo(geo, *expected_ids)
+    positions = positions_from_geo(geo, *expected_ids)
     return dict(zip(expected_ids, positions))
 
 def _compute_top_corners(
@@ -320,7 +320,7 @@ def _compute_support_points(
 
 def _add_head_dent(node: hou.SopNode) -> None:
     geo = node.geometry()
-    headfront0, headsupport0 = point_from_geo(
+    headfront0, headsupport0 = points_from_geo(
         geo,
         headfront(0),
         headsupport(0),
@@ -335,7 +335,7 @@ def _add_head_dent(node: hou.SopNode) -> None:
 def _curve_lip(node: hou.SopNode) -> None:
     geo = node.geometry()
     dist = get_head_base_loop_width(node)
-    headchelicerae1, headsupport1 = point_from_geo(geo, headchelicerae(1), headsupport(1))
+    headchelicerae1, headsupport1 = points_from_geo(geo, headchelicerae(1), headsupport(1))
     offset = hou.Vector3(0.0, dist * 2, 0.0)
     for point in (headchelicerae1, headsupport1):
         offset_point(point, offset)
@@ -393,7 +393,7 @@ def _fill_head_front_faces(geo: hou.Geometry) -> None:
 
 
 def _add_head_front_pentagon(geo: hou.Geometry) -> None:
-    hf0, hf1, hs2, hs1, hs0 = point_from_geo(
+    hf0, hf1, hs2, hs1, hs0 = points_from_geo(
         geo,
         headfront(0),
         headfront(1),
@@ -644,7 +644,7 @@ def _inset_base_support_loop(node: hou.SopNode) -> None:
 def get_head_base_loop_width(node: hou.SopNode) -> float:
     geo = node.geometry()
     ratio = _get_membrane_ratio(node)
-    headfront0, baseend0 = point_from_geo(geo, headfront(0), base_sops.baseend(0))
+    headfront0, baseend0 = points_from_geo(geo, headfront(0), base_sops.baseend(0))
     height = headfront0.position().y() - baseend0.position().y()
     return ratio * height
 
@@ -669,7 +669,7 @@ def _extrude_lip(node: hou.SopNode) -> None:
     ratio_x, ratio_y = get_parms(parent).lip_extrusion_ratio
 
     # h0: headbasesupport(0), c0: headchelicerae(0)
-    h0, c0 = point_from_geo(
+    h0, c0 = points_from_geo(
         geo,
         headbasesupport(headchelicerae(0)),
         headchelicerae(0),
@@ -682,7 +682,7 @@ def _extrude_lip(node: hou.SopNode) -> None:
 
     for side in (0, 1, 2, -1, -2):
         # hc: headchelicerae, hb: headbasesupport, hs: headsupport
-        hc, hb, hs = point_from_geo(
+        hc, hb, hs = points_from_geo(
             geo,
             headchelicerae(side),
             headbasesupport(headchelicerae(side)),
@@ -692,14 +692,14 @@ def _extrude_lip(node: hou.SopNode) -> None:
             offset_point(pt, offset)
 
     for side in (0, 1, -1):
-        (hf,) = point_from_geo(geo, headfront(side))
+        (hf,) = points_from_geo(geo, headfront(side))
         offset_point(hf, offset)
 
     for side in (1, -1):
-        (hff,) = point_from_geo(geo, headfrontfloat(side))
+        (hff,) = points_from_geo(geo, headfrontfloat(side))
         offset_point(hff, offset)
 
-    (hfm,) = point_from_geo(geo, headfrontmid(0))
+    (hfm,) = points_from_geo(geo, headfrontmid(0))
     offset_point(hfm, offset)
 
 

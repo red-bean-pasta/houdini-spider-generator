@@ -6,8 +6,8 @@ import hou
 from .helper import (
     add_id_attr,
     affix_id,
-    point_from_geo,
-    position_from_geo,
+    points_from_geo,
+    positions_from_geo,
     points_by_id,
     set_point_id,
     sopify_chain,
@@ -273,7 +273,7 @@ def _descend_sternum_spine(node: hou.SopNode) -> None:
     power = params.spine_descent_power
     points = points_by_id(geo)
 
-    top, middle, bottom = position_from_geo(
+    top, middle, bottom = positions_from_geo(
         geo,
         sternumrim(0),
         sternumrim(3),
@@ -413,17 +413,17 @@ def _add_sternum_loop(geo: hou.Geometry, dist: float) -> list[hou.Point]:
 
 def _adjust_midpoints_after_outset(geo: hou.Geometry) -> None:
     points = points_by_id(geo)
-    rim1, rim_neg1 = point_from_geo(geo, sternumrim(1), sternumrim(-1))
+    rim1, rim_neg1 = points_from_geo(geo, sternumrim(1), sternumrim(-1))
     p0 = (rim1.position() + rim_neg1.position()) / 2.0
-    (rim0,) = point_from_geo(geo, sternumrim(0))
+    (rim0,) = points_from_geo(geo, sternumrim(0))
     rim0.setPosition(hou.Vector3(0.0, p0[1], p0[2]))
     if sternumrim(5) in points:
-        (rim5,) = point_from_geo(geo, sternumrim(5))
+        (rim5,) = points_from_geo(geo, sternumrim(5))
         p5 = rim5.position()
         rim5.setPosition(hou.Vector3(0.0, p5[1], p5[2]))
     for side in (1, -1):
         for i in range(1, 5):
-            start, end = point_from_geo(
+            start, end = points_from_geo(
                 geo,
                 sternumrim(side * i),
                 sternumrim(5) if i == 4 else sternumrim(side * (i + 1)),
@@ -431,5 +431,5 @@ def _adjust_midpoints_after_outset(geo: hou.Geometry) -> None:
             start = start.position()
             end = end.position()
             midpoint = (start + end) / 2.0
-            (middle_point,) = point_from_geo(geo, sternummiddle(side * i))
+            (middle_point,) = points_from_geo(geo, sternummiddle(side * i))
             middle_point.setPosition(midpoint)

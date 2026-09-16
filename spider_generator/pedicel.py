@@ -5,7 +5,7 @@ import hou
 from . import abdomen, spider
 from .helper import (
     affix_id,
-    point_from_geo,
+    points_from_geo,
     points_by_id,
     replace_points,
     set_prim_attr_where_blank,
@@ -94,7 +94,7 @@ def _connect_pedicel(node: hou.SopNode) -> None:
         abdomensideupper_neg1,
         abdomensidelower1,
         abdomensidelower_neg1,
-    ) = point_from_geo(
+    ) = points_from_geo(
         geo,
         spider.cephapedicelupper(),
         spider.cephapedicelright(),

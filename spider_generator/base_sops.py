@@ -16,7 +16,7 @@ from .helper import (
     fill_face_with_attr,
     get_id_range,
     inset_inner_prims,
-    point_from_geo,
+    points_from_geo,
     points_by_id,
     prims_by_attr,
     replace_points,
@@ -159,12 +159,12 @@ def connect_side_flaps(node: hou.SopNode) -> None:
     count = get_id_range(geo, ID.BASESTERNUM)[1]
     for side in (-1, 1):
         for index in range(2, count):
-            first, second = point_from_geo(
+            first, second = points_from_geo(
                 geo,
                 basesternum(side * index, 1),
                 basesternum(side * index, 2),
             )
-            prev_mid, curr_mid = point_from_geo(
+            prev_mid, curr_mid = points_from_geo(
                 geo,
                 basesternummiddle(side * (index - 1)),
                 basesternummiddle(side * index),
@@ -177,7 +177,7 @@ def connect_side_flaps(node: hou.SopNode) -> None:
 def adjust_front_and_end_flaps(node: hou.SopNode) -> None:
     geo = node.geometry()
     for side in (1, -1):
-        target, opposite, sternum_middle, base_middle = point_from_geo(
+        target, opposite, sternum_middle, base_middle = points_from_geo(
             geo,
             basesternum(side, 2),
             basesternum(side * 2, 1),
@@ -187,7 +187,7 @@ def adjust_front_and_end_flaps(node: hou.SopNode) -> None:
         _reflect_point_across_edge(target, opposite, (sternum_middle, base_middle))
 
     for side, target_minor in ((1, 1), (-1, 2)):
-        target, opposite, sternum_middle, base_middle = point_from_geo(
+        target, opposite, sternum_middle, base_middle = points_from_geo(
             geo,
             basesternum(5, target_minor),
             basesternum(side * 4, 2),
@@ -266,7 +266,7 @@ def rotate_coxa_flaps(node: hou.SopNode) -> None:
 
 def adjust_frontest_line(node: hou.SopNode) -> None:
     geo = node.geometry()
-    line_start, line_end = point_from_geo(
+    line_start, line_end = points_from_geo(
         geo,
         basesternum(-1, 2),
         basesternum(1, 2),
@@ -277,7 +277,7 @@ def adjust_frontest_line(node: hou.SopNode) -> None:
     line_length_squared = line_direction.dot(line_direction)
     assert line_length_squared > 1e-12, "Expected distinct frontest line endpoints"
 
-    for point in point_from_geo(
+    for point in points_from_geo(
         geo,
         basesternum(0),
         basesternum(1, 1),
@@ -290,10 +290,10 @@ def adjust_frontest_line(node: hou.SopNode) -> None:
 
 def fill_maxilla(node: hou.SopNode) -> None:
     geo = node.geometry()
-    starts = point_from_geo(geo, basesternum(1, 1), basesternum(-1, 1))
-    ends = point_from_geo(geo, basesternum(1, 2), basesternum(-1, 2))
-    centers = point_from_geo(geo, basesternum(0), basesternum(0))
-    pivots = point_from_geo(geo, sternumrim(1), sternumrim(-1))
+    starts = points_from_geo(geo, basesternum(1, 1), basesternum(-1, 1))
+    ends = points_from_geo(geo, basesternum(1, 2), basesternum(-1, 2))
+    centers = points_from_geo(geo, basesternum(0), basesternum(0))
+    pivots = points_from_geo(geo, sternumrim(1), sternumrim(-1))
     add_prim_attrib(geo, "region", "")
 
     for side, (start, end, center, pivot) in enumerate(zip(starts, ends, centers, pivots)):
@@ -314,7 +314,7 @@ def fill_maxilla(node: hou.SopNode) -> None:
 
 def fill_pedicel_membrane(node: hou.SopNode) -> None:
     geo = node.geometry()
-    p5, e5_1, e5_2 = point_from_geo(
+    p5, e5_1, e5_2 = points_from_geo(
         geo,
         sternumrim(5),
         basesternum(5, 1),
@@ -337,7 +337,7 @@ def fill_pedicel_membrane(node: hou.SopNode) -> None:
 
 def adjust_mouth(node: hou.SopNode) -> None:
     geo = node.geometry()
-    center, right, left = point_from_geo(
+    center, right, left = points_from_geo(
         geo,
         basesternum(0),
         basesternum(1, 1),

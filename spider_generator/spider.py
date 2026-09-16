@@ -18,7 +18,7 @@ from .helper import (
     add_id_point,
     affix_id,
     fill_face_with_attr,
-    point_from_geo,
+    points_from_geo,
     points_by_id,
     prims_by_attr,
     set_prim_attr_where_blank,
@@ -141,7 +141,7 @@ def _open_cepha_pedicel(node: hou.SopNode) -> None:
         bs5_2,
         basesupportsternum5_1,
         basesupportsternum5_2,
-    ) = point_from_geo(
+    ) = points_from_geo(
         geo,
         base_sops.baseend(0),
         head.headbasesupport(base_sops.baseend(0)),

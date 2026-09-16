@@ -2,9 +2,6 @@ import math
 
 import hou
 
-from .base_sops import basemaxillamembrane
-from .helper import add_id_point, affix_id, point_from_geo, position_from_geo, prims_by_attr, set_point_id, sopify_chain
-from .leg_builder import LegParam, build_leg, Region
 from houkit.attributer import add_global_attrib, points_by_attrib, points_start_with
 from houkit.geomath import get_line_face_intersection, rotation_to
 from houkit.models import Moject
@@ -14,10 +11,13 @@ from houkit.noder import (
     add_reloadable_subnet,
     get_control,
     get_parent,
-    sopify,
 )
 from houkit.parameterizer import add_float_parm, add_heading, get_float_parm, get_parms
 from houkit.topology import fill_face
+from .base_sops import basemaxillamembrane
+from .helper import add_id_point, affix_id, points_from_geo, positions_from_geo, prims_by_attr, set_point_id, \
+    sopify_chain, positions_from_points
+from .leg_builder import LegParam, build_leg, Region
 
 
 def _tmp_coxa_start(*i) -> str:
@@ -62,7 +62,7 @@ def add_parameters(subnet: hou.OpNode) -> None:
 def prepare(
     geo: hou.Geometry
 ) -> set[hou.Point]:
-    retained = point_from_geo(
+    retained = points_from_geo(
         geo,
         basemaxillamembrane(1),
         basemaxillamembrane(2),
@@ -88,7 +88,7 @@ def build(
             _build_basic,
             _position_basic,
             _delete_start_coxa_supports,
-            _prepare_coxa_corners,
+            _prepare_coxa_base_trapezoid,
             _fill_bottom_right_face,
             _fill_back_face,
             _fill_top_face,
@@ -111,7 +111,7 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
         control,
         "endite_buffer_ratios",
         size=2,
-        default=(0.2, 0.2),
+        default=(0.4, 0.1),
         min_max=(0.0, 1.0),
         label="Endite Buffer",
         help="X positions the buffer across the coxa end; Y sets its lengthwise reach.",
@@ -119,7 +119,7 @@ def _add_controls(parent: hou.SopNode) -> hou.SopNode:
     add_float_parm(
         control,
         "endite_surface_size_ratio",
-        default=0.1,
+        default=0.06,
         min_max=(0.0, 1.0),
         label="Endite Surface Size",
         help="Size of the added endite surface faces.",
@@ -148,7 +148,7 @@ def _position_basic(
 ) -> None:
     geo = node.geometry()
     pedipalp_pts = _get_pedipalp_points(geo)
-    top_right_pt, m1, m3, m4 = point_from_geo(
+    top_right_pt, m1, m3, m4 = points_from_geo(
         geo,
         _tmp_coxa_start(3),
         basemaxillamembrane(1),
@@ -172,7 +172,7 @@ def _delete_start_coxa_supports(
     pts = [p for p in geo.points() if p.stringAttribValue("id").startswith(_tmp_coxa_support(1))]
     geo.deletePoints(list(pts))
 
-    starts = point_from_geo(
+    starts = points_from_geo(
         geo,
         _tmp_coxa_start(1),
         _tmp_coxa_start(2),
@@ -181,30 +181,19 @@ def _delete_start_coxa_supports(
     geo.deletePoints(list(starts))
 
 
-def _prepare_coxa_corners(
+def _prepare_coxa_base_trapezoid(
     node: hou.SopNode,
 ) -> None:
-    geo = node.geometry()
-    _add_base_trapezoid(geo)
-
-
-def _fill_bottom_right_face(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     control_params = get_parms(get_control(node, "CONTROL"), use_tuple=False)
-    c4 = _add_bottom_right_face_point(geo, control_params.endite_buffer_ratios)
-    es4, c2, m1 = point_from_geo(
-        geo,
-        _tmp_coxa_support(2, 4),
-        _tmp_coxa_corner("base", 2),
-        basemaxillamembrane(1),
-    )
-    fill_face([es4, c4, c2, m1])
+    _add_bottom_right_face_point(geo, control_params.endite_buffer_ratios)
+    _add_base_trapezoid(node)
 
 def _add_bottom_right_face_point(
     geo: hou.Geometry,
     endite_buffer: hou.Vector2,
 ) -> hou.Point:
-    e1, e4, m1 = point_from_geo(
+    e1, e4, m1 = points_from_geo(
         geo,
         _tmp_coxa_end(1),
         _tmp_coxa_end(4),
@@ -220,9 +209,21 @@ def _add_bottom_right_face_point(
     return p
 
 
+def _fill_bottom_right_face(node: hou.SopNode) -> None:
+    geo: hou.Geometry = node.geometry()
+    es4, c2, m1, cb = points_from_geo(
+        geo,
+        _tmp_coxa_support(2, 4),
+        _tmp_coxa_corner("base", 2),
+        basemaxillamembrane(1),
+        _tmp_coxa_corner("bottom"),
+    )
+    fill_face([es4, cb, c2, m1])
+
+
 def _fill_back_face(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-    s3, es3, es4, m1 = point_from_geo(
+    s3, es3, es4, m1 = points_from_geo(
         geo,
         _tmp_coxa_start(3),
         _tmp_coxa_support(2, 3),
@@ -237,7 +238,7 @@ def _fill_top_face(node: hou.SopNode) -> None:
     dist = geo.attribValue(_tmp_coxa_base_height())
     direction = _get_coxa_direction(geo)
 
-    e2, m2, m3, m4, es2, es3 = point_from_geo(
+    e2, m2, m3, m4, es2, es3 = points_from_geo(
         geo,
         _tmp_coxa_end(2),
         basemaxillamembrane(2),
@@ -266,16 +267,18 @@ def _get_maxilla_pole(node: hou.SopNode) -> hou.Vector3:
     leg = get_leg(node)
     length_ratio = get_float_parm(leg, "endite_length_ratio")
 
-    e1, e2, e3, es3, m2, ct2 = point_from_geo(
+    e1, e2, e3, m1, m2, m4, ct2 = points_from_geo(
         geo,
         _tmp_coxa_end(1),
         _tmp_coxa_end(2),
         _tmp_coxa_end(3),
-        _tmp_coxa_support(2, 3),
+        basemaxillamembrane(1),
         basemaxillamembrane(2),
+        basemaxillamembrane(4),
         _tmp_coxa_corner("base", 2)
     )
-    direction = e3.position()- es3.position()
+    direction = m4.position() - m1.position()
+    direction = hou.Vector3(direction.x(), 0, direction.z())
 
     m2_pos = m2.position()
     hit = get_line_face_intersection(
@@ -291,7 +294,7 @@ def _get_maxilla_pole(node: hou.SopNode) -> hou.Vector3:
     return end_pos
 
 def _get_averaged_maxilla_quad_normal(geo: hou.Geometry, target: hou.Vector3) -> hou.Vector3:
-    pts = point_from_geo(
+    pts = points_from_geo(
         geo,
         _tmp_coxa_corner("front"),
         basemaxillamembrane(2),
@@ -313,24 +316,29 @@ def _add_maxilla_quads_to_geo(
         normal: hou.Vector3,
         flat_ratio: float,
 ) -> list[hou.Point]:
-    ct2, cb, m2 = point_from_geo(
+    ct2p, cbp, cfp, m2p = positions_from_geo(
         geo,
         _tmp_coxa_corner("base", 2),
         _tmp_coxa_corner("bottom"),
+        _tmp_coxa_corner("front"),
         basemaxillamembrane(2),
     )
 
-    l = ct2.position().distanceTo(center) * flat_ratio
-    h = l * 0.5
+    w = ct2p.distanceTo(center) * flat_ratio
+    h = w * (cbp.distanceTo(cfp)) / (cbp.distanceTo(ct2p))
+    hw = w * 0.5
+    hh = h * 0.5
 
-    u = (cb.position() - m2.position()).normalized()
+    u = (cbp - m2p).normalized()
     u = hou.Vector3(u.x(), 0, u.z()).normalized()
     v = normal.cross(u).normalized()
 
-    p0 = center + (-u - v) * h
-    p1 = center + (u - v) * h
-    p2 = center + (u + v) * h
-    p3 = center + (-u + v) * h
+    pw = u * hw
+    ph = v * hh
+    p0 = center + (-pw - ph)
+    p1 = center + (pw - ph)
+    p2 = center + (pw + ph)
+    p3 = center + (-pw + ph)
     p4 = (p0 + p3) * 0.5
     p5 = (p1 + p2) * 0.5
 
@@ -350,7 +358,7 @@ def _add_front_upper_face(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     control_params = get_parms(get_control(node, "CONTROL"), use_tuple=False)
     p = _add_front_face_point(geo, control_params.endite_buffer_ratios)
-    es2, c6, m2 = point_from_geo(
+    es2, c6, m2 = points_from_geo(
         geo,
         _tmp_coxa_support(2, 2),
         _tmp_coxa_corner("fronttop"),
@@ -362,7 +370,7 @@ def _add_front_face_point(
     geo: hou.Geometry,
     endite_buffer: hou.Vector2,
 ) -> hou.Point:
-    e1, e2 = point_from_geo(
+    e1, e2 = points_from_geo(
         geo,
         _tmp_coxa_end(1),
         _tmp_coxa_end(2),
@@ -378,7 +386,7 @@ def _add_front_loop_faces(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     control_params = get_parms(get_control(node, "CONTROL"), use_tuple=False)
     p = _add_loop_point(geo, control_params.endite_buffer_ratios.y())
-    es1, es2, es4, cf, cb = point_from_geo(
+    es1, es2, es4, cf, cb = points_from_geo(
         geo,
         _tmp_coxa_support(2, 1),
         _tmp_coxa_support(2, 2),
@@ -393,7 +401,7 @@ def _add_loop_point(
     geo: hou.Geometry,
     endite_buffer_y: float,
 ) -> hou.Point:
-    e1, = point_from_geo(
+    e1, = points_from_geo(
         geo,
         _tmp_coxa_end(1),
     )
@@ -405,7 +413,7 @@ def _add_loop_point(
 
 def _fill_maxilla_faces(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-    cf, cfb, cb, ct2, ct1, m2 = point_from_geo(
+    cf, cfb, cb, ct2, ct1, m2 = points_from_geo(
         geo,
         _tmp_coxa_corner("front"),
         _tmp_coxa_corner("frontbottom"),
@@ -414,7 +422,7 @@ def _fill_maxilla_faces(node: hou.SopNode) -> None:
         _tmp_coxa_corner("base", 1),
         basemaxillamembrane(2),
     )
-    p0, p1, p2, p3, p4, p5 = point_from_geo(
+    p0, p1, p2, p3, p4, p5 = points_from_geo(
         geo,
         *[_tmp_maxilla_pole(i + 1) for i in range(6)],
     )
@@ -496,7 +504,7 @@ def _get_pedipalp_coxa_width_length(
     geo: hou.Geometry,
     front_coxa_width_length_ratio: hou.Vector2,
 ) -> tuple[float, float]:
-    m3, m4 = position_from_geo(geo, basemaxillamembrane(3), basemaxillamembrane(4))
+    m3, m4 = positions_from_geo(geo, basemaxillamembrane(3), basemaxillamembrane(4))
     width = m3.distanceTo(m4)
     length = front_coxa_width_length_ratio.y() / front_coxa_width_length_ratio.x() * width
     return width, length
@@ -511,53 +519,25 @@ def _get_pedipalp_points(
 
 
 
-def _add_base_corner_point(
-        geo: hou.Geometry,
-        dist: float,
-) -> None:
-    """
-    Legacy method
-    :param geo:
-    :param dist:
-    :return:
-    """
-    s3, e3, m1 = point_from_geo(
-        geo,
-        _tmp_coxa_start(3),
-        _tmp_coxa_end(3),
-        basemaxillamembrane(1),
-    )
-    d = (e3.position() - s3.position()).normalized()
-    pos = m1.position() + d * dist
-    p = add_id_point(geo, pos, _tmp_coxa_corner(3))
-
 def _add_base_trapezoid(
-    geo: hou.Geometry
+    node: hou.SopNode,
 ) -> float:
-    m1, m2, m4 = point_from_geo(
+    geo = node.geometry()
+    m1, m2, cb, es4 = points_from_geo(
         geo,
         basemaxillamembrane(1),
         basemaxillamembrane(2),
-        basemaxillamembrane(4),
+        _tmp_coxa_corner("bottom"),
+        _tmp_coxa_support(2, 4),
     )
-    neg_z = hou.Vector3(0.0, 0.0, -1.0)
 
-    n_socket = (m2.position() - m1.position()).cross(m4.position() - m1.position()).normalized()
-    if n_socket.dot(neg_z) < 0:
-        n_socket = -n_socket
-
-    pos_m1 = m1.position()
-    pos_m2 = m2.position()
-    edge = pos_m2 - pos_m1
-    length = edge.length()
-    u = edge.normalized()
-
-    n = hou.Quaternion(45.0, u).rotate(n_socket)
-    v = n.cross(u).normalized()
-
-    height = math.sqrt(3) / 4.0 * length
-    pos_p3 = pos_m1 + u * (0.75 * length) + v * height
-    pos_p4 = pos_m1 + u * (0.25 * length) + v * height
+    pos_p4, pos_p3, height = _calculate_base_trapezoid_points(
+        node,
+        m1.position(),
+        m2.position(),
+        cb.position(),
+        es4.position(),
+    )
 
     p3 = add_id_point(geo, pos_p3, _tmp_coxa_corner("base", 1))
     p4 = add_id_point(geo, pos_p4, _tmp_coxa_corner("base", 2))
@@ -567,10 +547,47 @@ def _add_base_trapezoid(
 
     return height
 
+def _calculate_base_trapezoid_points(
+    node: hou.SopNode,
+    pos_m1: hou.Vector3,
+    pos_m2: hou.Vector3,
+    pos_cb: hou.Vector3,
+    pos_es4: hou.Vector3,
+) -> tuple[hou.Vector3, hou.Vector3, float]:
+    geo = node.geometry()
+    leg = get_leg(node)
+    wedge_angle = get_float_parm(get_control(leg, "CONTROL"), "coxa_start_wedge_angle")
+
+    m4 = points_from_geo(geo, basemaxillamembrane(4))[0]
+    neg_z = hou.Vector3(0.0, 0.0, -1.0)
+    n_socket = (pos_m2 - pos_m1).cross(m4.position() - pos_m1).normalized()
+    if n_socket.dot(neg_z) < 0:
+        n_socket = -n_socket
+
+    edge = pos_m2 - pos_m1
+    u = edge.normalized()
+    length = edge.length()
+
+    n = hou.Quaternion(90.0 - wedge_angle, u).rotate(n_socket)
+    v = n.cross(u).normalized()
+    if v.y() > 0.0:
+        v = -v
+    n_plane = u.cross(v).normalized()
+
+    dir_line = pos_m1 - pos_es4
+    denom = dir_line.dot(n_plane)
+    t = (pos_m1 - pos_cb).dot(n_plane) / denom
+    pos_p4 = pos_cb + dir_line * t
+
+    offset = (pos_p4 - pos_m1).dot(u)
+    pos_p3 = pos_p4 + u * (length - 2.0 * offset)
+    height = (pos_p4 - pos_m1 - u * offset).length()
+
+    return pos_p4, pos_p3, height
 
 
 def _get_coxa_direction(geo: hou.Geometry) -> hou.Vector3:
-    es3, e3 = point_from_geo(
+    es3, e3 = points_from_geo(
         geo,
         _tmp_coxa_support(2, 3),
         _tmp_coxa_end(3),
@@ -579,7 +596,7 @@ def _get_coxa_direction(geo: hou.Geometry) -> hou.Vector3:
 
 
 def _get_buffer_dist_z(geo: hou.Geometry, endite_buffer_y: float) -> float:
-    e1, m1 = position_from_geo(
+    e1, m1 = positions_from_geo(
         geo,
         _tmp_coxa_end(1),
         basemaxillamembrane(1),
