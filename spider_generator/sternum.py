@@ -3,17 +3,6 @@ from enum import StrEnum, auto
 
 import hou
 
-from .helper import (
-    add_id_attr,
-    affix_id,
-    points_from_geo,
-    positions_from_geo,
-    points_by_id,
-    set_point_id,
-    sopify_chain,
-    replace_points,
-    set_points_id,
-)
 from houkit.attributer import add_prim_attrib, deduplicate_point_attribs
 from houkit.geomath import is_equal_approx
 from houkit.noder import (
@@ -26,8 +15,18 @@ from houkit.noder import (
     get_parent,
     sopify,
 )
-from houkit.parameterizer import add_float_parm, get_float_parm, get_parms
-from houkit.topology import fill_face, outset
+from houkit.parameterizer import add_float_parm, get_parms
+from houkit.topology import fill_face, inset, outset
+from .helper import (
+    add_id_attr,
+    affix_id,
+    points_from_geo,
+    positions_from_geo,
+    points_by_id,
+    set_point_id,
+    sopify_chain,
+    replace_points,
+)
 
 
 class ID(StrEnum):
@@ -64,7 +63,14 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     buffered = sopify_chain(
         sternum,
         fuse,
-        (_descend_sternum_spine, _build_sternum_faces, _add_prim_regions, _outset_sternum_loop),
+        (
+            _build_sternum_faces,
+            _inset_spine_loop,
+            _elevate_spine_loop,
+            _descend_sternum_spine,
+            _add_prim_regions,
+            _outset_sternum_loop,
+        ),
     )
 
     _ = add_output(sternum, "OUT_STERNUM", buffered)
@@ -112,11 +118,14 @@ def _add_parameters(sternum: hou.SopNode) -> None:
     add_float_parm(
         sternum,
         "spine_loop_position_ratio",
-        1,
-        1.0,
+        2,
+        (0.8, 0.35),
         (0.0, 1.0),
         label="Spine Loop Position",
-        help="Position from center spine toward rim. At 1, the intermediate loop is omitted.",
+        help=(
+            "X is position from center spine toward rim (at 1, intermediate loop is omitted). "
+            "spine_loop_position_ratioy is for elevation relative to spine depth."
+        ),
     )
     add_float_parm(
         sternum,
@@ -262,6 +271,59 @@ def _add_center_spine(node: hou.SopNode) -> None:
     )
 
 
+def _build_sternum_faces(node: hou.SopNode) -> None:
+    geo = node.geometry()
+
+    sort_by_z = lambda p: p.position().z()
+    center = sorted((p for p in geo.points() if p.position().x() == 0), key=sort_by_z)
+    right = sorted((p for p in geo.points() if p.position().x() > 0), key=sort_by_z)
+    left = sorted((p for p in geo.points() if p.position().x() < 0), key=sort_by_z)
+
+    _build_base_faces(center, right, left)
+
+def _build_base_faces(
+    center: list[hou.Point],
+    right: list[hou.Point],
+    left: list[hou.Point],
+) -> None:
+    for index in range(len(center) - 2):
+        fill_face([center[index], right[index], right[index + 1], center[index + 1]], True)
+        fill_face([center[index], center[index + 1], left[index + 1], left[index]], True)
+    fill_face([center[-2], right[-1], center[-1], left[-1]], True)
+
+
+def _inset_spine_loop(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    parent = get_parent(node)
+    params = get_parms(parent, use_tuple=False)
+    ratio_x, _ = params.spine_loop_position_ratio
+    assert 0.0 < ratio_x <= 1.0
+
+    if not is_equal_approx(ratio_x, 1.0):
+        inset(list(geo.prims()), 1.0 - ratio_x, use_ratio=True, follow_existing_edge=True)
+        deduplicate_point_attribs(geo, "id", outer_loop_ids(), keep_first=True)
+
+
+def _elevate_spine_loop(node: hou.SopNode) -> None:
+    geo = node.geometry()
+    parent = get_parent(node)
+    params = get_parms(parent, use_tuple=False)
+    control_params = get_parms(get_control(node, "CONTROL"), use_tuple=False)
+
+    ratio_x, ratio_y = params.spine_loop_position_ratio
+    if is_equal_approx(ratio_x, 1.0) or is_equal_approx(ratio_y, 0.0):
+        return
+
+    depth = control_params.half_width * params.spine_depth_ratio
+    rest_y = -depth * ratio_y
+
+    for point in geo.points():
+        if point.attribValue("id").startswith(outer_loop_ids()):
+            continue
+        pos = point.position()
+        point.setPosition((pos[0], rest_y, pos[2]))
+
+
 def _descend_sternum_spine(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
@@ -287,10 +349,11 @@ def _descend_sternum_spine(node: hou.SopNode) -> None:
         if not point_id.startswith(ID.STERNUMSPINE):
             continue
         position = point.position()
+        rest_y = position[1]
         if position[2] <= middle[2]:
-            y = _get_eased_depth(position[2], top[2], middle[2], 0.0, -depth, power)
+            y = _get_eased_depth(position[2], top[2], middle[2], rest_y, -depth, power)
         else:
-            y = _get_eased_depth(position[2], bottom[2], middle[2], 0.0, -depth, power)
+            y = _get_eased_depth(position[2], bottom[2], middle[2], rest_y, -depth, power)
         point.setPosition((position[0], y, position[2]))
 
 def _get_eased_depth(
@@ -305,78 +368,6 @@ def _get_eased_depth(
     assert span != 0.0, "Expected non-zero span for easing interpolation"
     t = max(0.0, min(1.0, (x - x0) / span))
     return y0 + (y1 - y0) * (t ** power)
-
-
-def _build_sternum_faces(node: hou.SopNode) -> None:
-    geo = node.geometry()
-    parent = get_parent(node)
-    t = get_float_parm(parent, "spine_loop_position_ratio")
-    assert 0.0 < t <= 1.0
-
-    sort_by_z = lambda p: p.position().z()
-    center = sorted((p for p in geo.points() if p.position().x() == 0), key=sort_by_z)
-    right = sorted((p for p in geo.points() if p.position().x() > 0), key=sort_by_z)
-    left = sorted((p for p in geo.points() if p.position().x() < 0), key=sort_by_z)
-
-    if is_equal_approx(t, 1.0):
-        _build_base_faces(geo, center, right, left)
-    else:
-        _build_subdivided_spine_faces(geo, center, right, left, t)
-
-def _build_base_faces(
-    geo: hou.Geometry,
-    center: list[hou.Point],
-    right: list[hou.Point],
-    left: list[hou.Point],
-) -> None:
-    for index in range(len(center) - 2):
-        fill_face([center[index], right[index], right[index + 1], center[index + 1]], True)
-        fill_face([center[index], center[index + 1], left[index + 1], left[index]], True)
-    fill_face([center[-2], right[-1], center[-1], left[-1]], True)
-
-def _build_subdivided_spine_faces(
-    geo: hou.Geometry,
-    center: list[hou.Point],
-    right: list[hou.Point],
-    left: list[hou.Point],
-    t: float,
-) -> None:
-    def _lerp(p1: hou.Point, p2: hou.Point, ratio: float) -> hou.Point:
-        pt = geo.createPoint()
-        pt.setPosition(p1.position() * (1.0 - ratio) + p2.position() * ratio)
-        return pt
-
-    loop_r = [_lerp(c, r, t) for c, r in zip(center[1:-1], right[1:])]
-    loop_l = [_lerp(c, l, t) for c, l in zip(center[1:-1], left[1:])]
-    loop_c = _lerp(center[-2], center[-1], t)
-
-    m1 = _lerp(center[1], center[0], t)
-    m2_r = _lerp(center[1], right[0], t)
-    m3_r = loop_r[0]
-    m2_l = _lerp(center[1], left[0], t)
-    m3_l = loop_l[0]
-
-    # Front 3 faces (Right)
-    fill_face([center[1], m1, m2_r, m3_r], True)
-    fill_face([m3_r, m2_r, right[0], right[1]], True)
-    fill_face([m2_r, m1, center[0], right[0]], True)
-
-    # Front 3 faces (Left)
-    fill_face([center[1], m3_l, m2_l, m1], True)
-    fill_face([m3_l, left[1], left[0], m2_l], True)
-    fill_face([m2_l, left[0], center[0], m1], True)
-
-    # Side quads along spokes
-    for i in range(len(loop_r) - 1):
-        fill_face([center[i + 1], loop_r[i], loop_r[i + 1], center[i + 2]], True)
-        fill_face([loop_r[i], right[i + 1], right[i + 2], loop_r[i + 1]], True)
-        fill_face([center[i + 1], center[i + 2], loop_l[i + 1], loop_l[i]], True)
-        fill_face([loop_l[i], loop_l[i + 1], left[i + 2], left[i + 1]], True)
-
-    # Rear diamond quads
-    fill_face([center[-2], loop_r[-1], loop_c, loop_l[-1]], True)
-    fill_face([loop_r[-1], right[-1], center[-1], loop_c], True)
-    fill_face([loop_l[-1], loop_c, center[-1], left[-1]], True)
 
 
 def _add_prim_regions(node: hou.SopNode) -> None:

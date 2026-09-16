@@ -36,9 +36,9 @@ hython -c '
 import hou
 import sys
 
-hou.hipFile.load("test.hip")
+hou.hipFile.load("test/test.hip")
 
-root = hou.node("/obj/spider/cephalothorax/base")
+root = hou.node("/obj")
 if root is None:
     print("Node not found")
     sys.exit(1)

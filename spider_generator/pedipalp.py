@@ -523,13 +523,17 @@ def _add_base_trapezoid(
     node: hou.SopNode,
 ) -> float:
     geo = node.geometry()
-    m1, m2, cb, es4 = points_from_geo(
+    m1, m2, cb, es4, e1, e4 = points_from_geo(
         geo,
         basemaxillamembrane(1),
         basemaxillamembrane(2),
         _tmp_coxa_corner("bottom"),
         _tmp_coxa_support(2, 4),
+        _tmp_coxa_end(1),
+        _tmp_coxa_end(4),
     )
+
+    pos_mid_bottom = (e1.position() + e4.position()) * 0.5
 
     pos_p4, pos_p3, height = _calculate_base_trapezoid_points(
         node,
@@ -537,6 +541,7 @@ def _add_base_trapezoid(
         m2.position(),
         cb.position(),
         es4.position(),
+        pos_mid_bottom,
     )
 
     p3 = add_id_point(geo, pos_p3, _tmp_coxa_corner("base", 1))
@@ -553,6 +558,7 @@ def _calculate_base_trapezoid_points(
     pos_m2: hou.Vector3,
     pos_cb: hou.Vector3,
     pos_es4: hou.Vector3,
+    pos_mid_bottom: hou.Vector3,
 ) -> tuple[hou.Vector3, hou.Vector3, float]:
     geo = node.geometry()
     leg = get_leg(node)
@@ -577,10 +583,20 @@ def _calculate_base_trapezoid_points(
     dir_line = pos_m1 - pos_es4
     denom = dir_line.dot(n_plane)
     t = (pos_m1 - pos_cb).dot(n_plane) / denom
-    pos_p4 = pos_cb + dir_line * t
+    pos_pp1 = pos_cb + dir_line * t
+
+    offset_pp = (pos_pp1 - pos_m1).dot(u)
+    pos_pp2 = pos_pp1 + u * (length - 2.0 * offset_pp)
+    mid_pp = (pos_pp1 + pos_pp2) * 0.5
+
+    n_bottom_plane = (pos_cb - pos_es4).cross(pos_m1 - pos_es4).normalized()
+    d = (pos_mid_bottom - mid_pp).dot(n_bottom_plane)
+    offset_vec = n_bottom_plane * d
+
+    pos_p4 = pos_pp1 + offset_vec
+    pos_p3 = pos_pp2 + offset_vec
 
     offset = (pos_p4 - pos_m1).dot(u)
-    pos_p3 = pos_p4 + u * (length - 2.0 * offset)
     height = (pos_p4 - pos_m1 - u * offset).length()
 
     return pos_p4, pos_p3, height
