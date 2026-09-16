@@ -2,10 +2,11 @@ import math
 
 import hou
 
-from helper import bridge_loops, fill_face_with_attr, points_from_loop_cut
 from houkit.attributer import add_prim_attrib
 from houkit.topology import loop_cut, points_to_positions
-from legs.attributes import Region
+
+from ...helper import bridge_loops, fill_face_with_attr, points_from_loop_cut
+from ..attributes import Region
 
 
 def inset_segment_thickness(
@@ -23,7 +24,7 @@ def inset_segment_thickness(
     for i in range(num_segs - 1):
         former_end = seg_pts[i * 8 + 4:(i + 1) * 8]
         latter_start = seg_pts[(i + 1) * 8:(i + 1) * 8 + 4]
-        former_inset, latter_inset = add_segment_thickness_loops(
+        former_inset, latter_inset = _add_segment_thickness_loops(
             geo,
             former_end,
             latter_start,
@@ -34,14 +35,14 @@ def inset_segment_thickness(
     return thickness_pts
 
 
-def add_segment_thickness_loops(
+def _add_segment_thickness_loops(
     geo: hou.Geometry,
     former_end: list[hou.Point],
     latter_start: list[hou.Point],
     cut_length: float,
 ) -> tuple[list[hou.Point], list[hou.Point]]:
-    former_inset = inset_loop(geo, former_end, cut_length)
-    latter_inset = inset_loop(geo, latter_start, cut_length)
+    former_inset = _inset_loop(geo, former_end, cut_length)
+    latter_inset = _inset_loop(geo, latter_start, cut_length)
 
     e_loop = [former_end[0], former_end[1], former_end[3], former_end[2]]
     ie_loop = [former_inset[0], former_inset[1], former_inset[3], former_inset[2]]
@@ -66,7 +67,7 @@ def add_segment_thickness_loops(
     return former_inset, latter_inset
 
 
-def inset_loop(
+def _inset_loop(
     geo: hou.Geometry,
     pts: list[hou.Point],
     cut_length: float,
@@ -104,8 +105,8 @@ def add_segment_loop_cuts(
         start_pts = cur_pts[:4]
         end_pts = cur_pts[4:]
 
-        start_cut = add_tube_loop_cut(geo, start_pts, end_pts, cut_length)
-        end_cut = add_tube_loop_cut(geo, end_pts, start_cut, cut_length)
+        start_cut = _add_tube_loop_cut(geo, start_pts, end_pts, cut_length)
+        end_cut = _add_tube_loop_cut(geo, end_pts, start_cut, cut_length)
 
         all_seg_pts.extend([
             *start_pts,
@@ -132,12 +133,12 @@ def fill_membranes(
     for i in range(num_joints):
         former_end = thickness_pts[i * 8:i * 8 + 4]
         latter_start = thickness_pts[i * 8 + 4:(i + 1) * 8]
-        membrane_points.extend(add_membrane_joint(geo, former_end, latter_start))
+        membrane_points.extend(_add_membrane_joint(geo, former_end, latter_start))
 
     return membrane_points
 
 
-def add_membrane_joint(
+def _add_membrane_joint(
     geo: hou.Geometry,
     former_end: list[hou.Point],
     latter_start: list[hou.Point],
@@ -145,8 +146,8 @@ def add_membrane_joint(
     # fu: former upper, fb: former bottom, lu: latter upper, lb: latter bottom
     fu1, fu2, fb1, fb2 = former_end
     lu1, lu2, lb1, lb2 = latter_start
-    midpoint_positions = get_membrane_joint_midpoint_positions(former_end, latter_start)
-    mu1, mu2, mb1, mb2 = create_membrane_midpoints(geo, midpoint_positions)
+    midpoint_positions = _get_membrane_joint_midpoint_positions(former_end, latter_start)
+    mu1, mu2, mb1, mb2 = _create_membrane_midpoints(geo, midpoint_positions)
 
     former_loop = [fu1, fu2, fb2, fb1]
     mid_loop = [mu1, mu2, mb2, mb1]
@@ -156,7 +157,7 @@ def add_membrane_joint(
     return [mu1, mu2, mb1, mb2]
 
 
-def get_membrane_joint_midpoint_positions(
+def _get_membrane_joint_midpoint_positions(
     former_end: list[hou.Point],
     latter_start: list[hou.Point],
 ) -> tuple[hou.Vector3, hou.Vector3, hou.Vector3, hou.Vector3]:
@@ -185,7 +186,7 @@ def get_membrane_joint_midpoint_positions(
     return pos_mu1, pos_mu2, pos_mb1, pos_mb2
 
 
-def create_membrane_midpoints(
+def _create_membrane_midpoints(
     geo: hou.Geometry,
     positions: tuple[hou.Vector3, hou.Vector3, hou.Vector3, hou.Vector3],
 ) -> tuple[hou.Point, hou.Point, hou.Point, hou.Point]:
@@ -222,8 +223,8 @@ def add_membrane_loop_cuts(
             all_mem_pts.extend(mid_pts)
             continue
 
-        former_cut = add_tube_loop_cut(geo, former_end, mid_pts, cut_length)
-        latter_cut = add_tube_loop_cut(geo, latter_start, mid_pts, cut_length)
+        former_cut = _add_tube_loop_cut(geo, former_end, mid_pts, cut_length)
+        latter_cut = _add_tube_loop_cut(geo, latter_start, mid_pts, cut_length)
         all_mem_pts.extend([
             *former_cut,
             *mid_pts,
@@ -250,7 +251,7 @@ def close_tarsus(
     p7.setPosition(hou.Vector3(pos7.x(), pos7.y(), pos7.z() - offset_z))
 
 
-def add_tube_loop_cut(
+def _add_tube_loop_cut(
     geo: hou.Geometry,
     start_pts: list[hou.Point],
     end_pts: list[hou.Point],

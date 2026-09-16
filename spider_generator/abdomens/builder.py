@@ -17,8 +17,8 @@ from . import topology
 def build(spider_node: hou.OpNode, cephalothorax: hou.SopNode) -> hou.SopNode:
     abdomen = add_reloadable_subnet(spider_node, "abdomen")
     abdomen.setInput(0, cephalothorax)
-    add_parameters(abdomen)
-    add_controls(abdomen)
+    _add_parameters(abdomen)
+    _add_controls(abdomen)
 
     source = abdomen.indirectInputs()[0]
     cepha_info = sopify(abdomen, source, topology.prepare_cephalothorax_info)
@@ -44,7 +44,7 @@ def build(spider_node: hou.OpNode, cephalothorax: hou.SopNode) -> hou.SopNode:
     return abdomen
 
 
-def add_parameters(abdomen: hou.SopNode) -> None:
+def _add_parameters(abdomen: hou.SopNode) -> None:
     add_float_parm(
         abdomen,
         "size_ratios",
@@ -65,7 +65,7 @@ def add_parameters(abdomen: hou.SopNode) -> None:
     )
 
 
-def add_controls(parent: hou.SopNode) -> hou.SopNode:
+def _add_controls(parent: hou.SopNode) -> hou.SopNode:
     control = parent.createNode("null", "CONTROL")
     add_float_parm(
         control,

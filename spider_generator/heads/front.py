@@ -34,13 +34,13 @@ def fill_back_loop_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
     add_prim_attrib(geo, "region", "")
 
-    fill_head_front_faces(geo)
-    add_head_front_pentagon(geo)
-    fill_head_top_and_back_faces(geo)
+    _fill_head_front_faces(geo)
+    _add_head_front_pentagon(geo)
+    _fill_head_top_and_back_faces(geo)
     set_prim_attr_where_blank(geo, "region", Region.HEADTOP)
 
 
-def fill_head_front_faces(geo: hou.Geometry) -> None:
+def _fill_head_front_faces(geo: hou.Geometry) -> None:
     fill_face_by_id_with_attr(
         geo,
         (
@@ -81,7 +81,7 @@ def fill_head_front_faces(geo: hou.Geometry) -> None:
     )
 
 
-def add_head_front_pentagon(geo: hou.Geometry) -> None:
+def _add_head_front_pentagon(geo: hou.Geometry) -> None:
     hf0, hf1, hs2, hs1, hs0 = points_from_geo(
         geo,
         headfront(0),
@@ -98,7 +98,7 @@ def add_head_front_pentagon(geo: hou.Geometry) -> None:
     set_point_id(floatpoint, headfrontfloat(1))
 
 
-def fill_head_top_and_back_faces(geo: hou.Geometry) -> None:
+def _fill_head_top_and_back_faces(geo: hou.Geometry) -> None:
     faces = {
         (
             headfront(0),
@@ -150,4 +150,3 @@ def fill_support_loop_faces(node: hou.SopNode) -> None:
 
     for i, (face, reverse) in enumerate(faces.items()):
         fill_face_by_id_with_attr(geo, face, "region", regions[i], reverse)
-

@@ -25,12 +25,12 @@ def outset_sternum_loop(node: hou.SopNode) -> None:
     support_dist = membrane_width
     dist = membrane_width
 
-    add_sternum_loop(geo, support_dist)
-    add_sternum_loop(geo, dist)
+    _add_sternum_loop(geo, support_dist)
+    _add_sternum_loop(geo, dist)
 
-    adjust_midpoints_after_outset(geo)
+    _adjust_midpoints_after_outset(geo)
 
-def add_sternum_loop(geo: hou.Geometry, dist: float) -> list[hou.Point]:
+def _add_sternum_loop(geo: hou.Geometry, dist: float) -> list[hou.Point]:
     outset(list(geo.prims()), dist, use_ratio=False)
     deduplicate_point_attribs(geo, "id", (ID.STERNUMSPINE,), keep_first=True)
     deduplicate_point_attribs(geo, "id", outer_loop_ids(), keep_first=False)
@@ -39,7 +39,7 @@ def add_sternum_loop(geo: hou.Geometry, dist: float) -> list[hou.Point]:
         if pt.attribValue("id").startswith(outer_loop_ids())
     ]
 
-def adjust_midpoints_after_outset(geo: hou.Geometry) -> None:
+def _adjust_midpoints_after_outset(geo: hou.Geometry) -> None:
     points = points_by_id(geo)
     rim1, rim_neg1 = points_from_geo(geo, sternumrim(1), sternumrim(-1))
     p0 = (rim1.position() + rim_neg1.position()) / 2.0

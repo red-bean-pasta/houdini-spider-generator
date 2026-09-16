@@ -15,8 +15,8 @@ from . import topology
 
 def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     sternum = add_reloadable_subnet(cephalothorax, "sternum")
-    add_parameters(sternum)
-    add_controls(sternum)
+    _add_parameters(sternum)
+    _add_controls(sternum)
 
     midpoints = sopify_chain(sternum, None, (topology.left_half, topology.add_midpoints))
 
@@ -46,7 +46,7 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
     return sternum
 
 
-def add_parameters(sternum: hou.SopNode) -> None:
+def _add_parameters(sternum: hou.SopNode) -> None:
     add_float_parm(
         sternum,
         "front_back_length_ratios",
@@ -106,7 +106,7 @@ def add_parameters(sternum: hou.SopNode) -> None:
     )
 
 
-def add_controls(parent: hou.SopNode) -> hou.SopNode:
+def _add_controls(parent: hou.SopNode) -> hou.SopNode:
     control = parent.createNode("null", "CONTROL")
     add_float_parm(
         control,

@@ -150,14 +150,14 @@ def add_height_frame(node: hou.SopNode) -> None:
 
 
 def add_upper_middle_frame(node: hou.SopNode) -> None:
-    add_middle_frame(node, negative=False)
+    _add_middle_frame(node, negative=False)
 
 
 def add_lower_middle_frame(node: hou.SopNode) -> None:
-    add_middle_frame(node, negative=True)
+    _add_middle_frame(node, negative=True)
 
 
-def add_middle_frame(node: hou.SopNode, negative: bool = False) -> None:
+def _add_middle_frame(node: hou.SopNode, negative: bool = False) -> None:
     geo = node.geometry()
 
     sign = -1 if negative else 1

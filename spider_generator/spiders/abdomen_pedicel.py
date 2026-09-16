@@ -13,4 +13,3 @@ def open_abdomen_pedicel(node: hou.SopNode) -> None:
     if origin_point in geo.points():
         geo.deletePoints([origin_point])
 
-

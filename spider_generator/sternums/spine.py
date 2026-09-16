@@ -67,12 +67,12 @@ def descend_sternum_spine(node: hou.SopNode) -> None:
         position = point.position()
         rest_y = position[1]
         if position[2] <= middle[2]:
-            y = get_eased_depth(position[2], top[2], middle[2], rest_y, -depth, power)
+            y = _get_eased_depth(position[2], top[2], middle[2], rest_y, -depth, power)
         else:
-            y = get_eased_depth(position[2], bottom[2], middle[2], rest_y, -depth, power)
+            y = _get_eased_depth(position[2], bottom[2], middle[2], rest_y, -depth, power)
         point.setPosition((position[0], y, position[2]))
 
-def get_eased_depth(
+def _get_eased_depth(
     x: float,
     x0: float,
     x1: float,
@@ -84,5 +84,4 @@ def get_eased_depth(
     assert span != 0.0, "Expected non-zero span for easing interpolation"
     t = max(0.0, min(1.0, (x - x0) / span))
     return y0 + (y1 - y0) * (t ** power)
-
 

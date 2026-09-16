@@ -11,12 +11,12 @@ from .attributes import Region, mouth
 
 def add_mouth_geometry(node: hou.SopNode) -> None:
     geo = node.geometry()
-    mouth_prims = query_mouth_prims(geo)
-    depth = get_sternum_depth(points_by_id(geo))
+    mouth_prims = _query_mouth_prims(geo)
+    depth = _get_sternum_depth(points_by_id(geo))
     extruded_prims = extrude(mouth_prims, depth)
     for prim in extruded_prims:
         prim.setAttribValue("region", Region.MOUTH)
-    rename_extruded_mouth_points(geo)
+    _rename_extruded_mouth_points(geo)
     deduplicate_point_attribs(geo, "id", None, keep_first=True)
 
 
@@ -27,17 +27,17 @@ def adjust_mouth_points(node: hou.SopNode) -> None:
 
     vertical_dir = lower_pts[1].position() - upper_pts[1].position()
     assert vertical_dir.length() > 1e-6
-    move_points(1 / 3, vertical_dir, *upper_pts)
-    move_points(-1 / 6, vertical_dir, *lower_pts)
+    _move_points(1 / 3, vertical_dir, *upper_pts)
+    _move_points(-1 / 6, vertical_dir, *lower_pts)
 
     for pts in (upper_pts, lower_pts):
         horizontal_dir = pts[0].position() - pts[2].position()
         assert horizontal_dir.length() > 1e-6
-        move_points(1 / 6, horizontal_dir, pts[2])
-        move_points(-1 / 6, horizontal_dir, pts[0])
+        _move_points(1 / 6, horizontal_dir, pts[2])
+        _move_points(-1 / 6, horizontal_dir, pts[0])
 
 
-def move_points(
+def _move_points(
     ratio: float,
     direction: hou.Vector3,
     *points: hou.Point,
@@ -47,22 +47,22 @@ def move_points(
         offset_point(point, offset)
 
 
-def query_mouth_prims(geo: hou.Geometry) -> list[hou.Prim]:
+def _query_mouth_prims(geo: hou.Geometry) -> list[hou.Prim]:
     mouth_prims = prims_by_attr(geo, "region", base_attributes.Region.LABIUMSOCKET)
     assert len(mouth_prims) == 2, f"Expected two inset mouth primitives, got {len(mouth_prims)}"
     return mouth_prims
 
 
-def rename_extruded_mouth_points(geo: hou.Geometry) -> None:
+def _rename_extruded_mouth_points(geo: hou.Geometry) -> None:
     points = points_by_attrib(geo, "id", skip_blank=True)
-    for base_id, mouth_id in mouth_point_id_pairs():
+    for base_id, mouth_id in _mouth_point_id_pairs():
         candidates = points.get(base_id)
         assert candidates is not None, f"Expected mouth point {base_id!r}"
         point = max(candidates, key=lambda candidate: candidate.number())
         point.setAttribValue("id", mouth_id)
 
 
-def get_sternum_depth(points: dict[str, hou.Point]) -> float:
+def _get_sternum_depth(points: dict[str, hou.Point]) -> float:
     spine_points = [
         point
         for point_id, point in points.items()
@@ -75,7 +75,7 @@ def get_sternum_depth(points: dict[str, hou.Point]) -> float:
     return depth
 
 
-def mouth_point_id_pairs() -> tuple[tuple[str, str], ...]:
+def _mouth_point_id_pairs() -> tuple[tuple[str, str], ...]:
     return (
         (basemouthmembrane("lower", 0), mouth("lower", 0)),
         (basemouthmembrane("lower", 1), mouth("lower", 1)),

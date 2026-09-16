@@ -26,9 +26,9 @@ def add_end_section(node: hou.SopNode) -> None:
     params = get_parms(parent, use_tuple=False)
     end_section_ratio = params.end_section_ratio
 
-    start_section, end_pivot, end_rot_matrix, end_surface_normal = get_end_section_frame(geo, parent)
+    start_section, end_pivot, end_rot_matrix, end_surface_normal = _get_end_section_frame(geo, parent)
 
-    c3_positions = construct_section_loop(
+    c3_positions = _construct_section_loop(
         end_pivot,
         hou.Vector2(start_section.height * end_section_ratio.y(), start_section.width * end_section_ratio.x()),
         start_section.along * end_rot_matrix,
@@ -61,7 +61,7 @@ class Section:
         return hou.Vector3(self.width, self.height, self.height)
 
 
-def get_start_section_frame(geo: hou.Geometry) -> Section:
+def _get_start_section_frame(geo: hou.Geometry) -> Section:
     c1_1, c1_2, c1_3, c1_4 = points_from_geo(
         geo,
         cheliceraestart(1),
@@ -85,12 +85,12 @@ def get_start_section_frame(geo: hou.Geometry) -> Section:
     )
 
 
-def get_end_section_frame(geo: hou.Geometry, parent: hou.OpNode) -> tuple[Section, hou.Vector3, hou.Matrix3, hou.Vector3]:
+def _get_end_section_frame(geo: hou.Geometry, parent: hou.OpNode) -> tuple[Section, hou.Vector3, hou.Matrix3, hou.Vector3]:
     params = get_parms(parent, use_tuple=False)
     end_section_offset = params.end_section_offset
     end_section_rotation = params.end_section_rotation
 
-    start_section = get_start_section_frame(geo)
+    start_section = _get_start_section_frame(geo)
     offset_baseline = start_section.offset_baseline
 
     end_pivot_offset = hou.Vector3(end_section_offset.x(), -end_section_offset.y(), -end_section_offset.z())
@@ -105,7 +105,7 @@ def get_end_section_frame(geo: hou.Geometry, parent: hou.OpNode) -> tuple[Sectio
     return start_section, end_pivot, end_rot_matrix, end_surface_normal
 
 
-def construct_section_loop(
+def _construct_section_loop(
     pivot: hou.Vector3,
     size: hou.Vector2,
     along: hou.Vector3,
@@ -130,18 +130,18 @@ def construct_section_loop(
 
 
 def add_middle_section(node: hou.SopNode) -> None:
-    add_intermediate_section(node, 0.5, cheliceraemiddle)
+    _add_intermediate_section(node, 0.5, cheliceraemiddle)
 
 
 def add_upper_middle_section(node: hou.SopNode) -> None:
-    add_intermediate_section(node, 0.25, lambda *i: cheliceraeintermediate(0.25, *i))
+    _add_intermediate_section(node, 0.25, lambda *i: cheliceraeintermediate(0.25, *i))
 
 
 def add_lower_middle_section(node: hou.SopNode) -> None:
-    add_intermediate_section(node, 0.75, lambda *i: cheliceraeintermediate(0.75, *i))
+    _add_intermediate_section(node, 0.75, lambda *i: cheliceraeintermediate(0.75, *i))
 
 
-def add_intermediate_section(
+def _add_intermediate_section(
     node: hou.SopNode,
     factor: float,
     id_factory: Callable[[int], str] | None,
@@ -155,17 +155,17 @@ def add_intermediate_section(
     middle_section_height_ratio = params.middle_section_height_ratio
     middle_section_ratio = params.middle_section_ratio
 
-    start_section, end_pivot, _, end_surface_normal = get_end_section_frame(geo, parent)
+    start_section, end_pivot, _, end_surface_normal = _get_end_section_frame(geo, parent)
     offset_baseline = start_section.offset_baseline
 
-    middle_pivot = get_middle_section_pivot(
+    middle_pivot = _get_middle_section_pivot(
         start_section,
         end_pivot,
         offset_baseline,
         middle_section_offset,
         middle_section_height_ratio,
     )
-    pivot, direction, normal, weights = get_intermediate_section_frame(
+    pivot, direction, normal, weights = _get_intermediate_section_frame(
         start_section.pivot,
         middle_pivot,
         end_pivot,
@@ -176,14 +176,14 @@ def add_intermediate_section(
     )
 
     start_size = hou.Vector2(start_section.height, start_section.width)
-    size = get_intermediate_section_size(
+    size = _get_intermediate_section_size(
         start_size,
         middle_section_ratio,
         end_section_ratio,
         weights,
     )
 
-    positions = construct_section_loop(
+    positions = _construct_section_loop(
         pivot,
         size,
         direction,
@@ -193,11 +193,11 @@ def add_intermediate_section(
     for pos in positions:
         assert pos.x() >= 0.0, f"Section loop point at factor {factor} crossed symmetry plane (x={pos.x():.4f} < 0.0). Adjust parameters or ratio."
 
-    pts = add_intermediate_section_points(geo, positions, id_factory)
+    pts = _add_intermediate_section_points(geo, positions, id_factory)
     fill_face(pts, True)
 
 
-def get_middle_section_pivot(
+def _get_middle_section_pivot(
     start_section: Section,
     end_pivot: hou.Vector3,
     offset_baseline: hou.Vector3,
@@ -211,7 +211,7 @@ def get_middle_section_pivot(
     )
 
 
-def get_intermediate_section_frame(
+def _get_intermediate_section_frame(
     start_pivot: hou.Vector3,
     middle_pivot: hou.Vector3,
     end_pivot: hou.Vector3,
@@ -244,7 +244,7 @@ def get_intermediate_section_frame(
     return pivot, direction, normal, (w_start, w_mid, w_end)
 
 
-def get_intermediate_section_size(
+def _get_intermediate_section_size(
     start_size: hou.Vector2,
     middle_section_ratio: hou.Vector2,
     end_section_ratio: hou.Vector2,
@@ -262,7 +262,7 @@ def get_intermediate_section_size(
     return start_size * w_start + middle_size * w_mid + end_size * w_end
 
 
-def add_intermediate_section_points(
+def _add_intermediate_section_points(
     geo: hou.Geometry,
     positions: list[hou.Vector3],
     id_factory: Callable[[int], str] | None,
@@ -282,12 +282,12 @@ def add_intermediate_section_points(
 def connect_sections(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
 
-    remove_section_cap_faces(geo)
-    connect_membrane_to_start_support(geo)
-    bridge_chelicerae_section_loops(geo)
+    _remove_section_cap_faces(geo)
+    _connect_membrane_to_start_support(geo)
+    _bridge_chelicerae_section_loops(geo)
 
 
-def remove_section_cap_faces(geo: hou.Geometry) -> None:
+def _remove_section_cap_faces(geo: hou.Geometry) -> None:
     def is_cap_face(prim: hou.Prim) -> bool:
         if prim.stringAttribValue("region") == Region.FANG:
             return False
@@ -301,7 +301,7 @@ def remove_section_cap_faces(geo: hou.Geometry) -> None:
     geo.deletePrims(middle_prims, keep_points=True)
 
 
-def connect_membrane_to_start_support(geo: hou.Geometry) -> None:
+def _connect_membrane_to_start_support(geo: hou.Geometry) -> None:
     # Connect socket membrane (4 corner points) to start membrane support (4 points)
     m1, m3, m4, m6 = points_from_geo(
         geo,
@@ -328,7 +328,7 @@ def connect_membrane_to_start_support(geo: hou.Geometry) -> None:
     fill_face([m3, m1, ss1, ss4], True)
 
 
-def bridge_chelicerae_section_loops(geo: hou.Geometry) -> None:
+def _bridge_chelicerae_section_loops(geo: hou.Geometry) -> None:
     tube_loops = [
         points_from_geo(
             geo,

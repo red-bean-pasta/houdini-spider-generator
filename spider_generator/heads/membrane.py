@@ -12,10 +12,10 @@ def inset_base_support_loop(node: hou.SopNode) -> None:
     geo = node.geometry()
     dist = get_head_base_loop_width(node)
     inset(list(geo.prims()), dist, use_ratio=False)
-    attribute_inset_points(geo)
+    _attribute_inset_points(geo)
     deduplicate_id_attr(geo, None, keep_first=True)
 
-def attribute_inset_points(geo: hou.Geometry) -> None:
+def _attribute_inset_points(geo: hou.Geometry) -> None:
     points = points_by_attrib(geo, "id", True)
     for point_id, matching in points.items():
         if not point_id or len(matching) != 2:

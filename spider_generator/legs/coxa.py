@@ -22,7 +22,7 @@ def extract_right_coxa(node: hou.SopNode) -> None:
     unused_points = [p for p in geo.points() if p not in used_points]
     geo.deletePoints(unused_points)
 
-    socket_corners, socket_midpoints = get_right_coxa_socket_points(node)
+    socket_corners, socket_midpoints = _get_right_coxa_socket_points(node)
     geo.deletePrims(geo.prims(), keep_points=True)
 
     flat_corner_nums = [p.number() for group in socket_corners for p in group]
@@ -33,7 +33,7 @@ def extract_right_coxa(node: hou.SopNode) -> None:
     geo.addArrayAttrib(hou.attribType.Global, "tmp_coxa_midpoints", hou.attribData.Int)
     geo.setGlobalAttribValue("tmp_coxa_midpoints", flat_midpoint_nums)
 
-def get_right_coxa_socket_points(
+def _get_right_coxa_socket_points(
     node: hou.SopNode,
 ) -> tuple[list[list[hou.Point]], list[list[hou.Point]]]:
     geo = node.geometry()
@@ -45,14 +45,14 @@ def get_right_coxa_socket_points(
     corner_result = []
     midpoint_result = []
     for group in groups:
-        corners, midpoints = get_socket_group_points(group)
+        corners, midpoints = _get_socket_group_points(group)
         corner_result.append(corners)
         midpoint_result.append(midpoints)
 
     return corner_result, midpoint_result
 
 
-def get_socket_group_points(
+def _get_socket_group_points(
     group: list[hou.Prim],
 ) -> tuple[list[hou.Point], list[hou.Point]]:
     group_points = {

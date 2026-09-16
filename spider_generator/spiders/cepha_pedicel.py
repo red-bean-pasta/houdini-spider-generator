@@ -42,16 +42,16 @@ def open_cepha_pedicel(node: hou.SopNode) -> None:
         head_attributes.headbasesupport(base_attributes.basesternum(5, 2)),
     )
 
-    support_loop_width = get_opening_support_loop_width(bs5_1, bs5_2, pedicel_opening_ratio_x)
+    support_loop_width = _get_opening_support_loop_width(bs5_1, bs5_2, pedicel_opening_ratio_x)
 
-    cp_outer_lower, right_inner, left_inner = identify_pedicel_membrane_points(geo)
-    cp_right, cp_left, cp_outer_right, cp_outer_left = add_side_cepha_pedicel_points(
+    cp_outer_lower, right_inner, left_inner = _identify_pedicel_membrane_points(geo)
+    cp_right, cp_left, cp_outer_right, cp_outer_left = _add_side_cepha_pedicel_points(
         geo, baseend0, bs5_1, bs5_2, pedicel_opening_ratio_x, support_loop_width
     )
-    cp_upper, cp_lower = position_vertical_pedicel_points(
+    cp_upper, cp_lower = _position_vertical_pedicel_points(
         geo, baseend0, basesupportend0, headsupport5, sternumrim5, cp_outer_lower, pedicel_opening_ratios, support_loop_width
     )
-    reconnect_lower_sternum_pedicel_loop(
+    _reconnect_lower_sternum_pedicel_loop(
         geo,
         cp_lower,
         cp_outer_lower,
@@ -65,7 +65,7 @@ def open_cepha_pedicel(node: hou.SopNode) -> None:
         bs5_2,
         sternumrim5,
     )
-    p_right, p_left = reconnect_upper_sternum_pedicel_loop(
+    p_right, p_left = _reconnect_upper_sternum_pedicel_loop(
         geo,
         baseend0,
         basesupportend0,
@@ -80,7 +80,7 @@ def open_cepha_pedicel(node: hou.SopNode) -> None:
         bs5_2,
         pedicel_opening_ratio_x,
     )
-    retopo_head_back_faces(
+    _retopo_head_back_faces(
         geo,
         headsupport4,
         headsupport_minus4,
@@ -91,9 +91,9 @@ def open_cepha_pedicel(node: hou.SopNode) -> None:
         p_right,
         p_left,
     )
-    adjust_opening_points_depth(cp_right, cp_left, cp_upper)
+    _adjust_opening_points_depth(cp_right, cp_left, cp_upper)
 
-def get_opening_support_loop_width(
+def _get_opening_support_loop_width(
     bs5_1: hou.Point,
     bs5_2: hou.Point,
     pedicel_opening_ratio_x: float,
@@ -101,7 +101,7 @@ def get_opening_support_loop_width(
     return bs5_1.position().x() * (1.0 - pedicel_opening_ratio_x) * 0.035
 
 
-def identify_pedicel_membrane_points(geo: hou.Geometry) -> tuple[hou.Point, hou.Point, hou.Point]:
+def _identify_pedicel_membrane_points(geo: hou.Geometry) -> tuple[hou.Point, hou.Point, hou.Point]:
     membrane_prims = prims_by_attr(geo, "region", base_attributes.Region.BASEPEDICELMEMBRANE)
     assert len(membrane_prims) == 1, f"Expected 1 basepedicelmembrane prim, got {len(membrane_prims)}"
     mem_prim = membrane_prims[0]
@@ -126,7 +126,7 @@ def identify_pedicel_membrane_points(geo: hou.Geometry) -> tuple[hou.Point, hou.
     return p_lower, right_inner, left_inner
 
 
-def add_side_cepha_pedicel_points(
+def _add_side_cepha_pedicel_points(
     geo: hou.Geometry,
     baseend0: hou.Point,
     bs5_1: hou.Point,
@@ -161,7 +161,7 @@ def add_side_cepha_pedicel_points(
     return cp_right, cp_left, cp_outer_right, cp_outer_left
 
 
-def position_vertical_pedicel_points(
+def _position_vertical_pedicel_points(
     geo: hou.Geometry,
     baseend0: hou.Point,
     basesupportend0: hou.Point,
@@ -202,7 +202,7 @@ def position_vertical_pedicel_points(
     return cp_upper, cp_lower
 
 
-def reconnect_lower_sternum_pedicel_loop(
+def _reconnect_lower_sternum_pedicel_loop(
     geo: hou.Geometry,
     cp_lower: hou.Point,
     cp_outer_lower: hou.Point,
@@ -226,7 +226,7 @@ def reconnect_lower_sternum_pedicel_loop(
     fill_face([cp_lower, cp_left, cp_outer_left, cp_outer_lower], reverse=True)
 
 
-def reconnect_upper_sternum_pedicel_loop(
+def _reconnect_upper_sternum_pedicel_loop(
     geo: hou.Geometry,
     baseend0: hou.Point,
     basesupportend0: hou.Point,
@@ -241,8 +241,8 @@ def reconnect_upper_sternum_pedicel_loop(
     bs5_2: hou.Point,
     size_ratio_x: float,
 ) -> tuple[hou.Point, hou.Point]:
-    remove_upper_head_back_faces(baseend0, geo)
-    p_right, p_left = create_upper_pedicel_support_points(
+    _remove_upper_head_back_faces(baseend0, geo)
+    p_right, p_left = _create_upper_pedicel_support_points(
         geo,
         baseend0,
         basesupportend0,
@@ -254,7 +254,7 @@ def reconnect_upper_sternum_pedicel_loop(
         bs5_2,
         size_ratio_x,
     )
-    fill_upper_pedicel_head_back_faces(
+    _fill_upper_pedicel_head_back_faces(
         geo,
         basesupportend0,
         baseend0,
@@ -267,17 +267,17 @@ def reconnect_upper_sternum_pedicel_loop(
         bs5_2,
         basesupportsternum5_2,
     )
-    fill_upper_pedicel_buffer_faces(geo, cp_upper, cp_right, cp_left, cp_outer_right, cp_outer_left, baseend0)
+    _fill_upper_pedicel_buffer_faces(geo, cp_upper, cp_right, cp_left, cp_outer_right, cp_outer_left, baseend0)
     return p_right, p_left
 
 
-def remove_upper_head_back_faces(baseend0: hou.Point, geo: hou.Geometry) -> None:
+def _remove_upper_head_back_faces(baseend0: hou.Point, geo: hou.Geometry) -> None:
     headback_prims = prims_by_attr(baseend0.prims(), "region", head_attributes.Region.HEADBACK)
     assert len(headback_prims) == 2, f"Expected 2 headback prims on baseend0, got {len(headback_prims)}"
     geo.deletePrims(headback_prims, keep_points=True)
 
 
-def create_upper_pedicel_support_points(
+def _create_upper_pedicel_support_points(
     geo: hou.Geometry,
     baseend0: hou.Point,
     basesupportend0: hou.Point,
@@ -305,7 +305,7 @@ def create_upper_pedicel_support_points(
     return p_right, p_left
 
 
-def fill_upper_pedicel_head_back_faces(
+def _fill_upper_pedicel_head_back_faces(
     geo: hou.Geometry,
     basesupportend0: hou.Point,
     baseend0: hou.Point,
@@ -333,7 +333,7 @@ def fill_upper_pedicel_head_back_faces(
     )
 
 
-def fill_upper_pedicel_buffer_faces(
+def _fill_upper_pedicel_buffer_faces(
     geo: hou.Geometry,
     cp_upper: hou.Point,
     cp_right: hou.Point,
@@ -350,7 +350,7 @@ def fill_upper_pedicel_buffer_faces(
     )
 
 
-def retopo_head_back_faces(
+def _retopo_head_back_faces(
     geo: hou.Geometry,
     headsupport4: hou.Point,
     headsupport_minus4: hou.Point,
@@ -382,7 +382,7 @@ def retopo_head_back_faces(
     set_prim_attr_where_blank(geo, "region", head_attributes.Region.HEADBACK)
 
 
-def adjust_opening_points_depth(
+def _adjust_opening_points_depth(
     cp_right: hou.Point,
     cp_left: hou.Point,
     cp_upper: hou.Point,
@@ -391,5 +391,4 @@ def adjust_opening_points_depth(
     offset = hou.Vector3(0.0, 0.0, -offset_z)
     for pt in (cp_right, cp_left, cp_upper):
         offset_point(pt, offset)
-
 

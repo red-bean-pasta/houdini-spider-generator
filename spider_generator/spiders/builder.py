@@ -16,7 +16,7 @@ from . import topology
 
 
 def build(parent: hou.OpNode) -> hou.SopNode:
-    spider = add_spider(parent)
+    spider = _add_spider(parent)
 
     cephalothorax = build_cephalothorax(spider)
     opened_cepha = sopify(spider, cephalothorax, topology.open_cepha_pedicel)
@@ -36,10 +36,10 @@ def build(parent: hou.OpNode) -> hou.SopNode:
     fused = add_fuse(spider, "fuse_main_and_legs", merged_all)
 
     recalculated = add_recalculate_normal(spider, "recalculate_normals", fused)
-    add_subdivide(spider, "subdivision", recalculated, depth=3)
+    _add_subdivide(spider, "subdivision", recalculated, depth=3)
 
-    propagate_subnets(spider)
-    propagate_controls(spider)
+    _propagate_subnets(spider)
+    _propagate_controls(spider)
 
     recalculated.setDisplayFlag(True)
     recalculated.setRenderFlag(True)
@@ -47,7 +47,7 @@ def build(parent: hou.OpNode) -> hou.SopNode:
     return spider
 
 
-def add_spider(parent: hou.OpNode) -> hou.SopNode:
+def _add_spider(parent: hou.OpNode) -> hou.SopNode:
     spider = parent.node("spider")
     if not spider:
         spider = parent.createNode("geo", "spider")
@@ -55,11 +55,11 @@ def add_spider(parent: hou.OpNode) -> hou.SopNode:
             child.destroy()
         add_reload_button(spider)
 
-    add_parameters(spider)
+    _add_parameters(spider)
     return spider
 
 
-def add_parameters(spider: hou.OpNode) -> None:
+def _add_parameters(spider: hou.OpNode) -> None:
     add_folder(
         spider,
         "build",
@@ -76,16 +76,16 @@ def add_parameters(spider: hou.OpNode) -> None:
     )
 
 
-def propagate_subnets(spider: hou.OpNode) -> None:
+def _propagate_subnets(spider: hou.OpNode) -> None:
     promote_subnets(spider, dest_group="Build")
 
 
-def propagate_controls(spider: hou.OpNode) -> None:
+def _propagate_controls(spider: hou.OpNode) -> None:
     add_folder(spider, "advanced")
     promote_controls(spider, depth=None, dest_group="Advanced",)
 
 
-def add_subdivide(
+def _add_subdivide(
     parent: hou.OpNode,
     name: str,
     p_input: hou.SopNode,

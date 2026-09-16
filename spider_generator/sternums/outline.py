@@ -72,8 +72,8 @@ def add_midpoints(node: hou.SopNode) -> None:
 
 def add_point_ids(node: hou.SopNode) -> None:
     geo = node.geometry()
-    right_points = ordered_points([point for point in geo.points() if point.position()[0] >= 0.0])
-    left_points = ordered_points([point for point in geo.points() if point.position()[0] < 0.0])
+    right_points = _ordered_points([point for point in geo.points() if point.position()[0] >= 0.0])
+    left_points = _ordered_points([point for point in geo.points() if point.position()[0] < 0.0])
     assert len(right_points) == 10
     assert len(left_points) == len(right_points) - 2
 
@@ -98,14 +98,14 @@ def add_point_ids(node: hou.SopNode) -> None:
         )
         set_point_id(point, point_id)
 
-def ordered_points(points: list[hou.Point]) -> list[hou.Point]:
+def _ordered_points(points: list[hou.Point]) -> list[hou.Point]:
     return sorted(points, key=lambda point: (point.position()[2], point.position()[0]))
 
 
 def add_center_spine(node: hou.SopNode) -> None:
     input_node = node.inputs()[0]; assert input_node is not None
     source_geo = input_node.geometry()
-    right_points = ordered_points([point for point in source_geo.points() if point.position()[0] >= 0.0])
+    right_points = _ordered_points([point for point in source_geo.points() if point.position()[0] >= 0.0])
     assert len(right_points) == 10
     positions = [point.position() for point in right_points[2:-1]]
 
@@ -117,5 +117,4 @@ def add_center_spine(node: hou.SopNode) -> None:
             for index, position in enumerate(positions, start=1)
         ],
     )
-
 

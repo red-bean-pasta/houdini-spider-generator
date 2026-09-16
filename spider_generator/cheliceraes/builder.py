@@ -16,7 +16,7 @@ from . import topology
 def build(cephalothorax: hou.SopNode, source: hou.SopNode) -> hou.SopNode:
     chelicerae = add_reloadable_subnet(cephalothorax, "chelicerae")
     chelicerae.setInput(0, source)
-    add_parameters(chelicerae)
+    _add_parameters(chelicerae)
 
     right_membrane = sopify_chain(
         chelicerae,
@@ -67,7 +67,7 @@ def build(cephalothorax: hou.SopNode, source: hou.SopNode) -> hou.SopNode:
     return chelicerae
 
 
-def add_parameters(chelicerae: hou.SopNode) -> None:
+def _add_parameters(chelicerae: hou.SopNode) -> None:
     add_float_parm(
         chelicerae,
         "membrane_ratio",

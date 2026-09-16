@@ -49,10 +49,10 @@ def build_geometry(node: hou.SopNode) -> None:
         Region.CHELICERA,
     )
 
-    retain_headbase_faces(geo, upper_points[2], upper_points[3], upper_points[4], headbase_positions)
+    _retain_headbase_faces(geo, upper_points[2], upper_points[3], upper_points[4], headbase_positions)
 
 
-def retain_headbase_faces(
+def _retain_headbase_faces(
     geo: hou.Geometry,
     h0: hou.Point,
     h1: hou.Point,

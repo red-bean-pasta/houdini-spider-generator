@@ -33,7 +33,7 @@ def extrude_legs(
         bottom_z_offset = (btm_mid - top_mid).dot(direction)
         origin = top_mid + direction * bottom_z_offset
 
-        param = get_leg_param(node, i)
+        param = _get_leg_param(node, i)
         (seg_pts, thickness_pts, mem_pts), warnings = build_leg(geo, param)
         for w in warnings:
             node.addWarning(w)
@@ -42,9 +42,9 @@ def extrude_legs(
         for pt in seg_pts + thickness_pts + mem_pts:
             pt.setPosition(q.rotate(pt.position()) + origin)
 
-        adjust_coxa(node, pts, mid_pts, seg_pts[:16])
+        _adjust_coxa(node, pts, mid_pts, seg_pts[:16])
 
-def get_leg_param(
+def _get_leg_param(
     node: hou.SopNode,
     leg_index: int,
 ) -> LegParam:
@@ -82,7 +82,7 @@ def get_leg_param(
     )
 
 
-def adjust_coxa(
+def _adjust_coxa(
     node: hou.SopNode,
     socket_points: list[hou.Point],
     socket_midpoints: list[hou.Point],
@@ -100,7 +100,7 @@ def adjust_coxa(
     coxa_end_pts = coxa_points[12:16]
 
     coxa_start_wedge_angle = get_float_parm(get_control(node, "CONTROL"), "coxa_start_wedge_angle")
-    adjusted_support_positions = get_adjusted_coxa_support_positions(
+    adjusted_support_positions = _get_adjusted_coxa_support_positions(
         socket_points,
         coxa_end_pts,
         coxa_start_wedge_angle,
@@ -109,13 +109,13 @@ def adjust_coxa(
         point.setPosition(position)
 
     support_loop_ratio = get_float_parm(get_control(node, "CONTROL"), "joint_support_loop_ratio")
-    buffer_ratio = get_coxa_buffer_ratio(
+    buffer_ratio = _get_coxa_buffer_ratio(
         socket_points,
         coxa_start_pts,
         coxa_start_support_pts,
         support_loop_ratio,
     )
-    build_coxa_socket_faces(
+    _build_coxa_socket_faces(
         geo,
         socket_points,
         socket_midpoints,
@@ -126,7 +126,7 @@ def adjust_coxa(
     geo.deletePoints(coxa_start_pts)
 
 
-def get_adjusted_coxa_support_positions(
+def _get_adjusted_coxa_support_positions(
     socket_points: list[hou.Point],
     coxa_end_points: list[hou.Point],
     coxa_start_wedge_angle: float,
@@ -136,14 +136,14 @@ def get_adjusted_coxa_support_positions(
     # pos_bu: base upper, pos_bb: base bottom
     pos_bu2, pos_bu1, pos_bb2, pos_bb1 = points_to_positions(coxa_end_points)
 
-    pos_ab1 = get_adjusted_bottom_coxa_position(pos_sb1, pos_bb1, coxa_start_wedge_angle)
-    pos_ab2 = get_adjusted_bottom_coxa_position(pos_sb2, pos_bb2, coxa_start_wedge_angle)
+    pos_ab1 = _get_adjusted_bottom_coxa_position(pos_sb1, pos_bb1, coxa_start_wedge_angle)
+    pos_ab2 = _get_adjusted_bottom_coxa_position(pos_sb2, pos_bb2, coxa_start_wedge_angle)
     pos_au1 = (pos_su1 + pos_bu1) * 0.5
     pos_au2 = (pos_su2 + pos_bu2) * 0.5
     return pos_au2, pos_au1, pos_ab2, pos_ab1
 
 
-def get_adjusted_bottom_coxa_position(
+def _get_adjusted_bottom_coxa_position(
     socket_position: hou.Vector3,
     base_position: hou.Vector3,
     wedge_angle: float,
@@ -165,7 +165,7 @@ def get_adjusted_bottom_coxa_position(
     )
 
 
-def get_coxa_buffer_ratio(
+def _get_coxa_buffer_ratio(
     socket_points: list[hou.Point],
     coxa_start_points: list[hou.Point],
     support_points: list[hou.Point],
@@ -181,7 +181,7 @@ def get_coxa_buffer_ratio(
     return 1.0 - cut_length / dist_socket_to_support
 
 
-def build_coxa_socket_faces(
+def _build_coxa_socket_faces(
     geo: hou.Geometry,
     socket_points: list[hou.Point],
     socket_midpoints: list[hou.Point],
@@ -217,5 +217,4 @@ def build_coxa_socket_faces(
     fill_face([su1, sb1, mid_b, mid_u])
     fill_face([mid_u, mid_b, b_eb1, b_eu1])
     fill_face([b_eu1, b_eb1, eb1, eu1])
-
 

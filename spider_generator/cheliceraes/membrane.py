@@ -28,7 +28,7 @@ def inset_flaps(node: hou.SopNode) -> None:
     dist = ratio * lower.position().distanceTo(upper.position())
 
     chelicera_prims = prims_by_attr(geo, "region", Region.CHELICERA)
-    inner = inset_and_recess(chelicera_prims, dist / 4, dist)
+    inner = _inset_and_recess(chelicera_prims, dist / 4, dist)
     for prim in inner:
         prim.setAttribValue("region", Region.CHELICERASOCKET)
 
@@ -143,7 +143,7 @@ def inset_start_membrane(node: hou.SopNode) -> None:
 
     start_points = points_from_geo(geo, *(cheliceraestart(j) for j in range(1, 5)))
     start_prim = next(prim for prim in start_points[0].prims() if all(pt in start_points for pt in prim.points()))
-    inset_and_recess([start_prim], dist / 4, dist, delete_inset_prims=True)
+    _inset_and_recess([start_prim], dist / 4, dist, delete_inset_prims=True)
 
     for j, pt in enumerate(start_points, start=1):
         set_point_id(pt, cheliceraestartmembranesupport(j))
@@ -165,7 +165,7 @@ def adjust_start_section_left(node: hou.SopNode) -> None:
         s.setPosition(hou.Vector3(new_x, pos.y(), pos.z()))
 
 
-def inset_and_recess(
+def _inset_and_recess(
     prims: list[hou.Prim],
     inset_dist: float,
     recess_dist: float,

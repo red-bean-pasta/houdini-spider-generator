@@ -58,7 +58,7 @@ def build(
 ) -> hou.SopNode:
     pedipalp = add_reloadable_subnet(parent, "pedipalp")
     pedipalp.setInput(0, input_node)
-    add_controls(pedipalp)
+    _add_controls(pedipalp)
 
     cleaned_up = sopify_chain(
         pedipalp,
@@ -86,7 +86,7 @@ def build(
     return pedipalp
 
 
-def add_controls(parent: hou.SopNode) -> hou.SopNode:
+def _add_controls(parent: hou.SopNode) -> hou.SopNode:
     control = parent.createNode("null", "CONTROL")
     add_float_parm(
         control,

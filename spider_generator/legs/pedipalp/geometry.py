@@ -29,7 +29,7 @@ def remove_noise_points(
 def build_basic(
     node: hou.SopNode,
 ) -> None:
-    _, warnings = build_cubes(node)
+    _, warnings = _build_cubes(node)
     for w in warnings:
         node.addWarning(w)
 
@@ -46,7 +46,7 @@ def trim_bottom_side_length(
     v = m3.position() - m1.position()
     trim_length = hou.Vector3(v.x(), 0.0, v.z()).length()
 
-    pedipalp_pts = get_pedipalp_points(geo)
+    pedipalp_pts = _get_pedipalp_points(geo)
     for pt in pedipalp_pts:
         pid = pt.stringAttribValue("id")
         if pid.startswith(tmp_coxa_start()) or pid.startswith(tmp_coxa_support(1)):
@@ -59,7 +59,7 @@ def position_basic(
     node: hou.SopNode,
 ) -> None:
     geo = node.geometry()
-    pedipalp_pts = get_pedipalp_points(geo)
+    pedipalp_pts = _get_pedipalp_points(geo)
     top_right_pt, m1, m3, m4 = points_from_geo(
         geo,
         tmp_coxa_start(3),
@@ -98,10 +98,10 @@ def prepare_coxa_base_trapezoid(
 ) -> None:
     geo: hou.Geometry = node.geometry()
     control_params = get_parms(get_control(node, "CONTROL"), use_tuple=False)
-    add_bottom_right_face_point(geo, control_params.endite_buffer_ratios)
-    add_base_trapezoid(node)
+    _add_bottom_right_face_point(geo, control_params.endite_buffer_ratios)
+    _add_base_trapezoid(node)
 
-def add_bottom_right_face_point(
+def _add_bottom_right_face_point(
     geo: hou.Geometry,
     endite_buffer: hou.Vector2,
 ) -> hou.Point:
@@ -130,22 +130,22 @@ def remove_tmp_attributes(node: hou.SopNode) -> None:
 
 
 
-def build_cubes(
+def _build_cubes(
     node: hou.SopNode,
 ) -> Moject[tuple[list[hou.Point], list[hou.Point], list[hou.Point]]]:
     geo = node.geometry()
-    param = get_pedipalp_param(node)
+    param = _get_pedipalp_param(node)
     result = build_leg(geo, param)
     (all_seg_pts, _, _), _ = result
 
-    def get_ordered_loop(index: int) -> tuple[hou.Point, ...]:
+    def _get_ordered_loop(index: int) -> tuple[hou.Point, ...]:
         return all_seg_pts[index * 4 + 3], all_seg_pts[index * 4 + 1], all_seg_pts[index * 4 + 0], all_seg_pts[index * 4 + 2]
 
     # 1: Bottom left, 2: Top left, 3: Top right, 4: Bottom right
-    start_corners = get_ordered_loop(0)
-    end_corners = get_ordered_loop(3)
-    start_support_corners = get_ordered_loop(1)
-    end_support_corners = get_ordered_loop(2)
+    start_corners = _get_ordered_loop(0)
+    end_corners = _get_ordered_loop(3)
+    start_support_corners = _get_ordered_loop(1)
+    end_support_corners = _get_ordered_loop(2)
     for i, (s_pt, e_pt, ss_pt, es_pt) in enumerate(
         zip(start_corners, end_corners, start_support_corners, end_support_corners),
         start=1
@@ -157,7 +157,7 @@ def build_cubes(
 
     return result
 
-def get_pedipalp_param(
+def _get_pedipalp_param(
     node: hou.SopNode,
 ) -> LegParam:
     geo = node.geometry()
@@ -166,7 +166,7 @@ def get_pedipalp_param(
     params = get_parms(leg, use_tuple=False)
     control_params = get_parms(get_control(leg, "CONTROL"), use_tuple=False)
 
-    coxa_width_length = get_pedipalp_coxa_width_length(
+    coxa_width_length = _get_pedipalp_coxa_width_length(
         geo,
         params.front_coxa_width_length_ratios.y(),
         params.pedipalp_coxa_length,
@@ -189,7 +189,7 @@ def get_pedipalp_param(
         tarsus_wedge_angle=control_params.tarsus_wedge_angle,
     )
 
-def get_pedipalp_coxa_width_length(
+def _get_pedipalp_coxa_width_length(
     geo: hou.Geometry,
     front_coxa_length_ratio: float,
     pedipalp_coxa_length: float,
@@ -201,7 +201,7 @@ def get_pedipalp_coxa_width_length(
     length = front_coxa_length * pedipalp_coxa_length
     return width, length
 
-def get_pedipalp_points(
+def _get_pedipalp_points(
     geo: hou.Geometry,
 ) -> list[hou.Point]:
     pts = {pt for prim in prims_by_attr(geo, "region", (Region.LEGMEMBRANE, Region.LEGSEGMENT), startswith=True) for pt in prim.points()}
@@ -211,7 +211,7 @@ def get_pedipalp_points(
 
 
 
-def add_base_trapezoid(
+def _add_base_trapezoid(
     node: hou.SopNode,
 ) -> float:
     geo = node.geometry()
@@ -227,7 +227,7 @@ def add_base_trapezoid(
 
     pos_mid_bottom = (e1.position() + e4.position()) * 0.5
 
-    pos_p4, pos_p3, height = calculate_base_trapezoid_points(
+    pos_p4, pos_p3, height = _calculate_base_trapezoid_points(
         node,
         m1.position(),
         m2.position(),
@@ -244,7 +244,7 @@ def add_base_trapezoid(
 
     return height
 
-def calculate_base_trapezoid_points(
+def _calculate_base_trapezoid_points(
     node: hou.SopNode,
     pos_m1: hou.Vector3,
     pos_m2: hou.Vector3,

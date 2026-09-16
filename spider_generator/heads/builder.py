@@ -16,7 +16,7 @@ from . import topology
 def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
     head = add_reloadable_subnet(cephalothorax, "head")
     head.setInput(0, base)
-    add_parameters(head)
+    _add_parameters(head)
 
     source = head.indirectInputs()[0]
     base_rim = sopify(head, source, topology.extract_base_rim)
@@ -49,7 +49,7 @@ def build(cephalothorax: hou.SopNode, base: hou.SopNode) -> hou.SopNode:
     return head
 
 
-def add_parameters(head: hou.SopNode) -> None:
+def _add_parameters(head: hou.SopNode) -> None:
     add_float_parm(
         head,
         "height_ratio",

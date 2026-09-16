@@ -9,7 +9,7 @@ from ..helper import add_id_point, points_by_id, set_prim_attr_where_blank
 def fill_side_faces(node: hou.SopNode) -> None:
     geo = node.geometry()
     points = points_by_id(geo)
-    right_side = sorted_right_side_points(geo)
+    right_side = _sorted_right_side_points(geo)
     assert len(right_side) >= 3 and len(right_side) % 2 == 1, "Expected an odd, symmetric right-side sternum loop"
 
     center_index = (len(right_side) - 1) // 2
@@ -19,30 +19,30 @@ def fill_side_faces(node: hou.SopNode) -> None:
     back_points = right_side[:center_index]
     assert len(front_points) == len(back_points), "Expected matching front and back sternum loops"
 
-    front_ratios, back_ratios = get_head_side_layer_ratios(
+    front_ratios, back_ratios = _get_head_side_layer_ratios(
         center_position,
         front_points,
         back_points,
     )
-    head_side_points = get_head_side_reference_points(points)
-    side_points = add_head_side_layer_points(
+    head_side_points = _get_head_side_reference_points(points)
+    side_points = _add_head_side_layer_points(
         geo,
         center_position,
         head_side_points,
         front_ratios,
         back_ratios,
     )
-    current_points = fill_head_side_layer_faces(
+    current_points = _fill_head_side_layer_faces(
         geo,
         front_points,
         back_points,
         head_side_points,
         side_points,
     )
-    fill_head_side_end_faces(geo, front_points, back_points, center, current_points)
+    _fill_head_side_end_faces(geo, front_points, back_points, center, current_points)
 
 
-def get_head_side_layer_ratios(
+def _get_head_side_layer_ratios(
     center_position: hou.Vector3,
     front_points: list[hou.Point],
     back_points: list[hou.Point],
@@ -58,7 +58,7 @@ def get_head_side_layer_ratios(
     return front_ratios, back_ratios
 
 
-def get_head_side_reference_points(
+def _get_head_side_reference_points(
     points: dict[str, hou.Point],
 ) -> tuple[hou.Point, hou.Point, hou.Point]:
     headfront_point = points.get(headsupport(2))
@@ -72,7 +72,7 @@ def get_head_side_reference_points(
     return headfront_point, headmiddle_point, headback_point
 
 
-def add_head_side_layer_points(
+def _add_head_side_layer_points(
     geo: hou.Geometry,
     center_position: hou.Vector3,
     head_side_points: tuple[hou.Point, hou.Point, hou.Point],
@@ -95,15 +95,15 @@ def add_head_side_layer_points(
         middle_position = center_position + (headmiddle_position - center_position) * middle_ratio
         side_points.append(
             (
-                add_named_point(geo, front_position, headsidefront(layer)),
-                add_named_point(geo, middle_position, headsidemiddle(layer)),
-                add_named_point(geo, back_position, headsideback(layer)),
+                _add_named_point(geo, front_position, headsidefront(layer)),
+                _add_named_point(geo, middle_position, headsidemiddle(layer)),
+                _add_named_point(geo, back_position, headsideback(layer)),
             )
         )
     return side_points
 
 
-def fill_head_side_layer_faces(
+def _fill_head_side_layer_faces(
     geo: hou.Geometry,
     front_points: list[hou.Point],
     back_points: list[hou.Point],
@@ -130,7 +130,7 @@ def fill_head_side_layer_faces(
     return current_front, current_middle, current_back
 
 
-def fill_head_side_end_faces(
+def _fill_head_side_end_faces(
     geo: hou.Geometry,
     front_points: list[hou.Point],
     back_points: list[hou.Point],
@@ -141,7 +141,7 @@ def fill_head_side_end_faces(
     fill_face([current_front, front_points[-1], center, current_middle])
     fill_face([current_middle, center, back_points[-1], current_back])
 
-def sorted_right_side_points(geo: hou.Geometry) -> list[hou.Point]:
+def _sorted_right_side_points(geo: hou.Geometry) -> list[hou.Point]:
     candidates = [
         point
         for point in geo.points()
@@ -163,7 +163,7 @@ def sorted_right_side_points(geo: hou.Geometry) -> list[hou.Point]:
         right_side.append(candidate)
     return right_side
 
-def add_named_point(
+def _add_named_point(
     geo: hou.Geometry,
     position: hou.Vector3,
     point_id: str,
@@ -174,4 +174,3 @@ def add_named_point(
 def add_side_regions(node: hou.SopNode) -> None:
     geo = node.geometry()
     set_prim_attr_where_blank(geo, "region", Region.HEADSIDE)
-

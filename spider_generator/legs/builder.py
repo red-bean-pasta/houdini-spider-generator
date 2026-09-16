@@ -20,8 +20,8 @@ def build(
 ) -> hou.SopNode:
     legs = add_reloadable_subnet(spider, "legs")
     legs.setInput(0, base)
-    add_parameters(legs)
-    add_controls(legs)
+    _add_parameters(legs)
+    _add_controls(legs)
 
     extracted = sopify(legs, legs.indirectInputs()[0], topology.extract_right_coxa)
     extruded = sopify(legs, extracted, topology.extrude_legs)
@@ -38,7 +38,7 @@ def build(
     return legs
 
 
-def add_parameters(legs: hou.OpNode) -> None:
+def _add_parameters(legs: hou.OpNode) -> None:
     add_heading(legs, "Basic")
     add_float_parm(
         legs,
@@ -102,7 +102,7 @@ def add_parameters(legs: hou.OpNode) -> None:
     builder.add_parameters(legs)
 
 
-def add_controls(parent: hou.SopNode) -> hou.SopNode:
+def _add_controls(parent: hou.SopNode) -> hou.SopNode:
     control = parent.createNode("null", "CONTROL")
     add_float_parm(
         control,

@@ -28,7 +28,7 @@ def extract_base_rim(node: hou.SopNode) -> None:
 def extract_work_base(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
-    upper0_pos, upper1_pos, upper2_pos = get_chelicerae_upper_positions(geo, parent)
+    upper0_pos, upper1_pos, upper2_pos = _get_chelicerae_upper_positions(geo, parent)
 
     excluded_ids = {
         base_attributes.basesternum(1, 1),
@@ -49,7 +49,7 @@ def extract_work_base(node: hou.SopNode) -> None:
     replace_points(geo, point_data)
 
 
-def get_chelicerae_upper_positions(geo: hou.Geometry, parent: hou.OpNode) -> tuple[hou.Vector3, hou.Vector3, hou.Vector3]:
+def _get_chelicerae_upper_positions(geo: hou.Geometry, parent: hou.OpNode) -> tuple[hou.Vector3, hou.Vector3, hou.Vector3]:
     chelicerae_height_ratio = get_float_parm(parent, "chelicerae_height_ratio")
     basesternum0, basemaxilla1 = points_from_geo(geo, base_attributes.basesternum(0), base_attributes.basemaxilla(1))
     height = basemaxilla1.position().distanceTo(basesternum0.position()) * chelicerae_height_ratio
@@ -65,11 +65,11 @@ def add_corners_half(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
     points = points_by_id(geo)
-    ref = get_corner_reference_positions(geo)
+    ref = _get_corner_reference_positions(geo)
     params = get_parms(parent)
 
-    top_corners = compute_top_corners(ref, params)
-    support_points = compute_support_points(ref, top_corners, params)
+    top_corners = _compute_top_corners(ref, params)
+    support_points = _compute_support_points(ref, top_corners, params)
 
     point_data = [
         (point_id, point.position())
@@ -79,7 +79,7 @@ def add_corners_half(node: hou.SopNode) -> None:
     new_points = list(top_corners.items()) + list(support_points.items())
     replace_points(geo, point_data + new_points)
 
-def get_corner_reference_positions(geo: hou.Geometry) -> dict[str, hou.Vector3]:
+def _get_corner_reference_positions(geo: hou.Geometry) -> dict[str, hou.Vector3]:
     points = points_by_id(geo)
     expected_ids = (
         sternum_attributes.sternumrim(0),
@@ -94,7 +94,7 @@ def get_corner_reference_positions(geo: hou.Geometry) -> dict[str, hou.Vector3]:
     positions = positions_from_geo(geo, *expected_ids)
     return dict(zip(expected_ids, positions))
 
-def compute_top_corners(
+def _compute_top_corners(
     ref: dict[str, hou.Vector3],
     params: Any,
 ) -> dict[str, hou.Vector3]:
@@ -126,7 +126,7 @@ def compute_top_corners(
         headtopmiddle(0): htm0,
     }
 
-def compute_support_points(
+def _compute_support_points(
     ref: dict[str, hou.Vector3],
     top_corners: dict[str, hou.Vector3],
     params: Any,

@@ -59,11 +59,11 @@ def fill_top_face(node: hou.SopNode) -> None:
 def add_maxilla_quads(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     control_params = get_parms(get_control(node, "CONTROL"), use_tuple=False)
-    pos = get_maxilla_pole(node)
-    normal = get_averaged_maxilla_quad_normal(geo, pos)
-    add_maxilla_quads_to_geo(geo, pos, normal, control_params.endite_surface_size_ratio)
+    pos = _get_maxilla_pole(node)
+    normal = _get_averaged_maxilla_quad_normal(geo, pos)
+    _add_maxilla_quads_to_geo(geo, pos, normal, control_params.endite_surface_size_ratio)
 
-def get_maxilla_pole(node: hou.SopNode) -> hou.Vector3:
+def _get_maxilla_pole(node: hou.SopNode) -> hou.Vector3:
     geo: hou.Geometry = node.geometry()
     leg = get_leg(node)
     length_ratio = get_float_parm(leg, "endite_length_ratio")
@@ -94,7 +94,7 @@ def get_maxilla_pole(node: hou.SopNode) -> hou.Vector3:
     end_pos = start_pos + v2 * v1.dot(v2)
     return end_pos
 
-def get_averaged_maxilla_quad_normal(geo: hou.Geometry, target: hou.Vector3) -> hou.Vector3:
+def _get_averaged_maxilla_quad_normal(geo: hou.Geometry, target: hou.Vector3) -> hou.Vector3:
     pts = points_from_geo(
         geo,
         tmp_coxa_corner("front"),
@@ -111,7 +111,7 @@ def get_averaged_maxilla_quad_normal(geo: hou.Geometry, target: hou.Vector3) -> 
         total += v
     return total.normalized()
 
-def add_maxilla_quads_to_geo(
+def _add_maxilla_quads_to_geo(
         geo: hou.Geometry,
         center: hou.Vector3,
         normal: hou.Vector3,
@@ -158,7 +158,7 @@ def add_maxilla_quads_to_geo(
 def add_front_upper_face(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     control_params = get_parms(get_control(node, "CONTROL"), use_tuple=False)
-    p = add_front_face_point(geo, control_params.endite_buffer_ratios)
+    p = _add_front_face_point(geo, control_params.endite_buffer_ratios)
     es2, c6, m2 = points_from_geo(
         geo,
         tmp_coxa_support(2, 2),
@@ -167,7 +167,7 @@ def add_front_upper_face(node: hou.SopNode) -> None:
     )
     fill_face([es2, c6, m2, p])
 
-def add_front_face_point(
+def _add_front_face_point(
     geo: hou.Geometry,
     endite_buffer: hou.Vector2,
 ) -> hou.Point:
@@ -186,7 +186,7 @@ def add_front_face_point(
 def add_front_loop_faces(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
     control_params = get_parms(get_control(node, "CONTROL"), use_tuple=False)
-    p = add_loop_point(geo, control_params.endite_buffer_ratios.y())
+    p = _add_loop_point(geo, control_params.endite_buffer_ratios.y())
     es1, es2, es4, cf, cb = points_from_geo(
         geo,
         tmp_coxa_support(2, 1),
@@ -198,7 +198,7 @@ def add_front_loop_faces(node: hou.SopNode) -> None:
     fill_face([es2, cf, p, es1])
     fill_face([es1, p, cb, es4])
 
-def add_loop_point(
+def _add_loop_point(
     geo: hou.Geometry,
     endite_buffer_y: float,
 ) -> hou.Point:
