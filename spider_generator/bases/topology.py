@@ -1,75 +1,31 @@
 import math
-from enum import StrEnum, auto
-from typing import Collection
 
 import hou
 
-from houkit.attributer import add_prim_attrib, deduplicate_point_attribs, points_by_attrib
+from houkit.attributer import add_prim_attrib, deduplicate_point_attribs
 from houkit.noder import get_parent
 from houkit.parameterizer import get_float_parm
-from houkit.topology import fill_face, outset
-from . import sternum
-from .helper import (
-    affix_id,
-    deduplicate_id_attr,
+from houkit.topology import outset
+from . import coxa_flaps, membrane
+from .attributes import ID, Region, basesternum, basesternummiddle, outer_loop_ids
+from ..sternums import attributes as sternum_attributes
+from ..helper import (
     add_id_point,
+    deduplicate_id_attr,
     fill_face_with_attr,
     get_id_range,
-    inset_inner_prims,
-    points_from_geo,
     points_by_id,
-    prims_by_attr,
+    points_from_geo,
     replace_points,
     unique_points_start_with_id,
 )
-from .sternum import ID as STERNUM_ID
-from .sternum import sternumrim
-
-
-class ID(StrEnum):
-    BASESTERNUM = auto()
-    BASESTERNUMMIDDLE = auto()
-    BASEMAXILLA = auto()
-    BASEMAXILLAMEMBRANE = auto()
-    BASEMOUTHMEMBRANE = auto()
-    BASEEND = auto()
-
-
-class Region(StrEnum):
-    COXA = auto()
-    LABIUM = auto()
-    MAXILLA = auto()
-    COXASOCKET = auto()
-    COXAMEMBRANE = auto()
-    LABIUMSOCKET = auto()
-    LABIUMMEMBRANE = auto()
-    MAXILLASOCKET = auto()
-    MAXILLAMEMBRANE = auto()
-    BASEBUFFERMEMBRANE = auto()
-    BASEPEDICELMEMBRANE = auto()
-
-
-def basesternum(*i: int | str) -> str:
-    return affix_id(ID.BASESTERNUM, *i)
-def basesternummiddle(*i: int | str) -> str:
-    return affix_id(ID.BASESTERNUMMIDDLE, *i)
-def basemaxilla(*i: int | str) -> str:
-    return affix_id(ID.BASEMAXILLA, *i)
-def basemaxillamembrane(*i: int | str) -> str:
-    return affix_id(ID.BASEMAXILLAMEMBRANE, *i)
-def basemouthmembrane(*i: int | str) -> str:
-    return affix_id(ID.BASEMOUTHMEMBRANE, *i)
-def baseend(*i: int | str) -> str:
-    return affix_id(ID.BASEEND, *i)
-def outer_loop_ids() -> tuple[str, ...]:
-    return ID.BASESTERNUM, ID.BASEMAXILLA, ID.BASESTERNUMMIDDLE, ID.BASEEND
 
 
 def extract_sternum_rim(node: hou.SopNode) -> None:
     geo = node.geometry()
     sternum_rim = {
         point_id: point.position()
-        for point_id, point in unique_points_start_with_id(geo, sternum.outer_loop_ids()).items()
+        for point_id, point in unique_points_start_with_id(geo, sternum_attributes.outer_loop_ids()).items()
     }
     rim_edges = [
         tuple(point.stringAttribValue("id") for point in edge.points())
@@ -90,58 +46,7 @@ def extract_sternum_rim(node: hou.SopNode) -> None:
 
 
 def build_coxa_flaps(node: hou.SopNode) -> None:
-    geo = node.geometry()
-    parent = get_parent(node)
-
-    flap_ratio = get_float_parm(parent, "coxa_flap_extension_ratio")
-
-    flap_edges = [
-        tuple(edge.points())
-        for edge in geo.globEdges("*")
-        if not any(
-            point.stringAttribValue("id").startswith(STERNUM_ID.STERNUMSPINE)
-            for point in edge.points()
-        )
-    ]
-    assert flap_edges, "Expected sternum rim edges"
-    flap_edges.sort(
-        key=lambda edge: (
-            (edge[0].position()[2] + edge[1].position()[2]) / 2.0,
-            -(edge[0].position()[0] + edge[1].position()[0]) / 2.0,
-        )
-    )
-    geo.deletePrims(list(geo.prims()), keep_points=True)
-    for start, end in flap_edges:
-        _extrude_edge_outward(geo, start, end, flap_ratio)
-
-def _extrude_edge_outward(
-    geo: hou.Geometry,
-    start: hou.Point,
-    end: hou.Point,
-    flap_ratio: float,
-) -> None:
-    def _get_extruded_id(source: hou.Point) -> str:
-        source_id = source.stringAttribValue("id")
-        source_id = source_id.replace(STERNUM_ID.STERNUMRIM, ID.BASESTERNUM)
-        source_id = source_id.replace(STERNUM_ID.STERNUMMIDDLE, ID.BASESTERNUMMIDDLE)
-        return source_id
-
-    start_position = start.position()
-    end_position = end.position()
-    direction = end_position - start_position
-    edge_length = start_position.distanceTo(end_position)
-    assert edge_length > 1e-6, f"Expected nonzero edge from {start.number()} to {end.number()}"
-
-    outward = hou.Vector3(
-        -direction[2],
-        0.0,
-        direction[0],
-    ) / edge_length
-    offset = outward * edge_length * flap_ratio * 2.0
-
-    outer_start = add_id_point(geo, start_position + offset, _get_extruded_id(start))
-    outer_end = add_id_point(geo, end_position + offset, _get_extruded_id(end))
-    fill_face([start, end, outer_end, outer_start], True)
+    coxa_flaps.build_coxa_flaps(node)
 
 
 def add_flap_regions(node: hou.SopNode) -> None:
@@ -181,7 +86,7 @@ def adjust_front_and_end_flaps(node: hou.SopNode) -> None:
             geo,
             basesternum(side, 2),
             basesternum(side * 2, 1),
-            sternum.sternummiddle(side),
+            sternum_attributes.sternummiddle(side),
             basesternummiddle(side),
         )
         _reflect_point_across_edge(target, opposite, (sternum_middle, base_middle))
@@ -191,25 +96,10 @@ def adjust_front_and_end_flaps(node: hou.SopNode) -> None:
             geo,
             basesternum(5, target_minor),
             basesternum(side * 4, 2),
-            sternum.sternummiddle(side * 4),
+            sternum_attributes.sternummiddle(side * 4),
             basesternummiddle(side * 4),
         )
         _reflect_point_across_edge(target, opposite, (sternum_middle, base_middle))
-
-
-def _reflect_point_across_edge(
-    target: hou.Point,
-    opposite: hou.Point,
-    edge: tuple[hou.Point, hou.Point],
-) -> None:
-    edge_start, edge_end = (point.position() for point in edge)
-    edge_vector = edge_end - edge_start
-    edge_length_squared = edge_vector.dot(edge_vector)
-    assert edge_length_squared > 1e-12, "Expected distinct flap-edge endpoints"
-
-    source_offset = opposite.position() - edge_start
-    projection = edge_start + edge_vector * (source_offset.dot(edge_vector) / edge_length_squared)
-    target.setPosition(projection * 2.0 - opposite.position())
 
 
 def cleanup_connected_side_flap_ids(node: hou.SopNode) -> None:
@@ -293,7 +183,7 @@ def fill_maxilla(node: hou.SopNode) -> None:
     starts = points_from_geo(geo, basesternum(1, 1), basesternum(-1, 1))
     ends = points_from_geo(geo, basesternum(1, 2), basesternum(-1, 2))
     centers = points_from_geo(geo, basesternum(0), basesternum(0))
-    pivots = points_from_geo(geo, sternumrim(1), sternumrim(-1))
+    pivots = points_from_geo(geo, sternum_attributes.sternumrim(1), sternum_attributes.sternumrim(-1))
     add_prim_attrib(geo, "region", "")
 
     for side, (start, end, center, pivot) in enumerate(zip(starts, ends, centers, pivots)):
@@ -316,7 +206,7 @@ def fill_pedicel_membrane(node: hou.SopNode) -> None:
     geo = node.geometry()
     p5, e5_1, e5_2 = points_from_geo(
         geo,
-        sternumrim(5),
+        sternum_attributes.sternumrim(5),
         basesternum(5, 1),
         basesternum(5, 2),
     )
@@ -350,91 +240,7 @@ def adjust_mouth(node: hou.SopNode) -> None:
 
 
 def inset_membrane(node: hou.SopNode) -> None:
-    geo = node.geometry()
-    parent = get_parent(node)
-    ratio = get_float_parm(parent, "membrane_ratio")
-    points = points_by_id(geo)
-
-    _inset_coxa_membranes(geo, points, ratio)
-    _inset_membrane_region(
-        geo,
-        Region.LABIUM,
-        Region.LABIUMSOCKET,
-        Region.LABIUMMEMBRANE,
-        (points[sternumrim(0)], points[basesternum(0)]),
-        ratio,
-        follow_existing_edge=False,
-    )
-    _classify_mouth_membrane_points(geo)
-    _inset_membrane_region(
-        geo,
-        Region.MAXILLA,
-        Region.MAXILLASOCKET,
-        Region.MAXILLAMEMBRANE,
-        (points[sternumrim(1)], points[basesternum(1, 1)]),
-        ratio,
-        follow_existing_edge=False,
-    )
-
-    _classify_maxilla_membrane_points(geo)
-    deduplicate_id_attr(geo, None, add_affix=False)
-
-def _inset_coxa_membranes(geo: hou.Geometry, points: dict[str, hou.Point], ratio: float) -> None:
-    side_indices = (*range(1, 5), *range(-4, 0))
-    for idx in side_indices:
-        sm = points[sternum.sternummiddle(idx)]
-        bsm = points[basesternummiddle(idx)]
-        dist = ratio * sm.position().distanceTo(bsm.position())
-        prims = prims_by_attr(sm.prims(), "region", Region.COXA)
-        inner_prims = inset_inner_prims(geo, prims, dist, use_ratio=False, follow_existing_edge=True)
-        for prim in inner_prims:
-            prim.setAttribValue("region", Region.COXASOCKET)
-
-    for prim in prims_by_attr(geo, "region", Region.COXA):
-        prim.setAttribValue("region", Region.COXAMEMBRANE)
-
-def _inset_membrane_region(
-    geo: hou.Geometry,
-    region: Region,
-    socket_region: Region,
-    membrane_region: Region,
-    baseline: tuple[hou.Point, hou.Point],
-    ratio: float,
-    follow_existing_edge: bool = True,
-) -> None:
-    inner_pt, outer_pt = baseline
-    dist = ratio * inner_pt.position().distanceTo(outer_pt.position())
-    prims = prims_by_attr(geo, "region", region)
-    inner_prims = inset_inner_prims(
-        geo,
-        prims,
-        dist,
-        use_ratio=False,
-        follow_existing_edge=follow_existing_edge,
-    )
-    for prim in inner_prims:
-        prim.setAttribValue("region", socket_region)
-    for prim in prims_by_attr(geo, "region", region):
-        prim.setAttribValue("region", membrane_region)
-
-def _classify_maxilla_membrane_points(geo: hou.Geometry) -> None:
-    points_by_id_dict = points_by_attrib(geo, "id", skip_blank=True)
-    for side in (1, -1):
-        for index, name in enumerate(
-            (sternumrim(side), basesternum(side, 1), basemaxilla(side), basesternum(side, 2)),
-            start=1
-        ):
-            _id_last_point(points_by_id_dict[name], basemaxillamembrane(side * index))
-
-
-def _classify_mouth_membrane_points(geo: hou.Geometry) -> None:
-    pts = points_by_attrib(geo, "id", skip_blank=True)
-    for side in (1, -1):
-        _id_last_point(pts[sternumrim(side)], basemouthmembrane("lower", side))
-        _id_last_point(pts[basesternum(side, 1)], basemouthmembrane("upper", side))
-
-    _id_last_point(pts[sternumrim(0)], basemouthmembrane("lower", 0))
-    _id_last_point(pts[basesternum(0)], basemouthmembrane("upper", 0))
+    membrane.inset_membrane(node)
 
 
 def extrude_base_buffer(node: hou.SopNode) -> None:
@@ -453,6 +259,16 @@ def extrude_base_buffer(node: hou.SopNode) -> None:
     deduplicate_point_attribs(geo, "id", outer_loop_ids(), keep_first=False)
 
 
-def _id_last_point(points: Collection[hou.Point], value: str) -> None:
-    p = max(points, key=lambda point: point.number())
-    p.setAttribValue("id", value)
+def _reflect_point_across_edge(
+    target: hou.Point,
+    opposite: hou.Point,
+    edge: tuple[hou.Point, hou.Point],
+) -> None:
+    edge_start, edge_end = (point.position() for point in edge)
+    edge_vector = edge_end - edge_start
+    edge_length_squared = edge_vector.dot(edge_vector)
+    assert edge_length_squared > 1e-12, "Expected distinct flap-edge endpoints"
+
+    source_offset = opposite.position() - edge_start
+    projection = edge_start + edge_vector * (source_offset.dot(edge_vector) / edge_length_squared)
+    target.setPosition(projection * 2.0 - opposite.position())

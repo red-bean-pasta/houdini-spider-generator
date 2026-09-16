@@ -1,6 +1,6 @@
 import hou
 
-from . import base_sops
+from .bases import attributes as base_attributes
 from .base import build as build_base
 from .chelicerae import build as build_chelicerae
 from .head import build as build_head
@@ -45,7 +45,7 @@ def _propagate_subnets(cephalothorax: hou.SopNode) -> None:
 def _position_cephalothorax(parent: hou.SopNode, source: hou.SopNode) -> hou.SopNode:
     position = parent.createNode("xform", "position_cephalothorax")
     position.setInput(0, source)
-    pattern = f'pointpattern(0, "@id={base_sops.baseend(0)}")'
+    pattern = f'pointpattern(0, "@id={base_attributes.baseend(0)}")'
     for axis_index, axis_name in enumerate(("tx", "ty", "tz")):
         position.parm(axis_name).setExpression(f'0 - point(0, {pattern}, "P", {axis_index})')
     return position

@@ -2,7 +2,8 @@ from enum import StrEnum, auto
 
 import hou
 
-from . import abdomen, spider
+from .spiders import attributes as spider_attributes
+from .abdomens import attributes as abdomen_attributes
 from .helper import (
     affix_id,
     points_from_geo,
@@ -55,18 +56,18 @@ def _extract_needed_points(node: hou.SopNode) -> None:
     points = points_by_id(geo)
 
     needed_ids = (
-        spider.cephapedicelupper(),
-        spider.cephapedicelright(),
-        spider.cephapedicelleft(),
-        spider.cephapedicellower(),
-        abdomen.abdomenverticalrim(1),
-        abdomen.abdomenverticalrim(-1),
-        abdomen.abdomenhorizontalrim(1),
-        abdomen.abdomenhorizontalrim(-1),
-        abdomen.abdomensideupper(1),
-        abdomen.abdomensideupper(-1),
-        abdomen.abdomensidelower(1),
-        abdomen.abdomensidelower(-1),
+        spider_attributes.cephapedicelupper(),
+        spider_attributes.cephapedicelright(),
+        spider_attributes.cephapedicelleft(),
+        spider_attributes.cephapedicellower(),
+        abdomen_attributes.abdomenverticalrim(1),
+        abdomen_attributes.abdomenverticalrim(-1),
+        abdomen_attributes.abdomenhorizontalrim(1),
+        abdomen_attributes.abdomenhorizontalrim(-1),
+        abdomen_attributes.abdomensideupper(1),
+        abdomen_attributes.abdomensideupper(-1),
+        abdomen_attributes.abdomensidelower(1),
+        abdomen_attributes.abdomensidelower(-1),
     )
 
     point_data = []
@@ -96,18 +97,18 @@ def _connect_pedicel(node: hou.SopNode) -> None:
         abdomensidelower_neg1,
     ) = points_from_geo(
         geo,
-        spider.cephapedicelupper(),
-        spider.cephapedicelright(),
-        spider.cephapedicelleft(),
-        spider.cephapedicellower(),
-        abdomen.abdomenverticalrim(1),
-        abdomen.abdomenverticalrim(-1),
-        abdomen.abdomenhorizontalrim(1),
-        abdomen.abdomenhorizontalrim(-1),
-        abdomen.abdomensideupper(1),
-        abdomen.abdomensideupper(-1),
-        abdomen.abdomensidelower(1),
-        abdomen.abdomensidelower(-1),
+        spider_attributes.cephapedicelupper(),
+        spider_attributes.cephapedicelright(),
+        spider_attributes.cephapedicelleft(),
+        spider_attributes.cephapedicellower(),
+        abdomen_attributes.abdomenverticalrim(1),
+        abdomen_attributes.abdomenverticalrim(-1),
+        abdomen_attributes.abdomenhorizontalrim(1),
+        abdomen_attributes.abdomenhorizontalrim(-1),
+        abdomen_attributes.abdomensideupper(1),
+        abdomen_attributes.abdomensideupper(-1),
+        abdomen_attributes.abdomensidelower(1),
+        abdomen_attributes.abdomensidelower(-1),
     )
 
     ratio = 1.0 - 0.035
