@@ -7,22 +7,36 @@ from houkit.geomath import rotation_to
 from houkit.noder import get_control, get_parent
 from houkit.parameterizer import get_float_parm, get_parms
 from houkit.topology import fill_face, fill_pentagon_with_buffer, points_to_positions
-from .coxa import get_front_coxa_socket_size
+from ..bases.attributes import basecoxamemebrane, basecoxamembranemiddle
+from ..helper import points_from_geo
+from .pedipalp.attributes import tmp_front_socket_size
 from .attributes import LegParam
 from .cubes import build_leg
+
 
 def extrude_legs(
     node: hou.SopNode,
 ) -> None:
     geo = node.geometry()
-    corners = geo.attribValue("tmp_coxa_corners")
-    midpoints = geo.attribValue("tmp_coxa_midpoints")
 
     for i in range(4):
-        pt_nums = corners[i * 4:(i + 1) * 4]
-        pts = [geo.iterPoints()[p] for p in pt_nums]
-        mid_pt_nums = midpoints[i * 2:(i + 1) * 2]
-        mid_pts = [geo.iterPoints()[p] for p in mid_pt_nums]
+        leg_idx = i + 1
+        pts = list(
+            points_from_geo(
+                geo,
+                basecoxamemebrane(leg_idx, 4),
+                basecoxamemebrane(leg_idx, 3),
+                basecoxamemebrane(leg_idx, 1),
+                basecoxamemebrane(leg_idx, 2),
+            )
+        )
+        mid_pts = list(
+            points_from_geo(
+                geo,
+                basecoxamembranemiddle(leg_idx, 2),
+                basecoxamembranemiddle(leg_idx, 1),
+            )
+        )
 
         # sz: small Z, bz: big Z
         pos_top_sz, pos_top_bz, pos_btm_sz, pos_btm_bz = points_to_positions(pts)
@@ -44,6 +58,7 @@ def extrude_legs(
 
         _adjust_coxa(node, pts, mid_pts, seg_pts[:16])
 
+
 def _get_leg_param(
     node: hou.SopNode,
     leg_index: int,
@@ -54,7 +69,7 @@ def _get_leg_param(
     params = get_parms(parent, use_tuple=False)
     control_params = get_parms(get_control(parent, "CONTROL"), use_tuple=False)
 
-    front_socket_width, _ = get_front_coxa_socket_size(geo)
+    front_socket_width, _ = geo.attribValue(tmp_front_socket_size())
     front_coxa_width = front_socket_width * params.front_coxa_width_length_ratios.x()
     front_coxa_length = front_socket_width * params.front_coxa_width_length_ratios.y()
 
@@ -217,4 +232,3 @@ def _build_coxa_socket_faces(
     fill_face([su1, sb1, mid_b, mid_u])
     fill_face([mid_u, mid_b, b_eb1, b_eu1])
     fill_face([b_eu1, b_eb1, eb1, eu1])
-

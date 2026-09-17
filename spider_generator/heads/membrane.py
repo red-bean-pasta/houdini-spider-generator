@@ -1,10 +1,12 @@
 import hou
 
-from ..helper import deduplicate_id_attr, points_from_geo, set_point_id
+from houkit.topologies.basic import remove_unused_points
 from houkit.attributer import points_by_attrib
 from houkit.noder import get_parent
 from houkit.parameterizer import get_parms
 from houkit.topology import inset, offset_point
+
+from ..helper import deduplicate_id_attr, points_from_geo, set_point_id
 from .attributes import headbasesupport, headchelicerae, headfront, headfrontfloat, headfrontmid, headsupport
 from .helper import get_head_base_loop_width
 
@@ -66,6 +68,4 @@ def extrude_lip(node: hou.SopNode) -> None:
 
 def cleanup(node: hou.SopNode) -> None:
     geo = node.geometry()
-    unused = [p for p in geo.points() if not p.prims()]
-    if unused:
-        geo.deletePoints(unused)
+    remove_unused_points(geo)

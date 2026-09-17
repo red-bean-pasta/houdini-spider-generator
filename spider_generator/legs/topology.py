@@ -1,11 +1,15 @@
 from hou import SopNode
 
-from . import coxa, geometry as leg_geometry
-from .pedipalp import faces, geometry as pedipalp_geometry
+from . import coxa as leg_coxa, geometry as leg_geometry
+from .pedipalp import coxa as pedipalp_coxa, geometry as pedipalp_geometry
+
+
+def prepare_attributed_data(node: SopNode) -> None:
+    leg_coxa.prepare_attributed_data(node)
 
 
 def extract_right_coxa(node: SopNode) -> None:
-    coxa.extract_right_coxa(node)
+    leg_coxa.extract_right_coxa(node)
 
 
 def extrude_legs(node: SopNode) -> None:
@@ -13,7 +17,7 @@ def extrude_legs(node: SopNode) -> None:
 
 
 def remove_tmp_attributes(node: SopNode) -> None:
-    coxa.remove_tmp_attributes(node)
+    leg_coxa.remove_tmp_attributes(node)
 
 
 def remove_noise_points(node: SopNode) -> None:
@@ -40,33 +44,33 @@ def prepare_coxa_base_trapezoid(node: SopNode) -> None:
     pedipalp_geometry.prepare_coxa_base_trapezoid(node)
 
 
-def fill_bottom_right_face(node: SopNode) -> None:
-    faces.fill_bottom_right_face(node)
+def fill_pedipalp_bottom_right_face(node: SopNode) -> None:
+    pedipalp_coxa.fill_bottom_right_face(node)
 
 
-def fill_back_face(node: SopNode) -> None:
-    faces.fill_back_face(node)
+def fill_pedipalp_back_face(node: SopNode) -> None:
+    pedipalp_coxa.fill_back_face(node)
 
 
-def fill_top_face(node: SopNode) -> None:
-    faces.fill_top_face(node)
+def fill_pedipalp_top_face(node: SopNode) -> None:
+    pedipalp_coxa.fill_top_face(node)
 
 
-def add_front_upper_face(node: SopNode) -> None:
-    faces.add_front_upper_face(node)
+def add_pedipalp_front_upper_face(node: SopNode) -> None:
+    pedipalp_coxa.add_front_upper_face(node)
 
 
-def add_front_loop_faces(node: SopNode) -> None:
-    faces.add_front_loop_faces(node)
+def add_pedipalp_front_loop_faces(node: SopNode) -> None:
+    pedipalp_coxa.add_front_loop_faces(node)
 
 
-def add_maxilla_quads(node: SopNode) -> None:
-    faces.add_maxilla_quads(node)
+def add_pedipalp_maxilla_quads(node: SopNode) -> None:
+    pedipalp_coxa.add_maxilla_quads(node)
 
 
-def fill_maxilla_faces(node: SopNode) -> None:
-    faces.fill_maxilla_faces(node)
+def fill_pedipalp_maxilla_faces(node: SopNode) -> None:
+    pedipalp_coxa.fill_maxilla_faces(node)
 
 
-def remove_pedipalp_tmp_attributes(node: SopNode) -> None:
-    pedipalp_geometry.remove_tmp_attributes(node)
+def cleanup_pedipalp(node: SopNode) -> None:
+    pedipalp_geometry.cleanup(node)

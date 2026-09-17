@@ -1,14 +1,16 @@
 import hou
 
-from houkit.geomath import get_line_face_intersection
+from houkit.geomath import get_line_face_intersection, is_zero_approx
 from houkit.noder import get_control
 from houkit.parameterizer import get_float_parm, get_parms
 from houkit.topology import fill_face
+
+from .attributes import tmp_coxa_corner, tmp_coxa_end, tmp_coxa_start, tmp_coxa_support, tmp_maxilla_pole, tmp_chelicerae_start_z
+from .geometry import get_buffer_dist_z, get_coxa_base_direction
+from .helper import get_leg
 from ...bases.attributes import basemaxillamembrane
 from ...helper import add_id_point, points_from_geo, positions_from_geo
-from .attributes import tmp_coxa_base_height, tmp_coxa_corner, tmp_coxa_end, tmp_coxa_start, tmp_coxa_support, tmp_maxilla_pole
-from .geometry import get_buffer_dist_z, get_coxa_direction
-from .helper import get_leg
+
 
 def fill_bottom_right_face(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
@@ -36,8 +38,6 @@ def fill_back_face(node: hou.SopNode) -> None:
 
 def fill_top_face(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
-    dist = geo.attribValue(tmp_coxa_base_height())
-    direction = get_coxa_direction(geo)
 
     e2, m2, m3, m4, es2, es3 = points_from_geo(
         geo,
@@ -46,14 +46,21 @@ def fill_top_face(node: hou.SopNode) -> None:
         basemaxillamembrane(3),
         basemaxillamembrane(4),
         tmp_coxa_support(2, 2),
-        tmp_coxa_support(2, 3)
+        tmp_coxa_support(2, 3),
     )
 
-    pos = e2.position() + direction * dist
-    c6 = add_id_point(geo, pos, tmp_coxa_corner("fronttop"))
+    direction = get_coxa_base_direction(geo)
+    assert not is_zero_approx(direction.z())
 
-    fill_face([es3, m4, c6, es2])
-    fill_face([m4, m3, m2, c6])
+    target_z = geo.floatAttribValue(tmp_chelicerae_start_z())
+    z_offset = target_z - e2.position().z()
+    offset = z_offset / direction.z() * direction
+    pos = e2.position() + offset
+
+    cf = add_id_point(geo, pos, tmp_coxa_corner("fronttop"))
+
+    fill_face([es3, m4, cf, es2])
+    fill_face([m4, m3, m2, cf])
 
 
 def add_maxilla_quads(node: hou.SopNode) -> None:
@@ -177,7 +184,7 @@ def _add_front_face_point(
         tmp_coxa_end(2),
     )
     dist = get_buffer_dist_z(geo, endite_buffer.y())
-    direction = get_coxa_direction(geo)
+    direction = get_coxa_base_direction(geo)
     start = e1.position() * endite_buffer.x() + e2.position() * (1.0 - endite_buffer.x())
     target = start + direction * dist
     return add_id_point(geo, target, tmp_coxa_corner("front"))
@@ -207,7 +214,7 @@ def _add_loop_point(
         tmp_coxa_end(1),
     )
     dist = get_buffer_dist_z(geo, endite_buffer_y)
-    direction = get_coxa_direction(geo)
+    direction = get_coxa_base_direction(geo)
     target = e1.position() + direction * dist
     return add_id_point(geo, target, tmp_coxa_corner("frontbottom"))
 

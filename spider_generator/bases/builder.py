@@ -5,12 +5,11 @@ from houkit.noder import (
     add_merge,
     add_output,
     add_reloadable_subnet,
-    sopify,
 )
 from houkit.parameterizer import add_float_parm, promote_subnets
+from . import topology
 from .. import sternum
 from ..helper import sopify_chain
-from . import topology
 
 
 def build(cephalothorax: hou.SopNode) -> hou.SopNode:

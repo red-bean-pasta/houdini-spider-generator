@@ -9,7 +9,6 @@ from houkit.noder import (
     sopify,
 )
 from houkit.parameterizer import add_float_parm, add_heading
-
 from . import topology
 from .pedipalp import builder
 
@@ -23,7 +22,8 @@ def build(
     _add_parameters(legs)
     _add_controls(legs)
 
-    extracted = sopify(legs, legs.indirectInputs()[0], topology.extract_right_coxa)
+    prepared = sopify(legs, legs.indirectInputs()[0], topology.prepare_attributed_data)
+    extracted = sopify(legs, prepared, topology.extract_right_coxa)
     extruded = sopify(legs, extracted, topology.extrude_legs)
 
     pedipalp_built = builder.build(legs, extracted)

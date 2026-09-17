@@ -54,6 +54,7 @@ def inset_membrane(node: hou.SopNode) -> None:
     )
 
     _classify_maxilla_membrane_points(geo)
+    _adjust_maxilla_upper_membrane(geo)
     deduplicate_id_attr(geo, None, add_affix=False)
 
 
@@ -196,6 +197,18 @@ def _classify_maxilla_membrane_points(geo: hou.Geometry) -> None:
             start=1
         ):
             _id_last_point(points_by_id_dict[name], basemaxillamembrane(side * index))
+
+
+def _adjust_maxilla_upper_membrane(geo: hou.Geometry) -> None:
+    points = points_by_id(geo)
+    for side in (1, -1):
+        target_y = points[basecoxamemebrane(side, 4)].position().y()
+        lower = points[basemaxillamembrane(side)]
+        for index in (2, 3, 4):
+            upper = points[basemaxillamembrane(side * index)]
+            direction = upper.position() - lower.position()
+            assert abs(direction.y()) > 1e-6, "Expected maxilla membrane line to have vertical extent"
+            move_points((target_y - upper.position().y()) / direction.y(), direction, upper)
 
 
 def _classify_mouth_membrane_points(geo: hou.Geometry) -> None:

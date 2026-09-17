@@ -1,8 +1,9 @@
 import hou
 
+from houkit.topologies.basic import remove_unused_points
 from ...bases.attributes import basemaxillamembrane
 from ...helper import add_id_point, points_from_geo, positions_from_geo, prims_by_attr, set_point_id
-from houkit.attributer import add_global_attrib, points_by_attrib, points_start_with, remove_attribs
+from houkit.attributer import points_by_attrib, points_start_with, remove_attribs
 from houkit.geomath import rotation_to
 from houkit.models import Moject
 from houkit.noder import get_control
@@ -10,7 +11,8 @@ from houkit.parameterizer import get_float_parm, get_parms
 from houkit.topology import fill_face
 from ..attributes import LegParam, Region
 from ..cubes import build_leg
-from .attributes import tmp_coxa_base_height, tmp_coxa_corner, tmp_coxa_end, tmp_coxa_start, tmp_coxa_support, tmp_front_socket_width
+from .attributes import tmp_coxa_corner, tmp_coxa_end, tmp_coxa_start, tmp_coxa_support, tmp_front_socket_size, \
+    tmp_chelicerae_start_z
 from .helper import get_leg
 
 
@@ -18,13 +20,9 @@ def remove_noise_points(
     node: hou.SopNode,
 ) -> None:
     geo = node.geometry()
-    from ..coxa import get_front_coxa_socket_size
-    front_socket_width, _ = get_front_coxa_socket_size(geo)
-    add_global_attrib(geo, tmp_front_socket_width(), front_socket_width)
-    pts = points_by_attrib(geo, "id", False)
-    to_delete = pts.get("", None)
-    if to_delete:
-        geo.deletePoints(list(to_delete))
+
+    pts = points_start_with(geo, "id", basemaxillamembrane())
+    geo.deletePoints(list(p for p in geo.points() if p not in pts))
 
 
 def build_basic(
@@ -113,7 +111,7 @@ def _add_bottom_right_face_point(
         basemaxillamembrane(1),
     )
 
-    direction = get_coxa_direction(geo)
+    direction = get_coxa_base_direction(geo)
 
     start_position = e1.position() * endite_buffer.x() + e4.position() * (1.0 - endite_buffer.x())
     dist = get_buffer_dist_z(geo, endite_buffer.y())
@@ -122,13 +120,15 @@ def _add_bottom_right_face_point(
     return p
 
 
-def remove_tmp_attributes(node: hou.SopNode) -> None:
+def cleanup(node: hou.SopNode) -> None:
     geo: hou.Geometry = node.geometry()
+
     pts = points_start_with(geo, "id", "tmp_")
     for p in pts:
         set_point_id(p, "")
-    remove_attribs(geo, global_attributes=(tmp_front_socket_width(),))
+    remove_attribs(geo, global_attributes=(tmp_chelicerae_start_z(),))
 
+    remove_unused_points(geo)
 
 
 def _build_cubes(
@@ -197,7 +197,7 @@ def _get_pedipalp_coxa_width_length(
 ) -> tuple[float, float]:
     m3, m4 = positions_from_geo(geo, basemaxillamembrane(3), basemaxillamembrane(4))
     width = m3.distanceTo(m4)
-    front_socket_width = geo.attribValue(tmp_front_socket_width())
+    front_socket_width, _ = geo.attribValue(tmp_front_socket_size())
     front_coxa_length = front_socket_width * front_coxa_length_ratio
     length = front_coxa_length * pedipalp_coxa_length
     return width, length
@@ -241,7 +241,6 @@ def _add_base_trapezoid(
     p4 = add_id_point(geo, pos_p4, tmp_coxa_corner("base", 2))
 
     fill_face([m1, m2, p3, p4], reverse=True)
-    add_global_attrib(geo, tmp_coxa_base_height(), height)
 
     return height
 
@@ -295,7 +294,7 @@ def _calculate_base_trapezoid_points(
     return pos_p4, pos_p3, height
 
 
-def get_coxa_direction(geo: hou.Geometry) -> hou.Vector3:
+def get_coxa_base_direction(geo: hou.Geometry) -> hou.Vector3:
     es3, e3 = points_from_geo(
         geo,
         tmp_coxa_support(2, 3),

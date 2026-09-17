@@ -1,10 +1,15 @@
 import hou
 
+from houkit.attributer import add_global_attrib
 from houkit.noder import add_fuse, add_output, add_reloadable_subnet
 from houkit.parameterizer import add_float_parm, add_heading
+
+from .attributes import tmp_chelicerae_start_z
 from ...bases.attributes import basemaxillamembrane
 from ...helper import points_from_geo, sopify_chain
+from ...cheliceraes.attributes import cheliceraestartmembranesupport
 from .. import topology
+
 
 def add_parameters(subnet: hou.OpNode) -> None:
     add_heading(
@@ -39,7 +44,19 @@ def add_parameters(subnet: hou.OpNode) -> None:
     )
 
 
-def prepare(
+def prepare_attributed_data(geo: hou.Geometry) -> None:
+    cs4, = points_from_geo(
+        geo,
+        cheliceraestartmembranesupport(4),
+    )
+    add_global_attrib(
+        geo,
+        tmp_chelicerae_start_z(),
+        cs4.position().z()
+    )
+
+
+def extract_required_points(
     geo: hou.Geometry
 ) -> set[hou.Point]:
     retained = points_from_geo(
@@ -70,14 +87,14 @@ def build(
             topology.position_basic,
             topology.delete_start_coxa_supports,
             topology.prepare_coxa_base_trapezoid,
-            topology.fill_bottom_right_face,
-            topology.fill_back_face,
-            topology.fill_top_face,
-            topology.add_front_upper_face,
-            topology.add_front_loop_faces,
-            topology.add_maxilla_quads,
-            topology.fill_maxilla_faces,
-            topology.remove_pedipalp_tmp_attributes,
+            topology.fill_pedipalp_bottom_right_face,
+            topology.fill_pedipalp_back_face,
+            topology.fill_pedipalp_top_face,
+            topology.add_pedipalp_front_upper_face,
+            topology.add_pedipalp_front_loop_faces,
+            topology.add_pedipalp_maxilla_quads,
+            topology.fill_pedipalp_maxilla_faces,
+            topology.cleanup_pedipalp,
         ),
     )
     fused = add_fuse(pedipalp, "fuse_sockets", cleaned_up)
