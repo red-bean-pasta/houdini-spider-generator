@@ -86,9 +86,9 @@ def _add_parameters(base: hou.SopNode) -> None:
     add_float_parm(
         base,
         "membrane_ratio",
-        1,
-        0.02,
+        3,
+        (0.02, 0.1, 0.02),
         (0.0, None),
         label="Membrane Width",
-        help="Shared cephalothorax setting. Each region applies it against its own local membrane scale.",
+        help="X (1st) sets side membrane width. Y (2nd) sets upper membrane width. Z (3rd) sets lower membrane width.",
     )

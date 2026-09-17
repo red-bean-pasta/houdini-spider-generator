@@ -4,7 +4,7 @@ import hou
 
 from houkit.attributer import add_prim_attrib, deduplicate_point_attribs
 from houkit.noder import get_parent
-from houkit.parameterizer import get_float_parm
+from houkit.parameterizer import get_float_parm, get_vector3_parm
 from houkit.topology import outset
 from . import coxa_flaps, membrane, hinge_retopology
 from .attributes import ID, Region, basesternum, basesternummiddle, outer_loop_ids
@@ -252,7 +252,7 @@ def extrude_base_buffer(node: hou.SopNode) -> None:
     geo = node.geometry()
     parent = get_parent(node)
 
-    dist = get_float_parm(parent, "membrane_ratio") * 50
+    dist = get_vector3_parm(parent, "membrane_ratio").x() * 50
     outer_prims = [
         prim
         for component in outset(list(geo.prims()), dist, use_ratio=False).values()

@@ -14,7 +14,7 @@ from houkit.attributer import (
     unique_points_start_with, )
 from houkit.formatter import affix_text
 from houkit.noder import sopify
-from houkit.topology import add_point, fill_face, fill_face_by_attrib, inset
+from houkit.topology import add_point, fill_face, fill_face_by_attrib, inset, offset_point
 
 
 def affix_id(prefix: str, *affixes: int | str | float) -> str:
@@ -107,6 +107,16 @@ def sopify_chain(
         current = sopify(parent, current, stage)
     assert current is not None, "Expected a chain with at least one stage"
     return current
+
+
+def move_points(
+    ratio: float,
+    direction: hou.Vector3,
+    *points: hou.Point,
+) -> None:
+    offset = direction * ratio
+    for point in points:
+        offset_point(point, offset)
 
 
 def points_from_loop_cut(

@@ -1,10 +1,10 @@
 import hou
 
 from houkit.attributer import deduplicate_point_attribs, latest_points_by_attrib, points_by_attrib
-from houkit.topology import extrude, offset_point
+from houkit.topology import extrude
 from ..bases import attributes as base_attributes
 from ..bases.attributes import basemouthmembrane
-from ..helper import points_by_id, prims_by_attr
+from ..helper import move_points, points_by_id, prims_by_attr
 from ..sternums import attributes as sternum_attributes
 from .attributes import Region, mouth
 
@@ -27,24 +27,14 @@ def adjust_mouth_points(node: hou.SopNode) -> None:
 
     vertical_dir = lower_pts[1].position() - upper_pts[1].position()
     assert vertical_dir.length() > 1e-6
-    _move_points(1 / 3, vertical_dir, *upper_pts)
-    _move_points(-1 / 6, vertical_dir, *lower_pts)
+    move_points(1 / 3, vertical_dir, *upper_pts)
+    move_points(-1 / 6, vertical_dir, *lower_pts)
 
     for pts in (upper_pts, lower_pts):
         horizontal_dir = pts[0].position() - pts[2].position()
         assert horizontal_dir.length() > 1e-6
-        _move_points(1 / 6, horizontal_dir, pts[2])
-        _move_points(-1 / 6, horizontal_dir, pts[0])
-
-
-def _move_points(
-    ratio: float,
-    direction: hou.Vector3,
-    *points: hou.Point,
-) -> None:
-    offset = direction * ratio
-    for point in points:
-        offset_point(point, offset)
+        move_points(1 / 6, horizontal_dir, pts[2])
+        move_points(-1 / 6, horizontal_dir, pts[0])
 
 
 def _query_mouth_prims(geo: hou.Geometry) -> list[hou.Prim]:
