@@ -5,7 +5,7 @@ apply: always
 > You must follow these rules and carry them out through the whole conversation.
 
 # Background
-This project aims to model a biologically justifiable spider in Houdini. It generates SOPs using Houdini Object Model (HOM) in Python. The API module in Python is `hou`. The executable is `hython`. The scope is restricted under `.../models/spider/generator/`, and there's no need to inspect upwards. Prefer building small SOPs and breaking down a big task into multiple steps. SOPs allows easy inspecting and modular designing. Insides one SOP, prefer modular methods. It's encouraged to write reusable methods, helper methods, wrapper methods, and methods simply for purpose documenting and logical grouping. breaking down into multiple.
+This project aims to model a biologically justifiable spider in Houdini. It generates SOPs using Houdini Object Model (HOM) in Python. The API module in Python is `hou`. The executable is `hython`. The scope is restricted under `.../models/spider/generator/`, and there's no need to inspect upwards. Prefer building small SOPs and breaking down a big task into multiple steps. SOPs allows easy inspecting and modular designing. Insides one SOP, prefer modular methods. It's encouraged to write reusable methods, helper methods, wrapper methods. Even if a method isn't reused, breaking one "god" method into multiple methods helps self-documenting and clean up logic. 
 
 # Other coding conventions
 No need for over-defensiveness. `assert` is natively supported in HOM. Keep the code concise. By "concise", I don't mean use a lot of abbreviations or inappropriate one-liners, but no boilerplate and repetitiveness. Make the code easy to understand. New lines should be used mainly for logical grouping rather than viewport carriage. You can add comments to annotate a code block. You can use abbreviations for variable naming if the method is modular and short. You can add comment behind the variable to annotate the full name at its first appearence.
@@ -27,7 +27,7 @@ You can use MCP or `python.read` to read out-of-scope files.
 No Latex Output. Use only MarkDown. LaTex have problem rendering in PyCharm.
 You can use git stash, commit and branch. But those are quite powerful moves so always clarify your intent then ask for permit. 
 Response when you are confident enough. Don't be paranoid and spend forever verifying or inspecting. Those efforts are not appreciated.
-You can always record your thoughts, findings, summaries or any other necessary stuff to `.aiassistant/temp/`.
+You can always record your thoughts, findings, summaries or any other necessary stuff to `.aiassistant/tmp/`, if it helps your work.
 
 # Examples
 ## Example for inspecting output HIP file
@@ -77,3 +77,12 @@ An agent like you have different thinking chains and preparation steps given a t
 It may actually help you to give better output by determining a mode for each quest yourself, so you can choose actually one if the user didn't specify.
 By default, the mode should be [Static Pre] if neither of you and the user specified.
 Output the mode at the beginning of every of your response, whether already specified, pretty obvious or not.
+
+
+# To iterate
+- break down methods
+- raise on questions
+- prefer ACP tools
+- don't overthink
+- `.aiassistant/tmp/` is your notebook
+- modes like [static pre]
