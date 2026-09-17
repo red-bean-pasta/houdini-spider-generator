@@ -52,7 +52,11 @@ def build(cephalothorax: hou.SopNode) -> hou.SopNode:
 
     merge = add_merge(base, "merge_sternum_and_coxa", membrane, sternum_node)
     fuse = add_fuse(base, "fuse_sternum_and_coxa", merge)
-    buffered = sopify(base, fuse, topology.extrude_base_buffer)
+    buffered = sopify_chain(
+        base,
+        fuse,
+        (topology.extrude_base_buffer, ),
+    )
     add_output(base, "OUT_BASE", buffered)
 
     promote_subnets(base)

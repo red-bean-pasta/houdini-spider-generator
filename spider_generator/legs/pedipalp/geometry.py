@@ -22,7 +22,9 @@ def remove_noise_points(
     front_socket_width, _ = get_front_coxa_socket_size(geo)
     add_global_attrib(geo, tmp_front_socket_width(), front_socket_width)
     pts = points_by_attrib(geo, "id", False)
-    geo.deletePoints(list(pts[""]))
+    to_delete = pts.get("", None)
+    if to_delete:
+        geo.deletePoints(list(to_delete))
 
 
 def build_basic(

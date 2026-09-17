@@ -7,6 +7,8 @@ from houkit.noder import get_parent
 from houkit.parameterizer import get_float_parm
 from .attributes import (
     Region,
+    basecoxamemebrane,
+    basecoxamembranemiddle,
     basemaxilla,
     basemaxillamembrane,
     basemouthmembrane,
@@ -55,12 +57,17 @@ def inset_membrane(node: hou.SopNode) -> None:
 
 def _inset_coxa_membranes(geo: hou.Geometry, points: dict[str, hou.Point], ratio: float) -> None:
     side_indices = (*range(1, 5), *range(-4, 0))
-    for idx in side_indices:
-        sm = points[sternum_attributes.sternummiddle(idx)]
-        bsm = points[basesternummiddle(idx)]
-        dist = ratio * sm.position().distanceTo(bsm.position())
+    for index in side_indices:
+        sm = points[sternum_attributes.sternummiddle(index)]
+        bsm = points[basesternummiddle(index)]
         prims = prims_by_attr(sm.prims(), "region", Region.COXA)
+
+        dist = ratio * sm.position().distanceTo(bsm.position())
+        assert dist > 0.0, f"Expected positive coxa membrane inset distance, got {dist}"
+
         inner_prims = inset_inner_prims(geo, prims, dist, use_ratio=False, follow_existing_edge=True)
+        _attribute_coxa_membrane_points(inner_prims, index)
+
         for prim in inner_prims:
             prim.setAttribValue("region", Region.COXASOCKET)
 
@@ -91,6 +98,41 @@ def _inset_membrane_region(
         prim.setAttribValue("region", socket_region)
     for prim in prims_by_attr(geo, "region", region):
         prim.setAttribValue("region", membrane_region)
+
+
+def _attribute_coxa_membrane_points(
+    prims: Collection[hou.Prim],
+    index: int,
+) -> None:
+    mapping = _coxa_membrane_id_mapping(index)
+    points = {
+        p
+        for prim in prims
+        for p in prim.points()
+        if p.stringAttribValue("id") in mapping
+    }
+    assert len(points) == 6, f"Expected 6 coxa membrane points, got {len(points)}"
+
+    for point in points:
+        source_id = point.stringAttribValue("id")
+        point.setAttribValue("id", mapping[source_id])
+
+
+def _coxa_membrane_id_mapping(index: int) -> dict[str, str]:
+    sign = 1 if index > 0 else -1
+    next_idx = 5 if abs(index) == 4 else index + sign
+
+    ant_basesternum = basesternum(index, 2) if abs(index) == 1 else basesternum(index)
+    post_basesternum = basesternum(5, 1 if index > 0 else 2) if abs(index) == 4 else basesternum(next_idx)
+
+    return {
+        sternum_attributes.sternumrim(index): basecoxamemebrane(index, 1),
+        sternum_attributes.sternummiddle(index): basecoxamembranemiddle(index, 1),
+        sternum_attributes.sternumrim(next_idx): basecoxamemebrane(index, 2),
+        post_basesternum: basecoxamemebrane(index, 3),
+        basesternummiddle(index): basecoxamembranemiddle(index, 2),
+        ant_basesternum: basecoxamemebrane(index, 4),
+    }
 
 
 def _classify_maxilla_membrane_points(geo: hou.Geometry) -> None:

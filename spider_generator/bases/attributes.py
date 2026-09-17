@@ -6,6 +6,9 @@ from ..helper import affix_id
 class ID(StrEnum):
     BASESTERNUM = auto()
     BASESTERNUMMIDDLE = auto()
+    BASECOXAMEMEBRANE = auto()
+    BASECOXAMEMBRANEMIDDLE = auto()
+    BASEHINGECORNER = auto()
     BASEMAXILLA = auto()
     BASEMAXILLAMEMBRANE = auto()
     BASEMOUTHMEMBRANE = auto()
@@ -32,6 +35,14 @@ def basesternum(*i: int | str) -> str:
 
 def basesternummiddle(*i: int | str) -> str:
     return affix_id(ID.BASESTERNUMMIDDLE, *i)
+
+
+def basecoxamemebrane(*i: int | str) -> str:
+    return affix_id(ID.BASECOXAMEMEBRANE, *i)
+
+
+def basecoxamembranemiddle(*i: int | str) -> str:
+    return affix_id(ID.BASECOXAMEMBRANEMIDDLE, *i)
 
 
 def basemaxilla(*i: int | str) -> str:

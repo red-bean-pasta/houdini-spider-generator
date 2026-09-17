@@ -6,7 +6,7 @@ from houkit.attributer import add_prim_attrib, deduplicate_point_attribs
 from houkit.noder import get_parent
 from houkit.parameterizer import get_float_parm
 from houkit.topology import outset
-from . import coxa_flaps, membrane
+from . import coxa_flaps, membrane, hinge_retopology
 from .attributes import ID, Region, basesternum, basesternummiddle, outer_loop_ids
 from ..sternums import attributes as sternum_attributes
 from ..helper import (
@@ -26,6 +26,7 @@ def extract_sternum_rim(node: hou.SopNode) -> None:
     sternum_rim = {
         point_id: point.position()
         for point_id, point in unique_points_start_with_id(geo, sternum_attributes.outer_loop_ids()).items()
+        if not point_id.startswith(sternum_attributes.sternumriminner())
     }
     rim_edges = [
         tuple(point.stringAttribValue("id") for point in edge.points())
@@ -241,6 +242,10 @@ def adjust_mouth(node: hou.SopNode) -> None:
 
 def inset_membrane(node: hou.SopNode) -> None:
     membrane.inset_membrane(node)
+
+
+def retopo_corners(node: hou.SopNode) -> None:
+    hinge_retopology.retopo_corners(node)
 
 
 def extrude_base_buffer(node: hou.SopNode) -> None:
