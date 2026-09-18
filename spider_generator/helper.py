@@ -11,7 +11,9 @@ from houkit.attributer import (
     set_point_attrib,
     set_points_attrib,
     unique_points_by_attrib,
-    unique_points_start_with, )
+    unique_points_start_with,
+)
+from houkit import attributer
 from houkit.formatter import affix_text
 from houkit.noder import sopify
 from houkit.topology import add_point, fill_face, fill_face_by_attrib, inset, offset_point
@@ -166,15 +168,11 @@ def points_by_id(
     return unique_points_by_attrib(geo, "id")
 
 
-def points_from_geo(geo: hou.Geometry, *point_ids: str) -> tuple[hou.Point, ...]:
-    """Return the geometry points identified by ``point_ids`` in the same order."""
-    points = points_by_id(geo)
-    return tuple(points[point_id] for point_id in point_ids)
+def points_from_geo(geo: hou.Geometry, *ids: str) -> tuple[hou.Point, ...]:
+    return tuple(attributer.points_from_geo(geo, "id", *ids))
 
-def positions_from_geo(geo: hou.Geometry, *point_ids: str) -> tuple[hou.Vector3, ...]:
-    """Return the geometry points' positions identified by ``point_ids`` in the same order."""
-    points = points_by_id(geo)
-    return tuple(points[point_id].position() for point_id in point_ids)
+def positions_from_geo(geo: hou.Geometry, *ids: str) -> tuple[hou.Vector3, ...]:
+    return tuple(attributer.positions_from_geo(geo, "id", *ids))
 
 def positions_from_points(*points: hou.Point) -> tuple[hou.Vector3, ...]:
     return tuple(p.position() for p in points)
