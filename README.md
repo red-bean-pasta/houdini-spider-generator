@@ -1,4 +1,4 @@
-# Houdini Spider Generator
+# Houspider
 
 A procedural spider model generator for SideFX Houdini. It builds a biologically plausible spider from Python and Houdini geometry attributes, then exposes the most useful shape and topology controls as editable Houdini parameters.
 
@@ -11,25 +11,29 @@ Adjust the handles to explore different spider shapes without rebuilding the mod
 
 The generator uses Houdini Python to create and connect the modeling network. Point, primitive, and global attributes identify anatomical regions and construction points as geometry moves through the network. The builder modules use those attributes to construct surfaces, connect regions, and expose controls on the generated nodes.
 
-The project uses [`houkit`](https://github.com/red-bean-pasta/houkit) for reusable Houdini node, parameter, attribute, and reloadable-subnet helpers. It is included as a Git submodule and is required at `./houkit`.
+The project uses [`houkit`](https://github.com/red-bean-pasta/houkit) for reusable Houdini node, parameter, attribute, and reloadable-subnet helpers.
 
 
 ## Quick start
 
 You need Houdini with `hython` available on your `PATH`.
 
+1. Install dependency `houkit`:
 ```bash
-git clone --recurse-submodules https://github.com/red-bean-pasta/houdini-spider-generator.git
-cd houdini-spider-generator
+hython -m pip install git+https://github.com/red-bean-pasta/houkit.git
 ```
 
-Build the example Houdini file:
+2. Clone this project:
+```bash
+git clone https://github.com/red-bean-pasta/houspider.git
+cd houspider
+```
 
+3. Build the example Houdini file:
 ```bash
 hython scripts/build_test_hip.py
 ```
-
-Open `test/test.hip` in Houdini. The generated spider is under `/obj/spider`, with promoted parameters in the `Build` and `Advanced` sections.
+The model is then output to `test/test.hip`.
 
 
 ## Examples and topology views
@@ -126,11 +130,6 @@ The complete handle set is generated in Houdini from the builder modules. The co
 | `pedipalp_coxa_length` | `0.8` | Pedipalp coxa length relative to the front-leg coxa length. |
 | `pedipalp_segment_length_ratios` | `(0.17, 0.8, 0.4, 0.45, 0.4)` | Length of each post-coxa pedipalp segment relative to pedipalp coxa length. |
 | `endite_length_ratio` | `0.95` | Endite extension from its membrane attachment toward the coxa. |
-
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).
 
 
 ## Acknowledgements
